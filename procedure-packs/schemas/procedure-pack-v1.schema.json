@@ -1,0 +1,585 @@
+{
+  "$defs": {
+    "CitedFact": {
+      "additionalProperties": false,
+      "properties": {
+        "fact_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Fact Id",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "text": {
+          "maxLength": 1200,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fact_id",
+        "text",
+        "source_ids"
+      ],
+      "title": "CitedFact",
+      "type": "object"
+    },
+    "DocumentGuidance": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "guidance": {
+          "maxLength": 1200,
+          "minLength": 1,
+          "title": "Guidance",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "document_id",
+        "name",
+        "guidance",
+        "source_ids"
+      ],
+      "title": "DocumentGuidance",
+      "type": "object"
+    },
+    "FeeInformation": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Amount"
+        },
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "qualifiers": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Qualifiers",
+          "type": "array"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "statement": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amount",
+        "currency",
+        "statement",
+        "qualifiers",
+        "source_ids"
+      ],
+      "title": "FeeInformation",
+      "type": "object"
+    },
+    "InteractionMode": {
+      "enum": [
+        "online",
+        "in_person"
+      ],
+      "title": "InteractionMode",
+      "type": "string"
+    },
+    "Jurisdiction": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/JurisdictionLevel"
+        },
+        "name": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "name"
+      ],
+      "title": "Jurisdiction",
+      "type": "object"
+    },
+    "JurisdictionLevel": {
+      "enum": [
+        "national",
+        "state",
+        "local"
+      ],
+      "title": "JurisdictionLevel",
+      "type": "string"
+    },
+    "LifecycleStatus": {
+      "enum": [
+        "draft",
+        "active",
+        "superseded"
+      ],
+      "title": "LifecycleStatus",
+      "type": "string"
+    },
+    "ProcedureStep": {
+      "additionalProperties": false,
+      "properties": {
+        "instruction": {
+          "maxLength": 1200,
+          "minLength": 1,
+          "title": "Instruction",
+          "type": "string"
+        },
+        "order": {
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Order",
+          "type": "integer"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "step_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Step Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "step_id",
+        "order",
+        "title",
+        "instruction",
+        "source_ids"
+      ],
+      "title": "ProcedureStep",
+      "type": "object"
+    },
+    "SourceRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "official_updated_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Official Updated Date"
+        },
+        "publisher": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Publisher",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "source_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "$ref": "#/$defs/SourceType"
+        },
+        "title": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "publisher",
+        "title",
+        "url",
+        "retrieved_at",
+        "source_type"
+      ],
+      "title": "SourceRecord",
+      "type": "object"
+    },
+    "SourceType": {
+      "enum": [
+        "webpage",
+        "pdf"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    },
+    "SubmissionChannel": {
+      "additionalProperties": false,
+      "properties": {
+        "channel_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Channel Id",
+          "type": "string"
+        },
+        "guidance": {
+          "maxLength": 1200,
+          "minLength": 1,
+          "title": "Guidance",
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/InteractionMode"
+        },
+        "name": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "channel_id",
+        "mode",
+        "name",
+        "guidance",
+        "source_ids"
+      ],
+      "title": "SubmissionChannel",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "maxLength": 80,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Category",
+      "type": "string"
+    },
+    "department": {
+      "maxLength": 240,
+      "minLength": 1,
+      "title": "Department",
+      "type": "string"
+    },
+    "fee": {
+      "$ref": "#/$defs/FeeInformation"
+    },
+    "intent_phrases": {
+      "items": {
+        "maxLength": 240,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Intent Phrases",
+      "type": "array"
+    },
+    "interaction_modes": {
+      "items": {
+        "$ref": "#/$defs/InteractionMode"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "title": "Interaction Modes",
+      "type": "array"
+    },
+    "jurisdiction": {
+      "$ref": "#/$defs/Jurisdiction"
+    },
+    "last_verified_at": {
+      "format": "date-time",
+      "title": "Last Verified At",
+      "type": "string"
+    },
+    "limitations": {
+      "items": {
+        "$ref": "#/$defs/CitedFact"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Limitations",
+      "type": "array"
+    },
+    "official_handoff_url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Official Handoff Url",
+      "type": "string"
+    },
+    "pack_version": {
+      "maxLength": 32,
+      "pattern": "^[1-9]\\d*\\.\\d+\\.\\d+$",
+      "title": "Pack Version",
+      "type": "string"
+    },
+    "provenance": {
+      "maxProperties": 100,
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z0-9]+(?:-[a-z0-9]+)*$": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 80
+      },
+      "title": "Provenance",
+      "type": "object"
+    },
+    "publisher": {
+      "maxLength": 240,
+      "minLength": 1,
+      "title": "Publisher",
+      "type": "string"
+    },
+    "required_documents": {
+      "items": {
+        "$ref": "#/$defs/DocumentGuidance"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Required Documents",
+      "type": "array"
+    },
+    "requirements": {
+      "items": {
+        "$ref": "#/$defs/CitedFact"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Requirements",
+      "type": "array"
+    },
+    "review_due_at": {
+      "format": "date-time",
+      "title": "Review Due At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "service_id": {
+      "maxLength": 80,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Service Id",
+      "type": "string"
+    },
+    "short_description": {
+      "additionalProperties": {
+        "maxLength": 240,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxProperties": 12,
+      "minProperties": 1,
+      "title": "Short Description",
+      "type": "object"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceRecord"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/LifecycleStatus"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/ProcedureStep"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "submission_channels": {
+      "items": {
+        "$ref": "#/$defs/SubmissionChannel"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Submission Channels",
+      "type": "array"
+    },
+    "title": {
+      "additionalProperties": {
+        "maxLength": 240,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxProperties": 12,
+      "minProperties": 1,
+      "title": "Title",
+      "type": "object"
+    },
+    "tracking_guidance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CitedFact"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema_version",
+    "service_id",
+    "pack_version",
+    "status",
+    "jurisdiction",
+    "department",
+    "publisher",
+    "title",
+    "short_description",
+    "intent_phrases",
+    "category",
+    "interaction_modes",
+    "sources",
+    "last_verified_at",
+    "review_due_at",
+    "requirements",
+    "required_documents",
+    "fee",
+    "steps",
+    "submission_channels",
+    "official_handoff_url",
+    "limitations",
+    "provenance"
+  ],
+  "title": "ProcedurePack",
+  "type": "object"
+}

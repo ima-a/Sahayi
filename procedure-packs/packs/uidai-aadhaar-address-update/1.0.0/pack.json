@@ -1,0 +1,231 @@
+{
+  "schema_version": "1.0",
+  "service_id": "uidai-aadhaar-address-update",
+  "pack_version": "1.0.0",
+  "status": "active",
+  "jurisdiction": {
+    "level": "national",
+    "name": "India"
+  },
+  "department": "Unique Identification Authority of India",
+  "publisher": "Unique Identification Authority of India",
+  "title": {
+    "en": "Update your Aadhaar address online"
+  },
+  "short_description": {
+    "en": "Official UIDAI guidance for requesting an address update through the MyAadhaar portal."
+  },
+  "intent_phrases": [
+    "change Aadhaar address",
+    "update address in Aadhaar",
+    "moved to a new address"
+  ],
+  "category": "identity-documents",
+  "interaction_modes": [
+    "online"
+  ],
+  "sources": [
+    {
+      "source_id": "uidai-update-overview",
+      "publisher": "Unique Identification Authority of India",
+      "title": "Updating Data on Aadhaar",
+      "url": "https://uidai.gov.in/en/updating-data-on-aadhaar",
+      "retrieved_at": "2026-08-28T00:00:00+05:30",
+      "official_updated_date": "2026-07-03",
+      "sha256": null,
+      "source_type": "webpage"
+    },
+    {
+      "source_id": "uidai-online-address-fee",
+      "publisher": "Unique Identification Authority of India",
+      "title": "Is there any fee involved for Online updation of address?",
+      "url": "https://www.uidai.gov.in/en/1045-english-uk/faqs/enrolment-update/myaadhaar-online-update-service/15861-is-there-any-fee-involved-for-online-updation-of-address.html",
+      "retrieved_at": "2026-08-28T00:00:00+05:30",
+      "official_updated_date": null,
+      "sha256": null,
+      "source_type": "webpage"
+    },
+    {
+      "source_id": "uidai-online-address-process",
+      "publisher": "Unique Identification Authority of India",
+      "title": "Online Address Update Process",
+      "url": "https://www.uidai.gov.in/en/922-faqs/aadhaar-online-services/online-address-update-process.html",
+      "retrieved_at": "2026-08-28T00:00:00+05:30",
+      "official_updated_date": null,
+      "sha256": null,
+      "source_type": "webpage"
+    }
+  ],
+  "last_verified_at": "2026-08-28T00:00:00+05:30",
+  "review_due_at": "2026-11-28T00:00:00+05:30",
+  "requirements": [
+    {
+      "fact_id": "registered-mobile",
+      "text": "Your mobile number must already be registered with Aadhaar to use the online service and receive the login OTP.",
+      "source_ids": [
+        "uidai-update-overview",
+        "uidai-online-address-process"
+      ]
+    },
+    {
+      "fact_id": "aadhaar-number",
+      "text": "You need your Aadhaar number to log in to the MyAadhaar portal.",
+      "source_ids": [
+        "uidai-update-overview"
+      ]
+    }
+  ],
+  "required_documents": [
+    {
+      "document_id": "valid-proof-of-address",
+      "name": "Valid proof of address",
+      "guidance": "Use a proof-of-address document accepted by UIDAI. The document should be in the Aadhaar holder's name, the entered address should match it, and the uploaded scan should be clear and in colour.",
+      "source_ids": [
+        "uidai-update-overview",
+        "uidai-online-address-process"
+      ]
+    }
+  ],
+  "fee": {
+    "amount": "50.00",
+    "currency": "INR",
+    "statement": "The official fee for an online address update is ₹50, including GST.",
+    "qualifiers": [
+      "Fee information was verified on 28 August 2026 and should be rechecked after the review date."
+    ],
+    "source_ids": [
+      "uidai-online-address-fee"
+    ]
+  },
+  "steps": [
+    {
+      "step_id": "open-portal",
+      "order": 1,
+      "title": "Open the official MyAadhaar portal",
+      "instruction": "Continue from Sahayi to the official MyAadhaar website. Sahayi does not collect your Aadhaar number or submit the request.",
+      "source_ids": [
+        "uidai-update-overview"
+      ]
+    },
+    {
+      "step_id": "authenticate",
+      "order": 2,
+      "title": "Log in on MyAadhaar",
+      "instruction": "On the official portal, use your Aadhaar number and the OTP sent to your registered mobile number.",
+      "source_ids": [
+        "uidai-update-overview"
+      ]
+    },
+    {
+      "step_id": "enter-address",
+      "order": 3,
+      "title": "Enter the new address",
+      "instruction": "Enter the address requested by the official service and make sure it matches the proof-of-address document.",
+      "source_ids": [
+        "uidai-online-address-process"
+      ]
+    },
+    {
+      "step_id": "upload-document",
+      "order": 4,
+      "title": "Upload proof of address",
+      "instruction": "Upload a clear colour scan or image of an accepted proof-of-address document on the official portal.",
+      "source_ids": [
+        "uidai-update-overview",
+        "uidai-online-address-process"
+      ]
+    },
+    {
+      "step_id": "pay-and-submit",
+      "order": 5,
+      "title": "Pay and submit on MyAadhaar",
+      "instruction": "Pay the official fee and submit the request on MyAadhaar. Submission does not guarantee that UIDAI will approve the update.",
+      "source_ids": [
+        "uidai-online-address-fee",
+        "uidai-online-address-process"
+      ]
+    },
+    {
+      "step_id": "save-srn",
+      "order": 6,
+      "title": "Save the service request number",
+      "instruction": "After successful submission, download the invoice and keep the SRN so you can check the request status on the official portal.",
+      "source_ids": [
+        "uidai-online-address-process"
+      ]
+    }
+  ],
+  "submission_channels": [
+    {
+      "channel_id": "myaadhaar-online",
+      "mode": "online",
+      "name": "MyAadhaar portal",
+      "guidance": "The address update request is completed on UIDAI's official MyAadhaar portal, not in Sahayi.",
+      "source_ids": [
+        "uidai-update-overview"
+      ]
+    }
+  ],
+  "official_handoff_url": "https://myaadhaar.uidai.gov.in/",
+  "tracking_guidance": {
+    "fact_id": "srn-tracking",
+    "text": "A successful online address update submission generates an SRN. Keep the downloaded invoice and use the official Check Aadhaar Update Status service.",
+    "source_ids": [
+      "uidai-online-address-process"
+    ]
+  },
+  "limitations": [
+    {
+      "fact_id": "guidance-only",
+      "text": "Sahayi provides guidance only. It is not UIDAI or a government service and cannot authenticate you, submit an update, or track your request.",
+      "source_ids": [
+        "uidai-update-overview"
+      ]
+    },
+    {
+      "fact_id": "uidai-validation",
+      "text": "UIDAI verifies and validates submitted information and documents; submitting a request does not guarantee an address update.",
+      "source_ids": [
+        "uidai-update-overview",
+        "uidai-online-address-process"
+      ]
+    }
+  ],
+  "provenance": {
+    "title": [
+      "uidai-update-overview"
+    ],
+    "short-description": [
+      "uidai-update-overview"
+    ],
+    "official-handoff-url": [
+      "uidai-update-overview"
+    ],
+    "fee": [
+      "uidai-online-address-fee"
+    ],
+    "requirements": [
+      "uidai-update-overview",
+      "uidai-online-address-process"
+    ],
+    "required-documents": [
+      "uidai-update-overview",
+      "uidai-online-address-process"
+    ],
+    "submission-channels": [
+      "uidai-update-overview"
+    ],
+    "steps": [
+      "uidai-update-overview",
+      "uidai-online-address-fee",
+      "uidai-online-address-process"
+    ],
+    "tracking-guidance": [
+      "uidai-online-address-process"
+    ],
+    "limitations": [
+      "uidai-update-overview",
+      "uidai-online-address-process"
+    ]
+  }
+}

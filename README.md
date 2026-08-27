@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first local kiosk prototype for making government services easier to understand. This first slice has no citizen inputs, accounts, stored data, or procedure intelligence.
+Sahayi is a privacy-first local kiosk prototype for making government services easier to understand. The current slice serves verified, versioned procedure guidance without citizen inputs, accounts, or stored data.
 
 The hackathon deliverable will be a hosted web demonstration of the intended kiosk experience. Project context and implementation decisions are in [`.ai/`](.ai/PROJECT_CONTEXT.md).
 
@@ -22,5 +22,7 @@ Start FastAPI with `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --r
 ## Testing and production build
 
 Run `python -m pytest`, then `cd frontend && npm run typecheck && npm test && npm run build`, and finally `git diff --check`.
+
+Validate procedure packs with `.venv/bin/python -m sahayi_api.procedure_tool validate`. Check generated-schema drift with `.venv/bin/python -m sahayi_api.procedure_tool check-schema`; regenerate it only after an intentional contract change with `.venv/bin/python -m sahayi_api.procedure_tool export-schema`.
 
 After `npm run build`, run `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000` and open `http://127.0.0.1:8000` for the same-origin production-style build. No production deployment configuration is included.

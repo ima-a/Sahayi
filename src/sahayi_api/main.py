@@ -9,9 +9,23 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sahayi_api.config import get_settings
+from sahayi_api.procedures import (
+    PackLoadError,
+    ProcedureDetail,
+    ProcedureListResponse,
+    default_pack_root,
+    detail_procedure,
+    load_procedure_registry,
+    summarize_procedure,
+)
 
 settings = get_settings()
 app = FastAPI(title="Sahayi API", docs_url=None, redoc_url=None, openapi_url=None)
+
+try:
+    procedure_registry = load_procedure_registry(default_pack_root())
+except PackLoadError:
+    procedure_registry = None
 
 
 @app.middleware("http")
@@ -58,6 +72,24 @@ async def health() -> dict[str, str]:
 @app.get("/api/v1/public-config")
 async def public_config() -> dict[str, str | bool]:
     return {"application_name": "Sahayi", "kiosk_mode": True}
+
+
+@app.get("/api/v1/procedures", response_model=ProcedureListResponse)
+async def procedures() -> ProcedureListResponse | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    summaries = [summarize_procedure(loaded) for _, loaded in sorted(procedure_registry.items())]
+    return ProcedureListResponse(procedures=summaries)
+
+
+@app.get("/api/v1/procedures/{service_id}", response_model=ProcedureDetail)
+async def procedure_detail(service_id: str) -> ProcedureDetail | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    loaded = procedure_registry.get(service_id)
+    if loaded is None:
+        return JSONResponse({"error": "Procedure not found"}, status_code=404)
+    return detail_procedure(loaded)
 
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
