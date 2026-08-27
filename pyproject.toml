@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sahayi-api"
+version = "0.1.0"
+description = "Sahayi local kiosk API foundation"
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi==0.128.8",
+  "uvicorn==0.40.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx==0.28.1",
+  "pytest==9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+where = ["src"]
