@@ -266,6 +266,112 @@
       "title": "LifecycleStatus",
       "type": "string"
     },
+    "LocaleTranslation": {
+      "additionalProperties": false,
+      "properties": {
+        "intent_phrases": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Intent Phrases",
+          "type": "array"
+        },
+        "text": {
+          "maxProperties": 500,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z0-9]+(?:[.-][a-z0-9]+)*$": {
+              "maxLength": 1200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 160
+          },
+          "title": "Text",
+          "type": "object"
+        }
+      },
+      "required": [
+        "intent_phrases",
+        "text"
+      ],
+      "title": "LocaleTranslation",
+      "type": "object"
+    },
+    "LocaleTranslationMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "disclaimer": {
+          "maxLength": 1200,
+          "minLength": 1,
+          "title": "Disclaimer",
+          "type": "string"
+        },
+        "method": {
+          "$ref": "#/$defs/TranslationMethod"
+        },
+        "review_status": {
+          "$ref": "#/$defs/TranslationReviewStatus"
+        }
+      },
+      "required": [
+        "method",
+        "review_status",
+        "disclaimer"
+      ],
+      "title": "LocaleTranslationMetadata",
+      "type": "object"
+    },
+    "PackLocalization": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_locale": {
+          "const": "en",
+          "title": "Canonical Locale",
+          "type": "string"
+        },
+        "locale_metadata": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LocaleTranslationMetadata"
+          },
+          "propertyNames": {
+            "enum": [
+              "en",
+              "hi",
+              "ml"
+            ]
+          },
+          "title": "Locale Metadata",
+          "type": "object"
+        },
+        "translations": {
+          "additionalProperties": {
+            "$ref": "#/$defs/LocaleTranslation"
+          },
+          "propertyNames": {
+            "enum": [
+              "hi",
+              "ml"
+            ]
+          },
+          "title": "Translations",
+          "type": "object"
+        }
+      },
+      "required": [
+        "canonical_locale",
+        "locale_metadata",
+        "translations"
+      ],
+      "title": "PackLocalization",
+      "type": "object"
+    },
     "ProcedureStep": {
       "additionalProperties": false,
       "properties": {
@@ -936,6 +1042,22 @@
       ],
       "title": "SubmissionChannel",
       "type": "object"
+    },
+    "TranslationMethod": {
+      "enum": [
+        "canonical_source",
+        "machine_assisted_prototype"
+      ],
+      "title": "TranslationMethod",
+      "type": "string"
+    },
+    "TranslationReviewStatus": {
+      "enum": [
+        "canonical_verified",
+        "native_review_required"
+      ],
+      "title": "TranslationReviewStatus",
+      "type": "string"
     }
   },
   "additionalProperties": false,
@@ -991,6 +1113,17 @@
       "minItems": 1,
       "title": "Limitations",
       "type": "array"
+    },
+    "localization": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackLocalization"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "official_handoff_url": {
       "format": "uri",

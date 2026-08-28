@@ -20,11 +20,12 @@ from sahayi_api.procedures import (
     default_pack_root,
     load_procedure_registry,
     pack_digest,
+    required_translation_keys,
     summarize_procedure,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.2.0" / "pack.json"
-KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.0.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.3.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.1.0" / "pack.json"
 SCHEMA_PATH = PACK_PATH.parents[3] / "schemas" / "procedure-pack-v1.schema.json"
 
 
@@ -79,7 +80,7 @@ def test_two_active_packs_are_independently_versioned_and_verified() -> None:
     registry = load_procedure_registry(default_pack_root())
     kerala = registry["kerala-ign-oap"]
     aadhaar = registry["uidai-aadhaar-address-update"]
-    assert kerala.pack.pack_version == "1.0.0"
+    assert kerala.pack.pack_version == "1.1.0"
     assert kerala.digest != aadhaar.digest
     assert kerala.pack.jurisdiction.name == "Kerala"
     assert {source.source_id for source in kerala.pack.sources} == {
@@ -142,6 +143,7 @@ def test_missing_and_nonexistent_source_references_are_rejected() -> None:
 
 def test_confirmed_fee_validation() -> None:
     data = pack_data()
+    data["status"] = "superseded"
     data["fee"] = confirmed_fee()
     validated = ProcedurePack.model_validate(data)
     assert validated.fee.verification_status == "confirmed"
@@ -177,6 +179,7 @@ def test_fee_claim_provenance_must_exist() -> None:
 
 def test_confirmed_fee_claims_cannot_disagree() -> None:
     data = pack_data()
+    data["status"] = "superseded"
     fee = confirmed_fee()
     fee["claims"].append(
         {
@@ -194,6 +197,7 @@ def test_confirmed_fee_claims_cannot_disagree() -> None:
 
 def test_free_and_not_stated_fee_validation() -> None:
     free = pack_data()
+    free["status"] = "superseded"
     free["fee"] = {
         "verification_status": "free",
         "amount": "0.00",
@@ -206,6 +210,7 @@ def test_free_and_not_stated_fee_validation() -> None:
     assert ProcedurePack.model_validate(free).fee.verification_status == "free"
 
     not_stated = pack_data()
+    not_stated["status"] = "superseded"
     not_stated["fee"] = {
         "verification_status": "not_stated",
         "amount": None,
@@ -232,7 +237,7 @@ def test_duplicate_service_version_is_rejected(tmp_path: Path) -> None:
 def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
     first = pack_data()
     second = copy.deepcopy(first)
-    second["pack_version"] = "1.3.0"
+    second["pack_version"] = "1.4.0"
     write_pack(tmp_path, "one", first)
     write_pack(tmp_path, "two", second)
     with pytest.raises(PackLoadError, match="exactly one active"):
@@ -242,12 +247,12 @@ def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
 def test_draft_pack_is_not_selected(tmp_path: Path) -> None:
     active = pack_data()
     draft = copy.deepcopy(active)
-    draft["pack_version"] = "1.3.0"
+    draft["pack_version"] = "1.4.0"
     draft["status"] = "draft"
     write_pack(tmp_path, "active", active)
     write_pack(tmp_path, "draft", draft)
     registry = load_procedure_registry(tmp_path)
-    assert registry[active["service_id"]].pack.pack_version == "1.2.0"
+    assert registry[active["service_id"]].pack.pack_version == "1.3.0"
 
 
 def test_no_active_pack_fails_closed(tmp_path: Path) -> None:
@@ -271,7 +276,7 @@ def test_pack_digest_is_deterministic() -> None:
     reordered_json = json.dumps(pack_data(), sort_keys=True)
     reordered = ProcedurePack.model_validate_json(reordered_json)
     assert pack_digest(original) == pack_digest(reordered)
-    assert pack_digest(original) == "f9b989709149bf5c51b60a1879a53f29e6050188c591878b7832f6850bc6659f"
+    assert pack_digest(original) == "0de2547531a1c6b366c3dfacfe9e6dd3080923ba89d58050fd7ea2d09312534e"
     assert pack_digest(original) != "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
 
 
@@ -295,6 +300,8 @@ async def test_list_endpoint_returns_safe_active_summaries(client: AsyncClient) 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
+    assert payload["locale"] == "en"
+    assert payload["translation"]["method"] == "canonical_source"
     assert len(payload["procedures"]) == 2
     summary = next(item for item in payload["procedures"] if item["service_id"] == "uidai-aadhaar-address-update")
     assert summary["service_id"] == "uidai-aadhaar-address-update"
@@ -329,6 +336,7 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
+    assert payload["locale"] == "en"
     assert payload["fee"]["verification_status"] == "conflicting"
     assert payload["fee"]["amount"] is None
     assert payload["fee"]["currency"] is None
@@ -336,7 +344,7 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert payload["fee"]["resolution_guidance"].endswith("Confirm the fee on the official portal before payment.")
     assert payload["attention_required"] is True
     assert payload["official_handoff_url"] == "https://myaadhaar.uidai.gov.in/"
-    assert payload["pack_digest"] == "f9b989709149bf5c51b60a1879a53f29e6050188c591878b7832f6850bc6659f"
+    assert payload["pack_digest"] == "0de2547531a1c6b366c3dfacfe9e6dd3080923ba89d58050fd7ea2d09312534e"
     assert payload["provenance"]["fee"] == ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
     assert all(source["url"].startswith("https://") for source in payload["sources"])
 
@@ -347,6 +355,46 @@ async def test_unknown_service_is_safe_and_not_stored(client: AsyncClient) -> No
     assert response.status_code == 404
     assert response.headers["cache-control"] == "no-store"
     assert response.json() == {"error": "Procedure not found"}
+
+
+def test_active_packs_have_exact_complete_translations() -> None:
+    for loaded in load_procedure_registry(default_pack_root()).values():
+        expected = required_translation_keys(loaded.pack)
+        assert loaded.pack.localization is not None
+        assert set(loaded.pack.localization.translations) == {"hi", "ml"}
+        for locale in ("hi", "ml"):
+            assert set(loaded.pack.localization.translations[locale].text) == expected
+            metadata = loaded.pack.localization.locale_metadata[locale]
+            assert metadata.method.value == "machine_assisted_prototype"
+            assert metadata.review_status.value == "native_review_required"
+
+
+@pytest.mark.parametrize("service_id", ["uidai-aadhaar-address-update", "kerala-ign-oap"])
+@pytest.mark.anyio
+async def test_locales_change_words_but_not_procedure_semantics(client: AsyncClient, service_id: str) -> None:
+    payloads = {}
+    for locale in ("en", "hi", "ml"):
+        response = await client.get(f"/api/v1/procedures/{service_id}?locale={locale}")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        payloads[locale] = response.json()
+        assert payloads[locale]["locale"] == locale
+    assert len({payloads[locale]["title"] for locale in payloads}) == 3
+    invariant = lambda item: (
+        item["service_id"], item["category"], item["official_handoff_url"], item["pack_version"],
+        item["pack_digest"], item["fee"]["verification_status"], item["fee"]["amount"],
+        [(claim["amount"], claim["currency"], tuple(claim["source_ids"])) for claim in item["fee"]["claims"]],
+        [(source["source_id"], source["url"]) for source in item["sources"]],
+    )
+    assert invariant(payloads["en"]) == invariant(payloads["hi"]) == invariant(payloads["ml"])
+
+
+@pytest.mark.anyio
+async def test_unsupported_locale_is_rejected_safely(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/procedures?locale=fr")
+    assert response.status_code == 422
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {"error": "Invalid request"}
 
 
 @pytest.mark.anyio

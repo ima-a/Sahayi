@@ -1,5 +1,5 @@
 .kiosk-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top left, #d8f3e8, transparent 45%), #f7faf8; }
-.welcome-card, .content-card { width: min(100%, 720px); padding: clamp(28px, 7vw, 58px); border: 1px solid #c9ded5; border-radius: 28px; background: #fff; box-shadow: 0 20px 50px #143b2a18; }
+.welcome-card, .content-card { width: min(100%, 720px); min-width: 0; padding: clamp(28px, 7vw, 58px); border: 1px solid #c9ded5; border-radius: 28px; background: #fff; box-shadow: 0 20px 50px #143b2a18; overflow-wrap: anywhere; }
 .welcome-card { max-width: 580px; text-align: center; }
 .content-card { width: min(100%, 920px); }
 .eyebrow { display: inline-block; margin: 0 0 20px; padding: 7px 12px; border-radius: 999px; color: #075a3b; background: #dff5e9; font-size: .82rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
@@ -17,7 +17,11 @@ p, li { color: #35564a; line-height: 1.6; }
 button, .official-handoff { min-height: 54px; border: 0; border-radius: 14px; background: #087a4d; color: #fff; font: inherit; font-weight: 750; font-size: 1.05rem; cursor: pointer; }
 .welcome-card > button { width: 100%; }
 button:disabled { background: #87a99a; color: #18372b; cursor: not-allowed; }
-button:focus-visible, a:focus-visible { outline: 4px solid #d6a312; outline-offset: 4px; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 4px solid #d6a312; outline-offset: 4px; }
+.language-controls { display: grid; grid-template-columns: auto minmax(130px, 190px); align-items: center; justify-content: end; gap: 8px 12px; margin: -10px 0 28px; text-align: left; }
+.language-controls label { color: #173d2e; font-weight: 750; }
+.language-controls select { min-height: 44px; padding: 7px 34px 7px 10px; border: 2px solid #78988b; border-radius: 10px; background: #fff; color: #173d2e; }
+.translation-note { grid-column: 1 / -1; max-width: 620px; margin: 0; color: #526d62; font-size: .82rem; line-height: 1.45; }
 .start-note { margin: 14px 0 0; color: #526d62; font-size: .95rem; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .page-header h1 { font-size: clamp(2.4rem, 7vw, 4rem); }
@@ -31,7 +35,7 @@ button:focus-visible, a:focus-visible { outline: 4px solid #d6a312; outline-offs
 .service-list li + li { margin-top: 14px; }
 .service-card { width: 100%; min-height: 100px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px; border: 1px solid #c9ded5; background: #f8fcfa; color: #123326; text-align: left; }
 .service-card:hover { border-color: #087a4d; background: #eef9f4; }
-.service-card strong, .service-card small { display: block; }
+.service-card strong, .service-card small { display: block; overflow-wrap: anywhere; }
 .service-card strong { margin-bottom: 7px; font-size: 1.15rem; }
 .service-card small { color: #47675b; line-height: 1.45; }
 .service-card .attention-badge { width: fit-content; margin-top: 10px; padding: 4px 8px; border: 1px solid #b76500; border-radius: 6px; background: #fff3d5; color: #593600; font-weight: 750; }
@@ -57,7 +61,7 @@ button:focus-visible, a:focus-visible { outline: 4px solid #d6a312; outline-offs
 .trust-card dt { color: #4d6a5f; font-size: .82rem; }
 .trust-card dd { margin: 4px 0 0; color: #173d2e; font-weight: 750; }
 .source-list li + li { margin-top: 8px; }
-a { color: #006b43; font-weight: 700; }
+a { color: #006b43; font-weight: 700; overflow-wrap: anywhere; }
 .stale-warning { margin: 28px 0; padding: 18px; border-left: 6px solid #bd7816; border-radius: 8px; background: #fff3d5; color: #593600; line-height: 1.55; }
 .disclaimer { padding: 18px; border-radius: 12px; background: #f1f3f2; }
 .detail-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 24px; margin-top: 34px; }
@@ -109,4 +113,6 @@ fieldset { margin: 0; padding: 0; border: 0; }
   .page-header .compact { margin-top: 20px; }
   .detail-grid, .trust-card dl { grid-template-columns: 1fr; }
   .readiness-callout { align-items: stretch; flex-direction: column; }
+  .language-controls { grid-template-columns: 1fr; justify-content: stretch; margin-top: -8px; }
+  .translation-note { grid-column: 1; }
 }

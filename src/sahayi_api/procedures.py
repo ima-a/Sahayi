@@ -27,6 +27,9 @@ LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1,
 SourceId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 SourceIds = Annotated[list[SourceId], Field(min_length=1, max_length=12)]
 LocalizedText = Annotated[dict[str, ShortText], Field(min_length=1, max_length=12)]
+TranslationKey = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$", max_length=160)]
+SupportedLocale = Literal["en", "hi", "ml"]
+SUPPORTED_LOCALES = ("en", "hi", "ml")
 
 _HTML = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
 _REQUIRED_PROVENANCE = {
@@ -114,6 +117,16 @@ class ReadinessStatus(StrEnum):
     ALTERNATIVE_PATH = "alternative_path"
     NEEDS_INFORMATION = "needs_information"
     CANNOT_CONFIRM = "cannot_confirm"
+
+
+class TranslationMethod(StrEnum):
+    CANONICAL_SOURCE = "canonical_source"
+    MACHINE_ASSISTED_PROTOTYPE = "machine_assisted_prototype"
+
+
+class TranslationReviewStatus(StrEnum):
+    CANONICAL_VERIFIED = "canonical_verified"
+    NATIVE_REVIEW_REQUIRED = "native_review_required"
 
 
 class Jurisdiction(StrictModel):
@@ -373,6 +386,38 @@ class ReadinessDefinition(StrictModel):
         return self
 
 
+class LocaleTranslationMetadata(StrictModel):
+    method: TranslationMethod
+    review_status: TranslationReviewStatus
+    disclaimer: LongText
+
+
+class LocaleTranslation(StrictModel):
+    intent_phrases: Annotated[list[ShortText], Field(min_length=1, max_length=30)]
+    text: Annotated[dict[TranslationKey, LongText], Field(min_length=1, max_length=500)]
+
+
+class PackLocalization(StrictModel):
+    canonical_locale: Literal["en"]
+    locale_metadata: dict[SupportedLocale, LocaleTranslationMetadata]
+    translations: dict[Literal["hi", "ml"], LocaleTranslation]
+
+    @model_validator(mode="after")
+    def validate_locale_contract(self) -> PackLocalization:
+        if set(self.locale_metadata) != set(SUPPORTED_LOCALES):
+            raise ValueError("locale metadata must contain exactly en, hi, and ml")
+        if set(self.translations) != {"hi", "ml"}:
+            raise ValueError("translations must contain exactly hi and ml")
+        english = self.locale_metadata["en"]
+        if english.method is not TranslationMethod.CANONICAL_SOURCE or english.review_status is not TranslationReviewStatus.CANONICAL_VERIFIED:
+            raise ValueError("English locale metadata must identify canonical verified source text")
+        for locale in ("hi", "ml"):
+            metadata = self.locale_metadata[locale]
+            if metadata.method is not TranslationMethod.MACHINE_ASSISTED_PROTOTYPE or metadata.review_status is not TranslationReviewStatus.NATIVE_REVIEW_REQUIRED:
+                raise ValueError("Hindi and Malayalam must be marked as machine-assisted prototypes requiring native review")
+        return self
+
+
 def _validate_localized_text(value: dict[str, str]) -> dict[str, str]:
     if "en" not in value:
         raise ValueError("English content is required")
@@ -454,6 +499,7 @@ class ProcedurePack(StrictModel):
     tracking_guidance: CitedFact | None = None
     limitations: Annotated[list[CitedFact], Field(min_length=1, max_length=20)]
     readiness: ReadinessDefinition
+    localization: PackLocalization | None = None
     provenance: Annotated[dict[Identifier, SourceIds], Field(min_length=1, max_length=100)]
 
     @field_validator("title", "short_description")
@@ -508,6 +554,22 @@ class ProcedurePack(StrictModel):
         if unmapped:
             raise ValueError(f"missing provenance mappings: {', '.join(unmapped)}")
 
+        if self.status is LifecycleStatus.ACTIVE:
+            if self.localization is None:
+                raise ValueError("active procedure packs require complete localization")
+            required_keys = required_translation_keys(self)
+            for locale, translation in self.localization.translations.items():
+                supplied_keys = set(translation.text)
+                missing_keys = sorted(required_keys - supplied_keys)
+                unexpected_keys = sorted(supplied_keys - required_keys)
+                if missing_keys or unexpected_keys:
+                    detail = []
+                    if missing_keys:
+                        detail.append(f"missing {locale} translation keys: {', '.join(missing_keys)}")
+                    if unexpected_keys:
+                        detail.append(f"unexpected {locale} translation keys: {', '.join(unexpected_keys)}")
+                    raise ValueError("; ".join(detail))
+
         self._reject_html(self.model_dump(mode="json"))
         return self
 
@@ -522,6 +584,70 @@ class ProcedurePack(StrictModel):
         elif isinstance(value, list):
             for nested in value:
                 cls._reject_html(nested)
+
+
+def required_translation_keys(pack: ProcedurePack) -> set[str]:
+    keys = {"title", "short-description", "category-label", "readiness.incomplete-disclaimer"}
+    keys.update(f"source.{item.source_id}.title" for item in pack.sources)
+    keys.update(f"requirement.{item.fact_id}" for item in pack.requirements)
+    for item in pack.required_documents:
+        keys.update({f"document.{item.document_id}.name", f"document.{item.document_id}.guidance"})
+    keys.add("fee.display-message")
+    keys.update(f"fee.claim.{index}.qualifier" for index, _ in enumerate(pack.fee.claims))
+    if pack.fee.resolution_guidance is not None:
+        keys.add("fee.resolution-guidance")
+    for item in pack.steps:
+        keys.update({f"step.{item.step_id}.title", f"step.{item.step_id}.instruction"})
+    for item in pack.submission_channels:
+        keys.update({f"channel.{item.channel_id}.name", f"channel.{item.channel_id}.guidance"})
+    if pack.tracking_guidance is not None:
+        keys.add("tracking-guidance")
+    keys.update(f"limitation.{item.fact_id}" for item in pack.limitations)
+    keys.update(f"additional-review.{item.fact_id}" for item in pack.readiness.additional_review_items)
+    for question in pack.readiness.questions:
+        keys.add(f"question.{question.question_id}.prompt")
+        if question.help_text is not None:
+            keys.add(f"question.{question.question_id}.help")
+        keys.update(f"question.{question.question_id}.option.{option.option_id}" for option in question.options or [])
+    for outcome in pack.readiness.outcomes:
+        keys.update(
+            {
+                f"outcome.{outcome.outcome_id}.title",
+                f"outcome.{outcome.outcome_id}.explanation",
+                f"outcome.{outcome.outcome_id}.disclaimer",
+            }
+        )
+        keys.update(f"outcome.{outcome.outcome_id}.next-step.{index}" for index, _ in enumerate(outcome.recommended_next_steps))
+    return keys
+
+
+def localized_text(pack: ProcedurePack, locale: SupportedLocale, key: str, english: str) -> str:
+    if locale == "en":
+        return english
+    if pack.localization is None:
+        return english
+    return pack.localization.translations[locale].text[key]
+
+
+class TranslationInfo(StrictModel):
+    locale: SupportedLocale
+    canonical_locale: Literal["en"]
+    method: TranslationMethod
+    review_status: TranslationReviewStatus
+    disclaimer: str
+
+
+def translation_info(pack: ProcedurePack, locale: SupportedLocale) -> TranslationInfo:
+    if pack.localization is None:
+        return TranslationInfo(
+            locale="en",
+            canonical_locale="en",
+            method=TranslationMethod.CANONICAL_SOURCE,
+            review_status=TranslationReviewStatus.CANONICAL_VERIFIED,
+            disclaimer="English is the canonical verified guidance. Official source wording prevails.",
+        )
+    metadata = pack.localization.locale_metadata[locale]
+    return TranslationInfo(locale=locale, canonical_locale="en", **metadata.model_dump())
 
 
 class PackLoadError(RuntimeError):
@@ -589,19 +715,25 @@ class ProcedureSummary(StrictModel):
     short_description: ShortText
     intent_phrases: Annotated[list[ShortText], Field(min_length=1, max_length=30)]
     category: Identifier
+    category_label: ShortText
     trust_state: TrustState
     attention_required: bool
 
 
 class ProcedureListResponse(StrictModel):
+    locale: SupportedLocale
+    translation: TranslationInfo
     procedures: list[ProcedureSummary]
 
 
 class ProcedureDetail(StrictModel):
+    locale: SupportedLocale
+    translation: TranslationInfo
     service_id: Identifier
     title: ShortText
     short_description: ShortText
     category: Identifier
+    category_label: ShortText
     jurisdiction: Jurisdiction
     department: ShortText
     official_publisher: ShortText
@@ -629,38 +761,77 @@ def fee_attention_required(fee: FeeInformation) -> bool:
     return fee.verification_status is FeeVerificationStatus.CONFLICTING
 
 
-def summarize_procedure(loaded: LoadedProcedure, now: datetime | None = None) -> ProcedureSummary:
+def summarize_procedure(
+    loaded: LoadedProcedure,
+    now: datetime | None = None,
+    locale: SupportedLocale = "en",
+) -> ProcedureSummary:
     pack = loaded.pack
+    intent_phrases = pack.intent_phrases if locale == "en" else pack.localization.translations[locale].intent_phrases  # type: ignore[union-attr]
     return ProcedureSummary(
         service_id=pack.service_id,
-        title=pack.title["en"],
-        short_description=pack.short_description["en"],
-        intent_phrases=pack.intent_phrases,
+        title=localized_text(pack, locale, "title", pack.title["en"]),
+        short_description=localized_text(pack, locale, "short-description", pack.short_description["en"]),
+        intent_phrases=intent_phrases,
         category=pack.category,
+        category_label=localized_text(pack, locale, "category-label", pack.category.replace("-", " ")),
         trust_state=loaded.trust_state(now),
         attention_required=fee_attention_required(pack.fee),
     )
 
 
-def detail_procedure(loaded: LoadedProcedure, now: datetime | None = None) -> ProcedureDetail:
+def detail_procedure(
+    loaded: LoadedProcedure,
+    now: datetime | None = None,
+    locale: SupportedLocale = "en",
+) -> ProcedureDetail:
     pack = loaded.pack
     return ProcedureDetail(
+        locale=locale,
+        translation=translation_info(pack, locale),
         service_id=pack.service_id,
-        title=pack.title["en"],
-        short_description=pack.short_description["en"],
+        title=localized_text(pack, locale, "title", pack.title["en"]),
+        short_description=localized_text(pack, locale, "short-description", pack.short_description["en"]),
         category=pack.category,
+        category_label=localized_text(pack, locale, "category-label", pack.category.replace("-", " ")),
         jurisdiction=pack.jurisdiction,
         department=pack.department,
         official_publisher=pack.publisher,
         interaction_modes=pack.interaction_modes,
-        requirements=pack.requirements,
-        required_documents=pack.required_documents,
-        fee=pack.fee,
-        steps=pack.steps,
-        submission_channels=pack.submission_channels,
+        requirements=[item.model_copy(update={"text": localized_text(pack, locale, f"requirement.{item.fact_id}", item.text)}) for item in pack.requirements],
+        required_documents=[
+            item.model_copy(
+                update={
+                    "name": localized_text(pack, locale, f"document.{item.document_id}.name", item.name),
+                    "guidance": localized_text(pack, locale, f"document.{item.document_id}.guidance", item.guidance),
+                }
+            )
+            for item in pack.required_documents
+        ],
+        fee=_localized_fee(pack, locale),
+        steps=[
+            item.model_copy(
+                update={
+                    "title": localized_text(pack, locale, f"step.{item.step_id}.title", item.title),
+                    "instruction": localized_text(pack, locale, f"step.{item.step_id}.instruction", item.instruction),
+                }
+            )
+            for item in pack.steps
+        ],
+        submission_channels=[
+            item.model_copy(
+                update={
+                    "name": localized_text(pack, locale, f"channel.{item.channel_id}.name", item.name),
+                    "guidance": localized_text(pack, locale, f"channel.{item.channel_id}.guidance", item.guidance),
+                }
+            )
+            for item in pack.submission_channels
+        ],
         official_handoff_url=pack.official_handoff_url,
-        tracking_guidance=pack.tracking_guidance,
-        sources=pack.sources,
+        tracking_guidance=pack.tracking_guidance.model_copy(
+            update={"text": localized_text(pack, locale, "tracking-guidance", pack.tracking_guidance.text)}
+        ) if pack.tracking_guidance else None,
+        sources=localized_sources(pack, locale),
         provenance=pack.provenance,
         pack_version=pack.pack_version,
         pack_digest=loaded.digest,
@@ -668,6 +839,34 @@ def detail_procedure(loaded: LoadedProcedure, now: datetime | None = None) -> Pr
         review_due_at=pack.review_due_at,
         trust_state=loaded.trust_state(now),
         attention_required=fee_attention_required(pack.fee),
-        limitations=pack.limitations,
-        additional_review_items=pack.readiness.additional_review_items,
+        limitations=[item.model_copy(update={"text": localized_text(pack, locale, f"limitation.{item.fact_id}", item.text)}) for item in pack.limitations],
+        additional_review_items=[
+            item.model_copy(update={"text": localized_text(pack, locale, f"additional-review.{item.fact_id}", item.text)})
+            for item in pack.readiness.additional_review_items
+        ],
     )
+
+
+def _localized_fee(pack: ProcedurePack, locale: SupportedLocale) -> FeeInformation:
+    fee = pack.fee
+    claims = [
+        claim.model_copy(update={"qualifier": localized_text(pack, locale, f"fee.claim.{index}.qualifier", claim.qualifier)})
+        for index, claim in enumerate(fee.claims)
+    ]
+    return fee.model_copy(
+        update={
+            "display_message": localized_text(pack, locale, "fee.display-message", fee.display_message),
+            "claims": claims,
+            "resolution_guidance": localized_text(pack, locale, "fee.resolution-guidance", fee.resolution_guidance)
+            if fee.resolution_guidance is not None
+            else None,
+        }
+    )
+
+
+def localized_sources(pack: ProcedurePack, locale: SupportedLocale, source_ids: set[str] | None = None) -> list[SourceRecord]:
+    return [
+        source.model_copy(update={"title": localized_text(pack, locale, f"source.{source.source_id}.title", source.title)})
+        for source in pack.sources
+        if source_ids is None or source.source_id in source_ids
+    ]

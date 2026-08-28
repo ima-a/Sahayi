@@ -3,8 +3,14 @@ import type { ProcedureSummary } from './api'
 export const MAX_QUERY_LENGTH = 500
 const MAX_CATALOGUE_CANDIDATES = 100
 
-// These are intentionally few and English-only. Service terms are never stop words.
-const STOP_WORDS = new Set(['a', 'an', 'and', 'are', 'for', 'i', 'in', 'is', 'it', 'my', 'of', 'or', 'the', 'to', 'want', 'with'])
+// These are intentionally few. Service terms are never stop words.
+const STOP_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'for', 'i', 'in', 'is', 'it', 'my', 'of', 'or', 'the', 'to', 'want', 'with',
+  'का', 'की', 'के', 'को', 'में', 'मुझे', 'है', 'करना', 'चाहिए',
+  'ഒരു', 'എന്റെ', 'എനിക്ക്', 'ആണ്', 'വേണം', 'ചെയ്യണം',
+])
+
+const DECIMAL_ZERO_CODE_POINTS = [0x30, 0x660, 0x6f0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66]
 
 export type MatchReason = 'exact_phrase' | 'phrase_containment' | 'token_overlap'
 export type Candidate = { procedure: ProcedureSummary; score: number; reason: MatchReason; matched_tokens: string[] }
@@ -14,7 +20,7 @@ export type MatchResult =
   | { kind: 'none' }
 
 export function normalise(text: string): string {
-  return text.normalize('NFKC').toLocaleLowerCase('en').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
+  return text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
 }
 
 export function meaningfulTokens(text: string): string[] {
@@ -22,11 +28,19 @@ export function meaningfulTokens(text: string): string[] {
 }
 
 export function detectHighRiskPii(text: string): boolean {
-  const compactDigits = text.replace(/[\s-]/g, '')
+  const compactDigits = normaliseDecimalDigits(text).replace(/[\s-]/g, '')
   const hasAadhaarLike = /(?<!\d)\d{12}(?!\d)/.test(compactDigits)
   const hasPhoneLike = /(?<!\d)\d{10}(?!\d)/.test(compactDigits)
   const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)
   return hasAadhaarLike || hasPhoneLike || hasEmail
+}
+
+export function normaliseDecimalDigits(text: string): string {
+  return text.replace(/\p{Nd}/gu, character => {
+    const codePoint = character.codePointAt(0) ?? -1
+    const zero = DECIMAL_ZERO_CODE_POINTS.find(base => codePoint >= base && codePoint <= base + 9)
+    return zero === undefined ? character : String(codePoint - zero)
+  })
 }
 
 export function matchProcedures(query: string, procedures: ProcedureSummary[]): MatchResult {

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "service_id": "uidai-aadhaar-address-update",
   "pack_version": "1.2.0",
-  "status": "active",
+  "status": "superseded",
   "jurisdiction": {
     "level": "national",
     "name": "India"

@@ -24,8 +24,8 @@ from sahayi_api.readiness import (
     evaluate_readiness,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.2.0" / "pack.json"
-KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.0.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.3.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.1.0" / "pack.json"
 
 
 def pack_data() -> dict:
@@ -285,6 +285,29 @@ def test_golden_aadhaar_paths(answers: dict, status: str, outcome_id: str) -> No
     assert first.sources
     assert any(entry.trace_type == "rule" for entry in first.reason_trace)
     assert first.disclaimer.endswith("not an eligibility decision or official approval.")
+
+
+@pytest.mark.parametrize(
+    ("loaded", "answers", "outcome_id", "handoff"),
+    [
+        (loaded_procedure, {"mobile-auth-access": True, "address-update-route": "own-document", "accepted-poa-ready": True}, "own-document-ready", "https://myaadhaar.uidai.gov.in/"),
+        (loaded_kerala_procedure, {"age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "within", "service-or-family-pension": "no", "income-tax-payer": "no", "other-social-welfare-pension": "no"}, "preliminary-conditions-aligned", "https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx"),
+    ],
+)
+def test_localized_readiness_preserves_rule_outcomes_and_sources(loaded, answers: dict, outcome_id: str, handoff: str) -> None:
+    results = {locale: evaluate_readiness(loaded(), answers, locale=locale) for locale in ("en", "hi", "ml")}
+    assert len({result.outcome.title for result in results.values() if result.outcome}) == 3
+    for locale, result in results.items():
+        assert result.locale == locale
+        assert result.outcome and result.outcome.outcome_id == outcome_id
+        assert result.evaluation_status == "ready"
+        assert str(result.official_handoff_url) == handoff
+        assert [(source.source_id, str(source.url)) for source in result.sources] == [
+            (source.source_id, str(source.url)) for source in results["en"].sources
+        ]
+        assert [(trace.trace_type, trace.trace_id, trace.source_ids) for trace in result.reason_trace] == [
+            (trace.trace_type, trace.trace_id, trace.source_ids) for trace in results["en"].reason_trace
+        ]
 
 
 def test_safe_default_outcome_is_used() -> None:

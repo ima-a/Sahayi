@@ -1,13 +1,23 @@
+import type { Locale } from './i18n'
+
 export type HealthStatus = { status: 'ok' }
 export type PublicConfig = { application_name: string; kiosk_mode: boolean }
 export type TrustState = 'current' | 'stale'
 export type FeeVerificationStatus = 'confirmed' | 'conflicting' | 'free' | 'not_stated'
+export type TranslationInfo = {
+  locale: Locale
+  canonical_locale: 'en'
+  method: 'canonical_source' | 'machine_assisted_prototype'
+  review_status: 'canonical_verified' | 'native_review_required'
+  disclaimer: string
+}
 export type ProcedureSummary = {
   service_id: string
   title: string
   short_description: string
   intent_phrases: string[]
   category: string
+  category_label: string
   trust_state: TrustState
   attention_required: boolean
 }
@@ -35,10 +45,13 @@ export type ProcedureSource = {
   source_type: 'webpage' | 'pdf'
 }
 export type ProcedureDetail = {
+  locale: Locale
+  translation: TranslationInfo
   service_id: string
   title: string
   short_description: string
   category: string
+  category_label: string
   jurisdiction: { level: 'national' | 'state' | 'local'; name: string }
   department: string
   official_publisher: string
@@ -74,6 +87,8 @@ export type ReadinessQuestion = {
   sensitivity: 'non_sensitive' | 'sensitive'
 }
 export type ReadinessResponse = {
+  locale: Locale
+  translation: TranslationInfo
   pack_version: string
   pack_digest: string
   evaluation_status: 'incomplete' | 'ready' | 'alternative_path' | 'needs_information' | 'cannot_confirm'
@@ -88,6 +103,7 @@ export type ReadinessResponse = {
   disclaimer: string
 }
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
+const localizedPath = (path: string, locale: Locale) => `${path}${path.includes('?') ? '&' : '?'}locale=${locale}`
 async function getJson<T>(path: string): Promise<T> { const response = await fetch(`${apiBase}${path}`, { headers: { Accept: 'application/json' } }); if (!response.ok) throw new Error('Service unavailable'); return response.json() as Promise<T> }
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
@@ -100,7 +116,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 }
 export const getHealth = () => getJson<HealthStatus>('/health')
 export const getPublicConfig = () => getJson<PublicConfig>('/public-config')
-export const getProcedures = () => getJson<{ procedures: ProcedureSummary[] }>('/procedures')
-export const getProcedure = (serviceId: string) => getJson<ProcedureDetail>(`/procedures/${encodeURIComponent(serviceId)}`)
-export const evaluateReadiness = (serviceId: string, answers: Record<string, ReadinessAnswer>) =>
-  postJson<ReadinessResponse>(`/procedures/${encodeURIComponent(serviceId)}/readiness/evaluate`, { answers })
+export const getProcedures = (locale: Locale = 'en') => getJson<{ locale: Locale; translation: TranslationInfo; procedures: ProcedureSummary[] }>(localizedPath('/procedures', locale))
+export const getProcedure = (serviceId: string, locale: Locale = 'en') => getJson<ProcedureDetail>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}`, locale))
+export const evaluateReadiness = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en') =>
+  postJson<ReadinessResponse>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/readiness/evaluate`, locale), { answers })

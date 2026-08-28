@@ -18,6 +18,11 @@ from sahayi_api.procedures import (
     SourceId,
     SourceRecord,
     StrictModel,
+    SupportedLocale,
+    TranslationInfo,
+    localized_sources,
+    localized_text,
+    translation_info,
 )
 
 MAX_ANSWERS = 30
@@ -69,6 +74,8 @@ class ReadinessProgress(StrictModel):
 
 
 class ReadinessEvaluationResponse(StrictModel):
+    locale: SupportedLocale
+    translation: TranslationInfo
     pack_version: str
     pack_digest: str
     evaluation_status: Literal["incomplete"] | ReadinessStatus
@@ -138,6 +145,7 @@ def evaluate_readiness(
     loaded: LoadedProcedure,
     submitted_answers: dict[str, AnswerValue],
     *,
+    locale: SupportedLocale = "en",
     operation_limit: int = MAX_EVALUATION_OPERATIONS,
 ) -> ReadinessEvaluationResponse:
     readiness = loaded.pack.readiness
@@ -162,7 +170,7 @@ def evaluate_readiness(
     answered_visible = sum(question.question_id in answers for question in visible_questions)
     next_question = next((question for question in visible_questions if question.question_id not in answers), None)
     if next_question is not None:
-        return _incomplete_response(loaded, next_question, answered_visible, len(visible_questions))
+        return _incomplete_response(loaded, next_question, answered_visible, len(visible_questions), locale)
 
     for rule in sorted(readiness.rules, key=lambda item: item.priority):
         if evaluate_expression(rule.expression, answers, budget):
@@ -178,13 +186,13 @@ def evaluate_readiness(
                     ReadinessTraceEntry(trace_type="outcome", trace_id=outcome.outcome_id, source_ids=outcome.source_ids),
                 ]
             )
-            return _complete_response(loaded, outcome, trace, answered_visible, len(visible_questions))
+            return _complete_response(loaded, outcome, trace, answered_visible, len(visible_questions), locale)
 
     outcome = next(item for item in readiness.outcomes if item.is_default)
     trace = [
         ReadinessTraceEntry(trace_type="default", trace_id=outcome.outcome_id, source_ids=outcome.source_ids)
     ]
-    return _complete_response(loaded, outcome, trace, answered_visible, len(visible_questions))
+    return _complete_response(loaded, outcome, trace, answered_visible, len(visible_questions), locale)
 
 
 def _validate_answer(question: ReadinessQuestion, value: AnswerValue) -> None:
@@ -201,13 +209,22 @@ def _validate_answer(question: ReadinessQuestion, value: AnswerValue) -> None:
         raise ReadinessInputError("Invalid readiness answer")
 
 
-def _question_response(question: ReadinessQuestion) -> ReadinessQuestionResponse:
+def _question_response(loaded: LoadedProcedure, question: ReadinessQuestion, locale: SupportedLocale) -> ReadinessQuestionResponse:
+    pack = loaded.pack
     return ReadinessQuestionResponse(
         question_id=question.question_id,
-        prompt=question.prompt["en"],
-        help_text=question.help_text["en"] if question.help_text else None,
+        prompt=localized_text(pack, locale, f"question.{question.question_id}.prompt", question.prompt["en"]),
+        help_text=localized_text(pack, locale, f"question.{question.question_id}.help", question.help_text["en"])
+        if question.help_text
+        else None,
         answer_type=question.answer_type,
-        options=[ReadinessOptionResponse(option_id=option.option_id, label=option.label["en"]) for option in question.options]
+        options=[
+            ReadinessOptionResponse(
+                option_id=option.option_id,
+                label=localized_text(pack, locale, f"question.{question.question_id}.option.{option.option_id}", option.label["en"]),
+            )
+            for option in question.options
+        ]
         if question.options
         else None,
         minimum=question.minimum,
@@ -222,21 +239,29 @@ def _incomplete_response(
     question: ReadinessQuestion,
     answered: int,
     total: int,
+    locale: SupportedLocale,
 ) -> ReadinessEvaluationResponse:
     source_ids = set(question.source_ids)
     return ReadinessEvaluationResponse(
+        locale=locale,
+        translation=translation_info(loaded.pack, locale),
         pack_version=loaded.pack.pack_version,
         pack_digest=loaded.digest,
         evaluation_status="incomplete",
         complete=False,
         progress=ReadinessProgress(answered=answered, total=total),
-        next_question=_question_response(question),
+        next_question=_question_response(loaded, question, locale),
         outcome=None,
         reason_trace=[ReadinessTraceEntry(trace_type="question", trace_id=question.question_id, source_ids=question.source_ids)],
-        sources=_sources(loaded, source_ids),
+        sources=_sources(loaded, source_ids, locale),
         recommended_next_steps=[],
         official_handoff_url=None,
-        disclaimer="This readiness check stores no answers and does not make an eligibility decision.",
+        disclaimer=localized_text(
+            loaded.pack,
+            locale,
+            "readiness.incomplete-disclaimer",
+            "This readiness check stores no answers and does not make an eligibility decision.",
+        ),
     )
 
 
@@ -246,9 +271,12 @@ def _complete_response(
     trace: list[ReadinessTraceEntry],
     answered: int,
     total: int,
+    locale: SupportedLocale,
 ) -> ReadinessEvaluationResponse:
     source_ids = {source_id for entry in trace for source_id in entry.source_ids}
     return ReadinessEvaluationResponse(
+        locale=locale,
+        translation=translation_info(loaded.pack, locale),
         pack_version=loaded.pack.pack_version,
         pack_digest=loaded.digest,
         evaluation_status=outcome.status,
@@ -258,19 +286,24 @@ def _complete_response(
         outcome=ReadinessOutcomeResponse(
             outcome_id=outcome.outcome_id,
             status=outcome.status,
-            title=outcome.title["en"],
-            explanation=outcome.explanation["en"],
+            title=localized_text(loaded.pack, locale, f"outcome.{outcome.outcome_id}.title", outcome.title["en"]),
+            explanation=localized_text(
+                loaded.pack, locale, f"outcome.{outcome.outcome_id}.explanation", outcome.explanation["en"]
+            ),
         ),
         reason_trace=trace,
-        sources=_sources(loaded, source_ids),
-        recommended_next_steps=[step["en"] for step in outcome.recommended_next_steps],
+        sources=_sources(loaded, source_ids, locale),
+        recommended_next_steps=[
+            localized_text(loaded.pack, locale, f"outcome.{outcome.outcome_id}.next-step.{index}", step["en"])
+            for index, step in enumerate(outcome.recommended_next_steps)
+        ],
         official_handoff_url=outcome.official_handoff_url,
-        disclaimer=outcome.disclaimer["en"],
+        disclaimer=localized_text(loaded.pack, locale, f"outcome.{outcome.outcome_id}.disclaimer", outcome.disclaimer["en"]),
     )
 
 
-def _sources(loaded: LoadedProcedure, source_ids: set[str]) -> list[SourceRecord]:
-    return [source for source in loaded.pack.sources if source.source_id in source_ids]
+def _sources(loaded: LoadedProcedure, source_ids: set[str], locale: SupportedLocale) -> list[SourceRecord]:
+    return localized_sources(loaded.pack, locale, source_ids)
 
 
 def _referenced_questions(expression: RuleExpression) -> list[str]:

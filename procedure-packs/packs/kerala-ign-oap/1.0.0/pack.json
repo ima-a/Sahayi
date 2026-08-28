@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "service_id": "kerala-ign-oap",
   "pack_version": "1.0.0",
-  "status": "active",
+  "status": "superseded",
   "jurisdiction": { "level": "state", "name": "Kerala" },
   "department": "Local Self Government Department, Government of Kerala",
   "publisher": "Government of Kerala, Sevana Pension – Social Security System",

@@ -3,23 +3,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { ProcedureDetail, ProcedureSummary, ReadinessResponse } from './api'
 
+const englishTranslation = {
+  locale: 'en' as const,
+  canonical_locale: 'en' as const,
+  method: 'canonical_source' as const,
+  review_status: 'canonical_verified' as const,
+  disclaimer: 'English is the canonical source language.',
+}
+
 const summary: ProcedureSummary = {
   service_id: 'uidai-aadhaar-address-update',
   title: 'Update your Aadhaar address online',
   short_description: 'Official UIDAI guidance for requesting an address update through the MyAadhaar portal.',
   intent_phrases: ['change Aadhaar address', 'update address in Aadhaar'],
-  category: 'identity-documents', trust_state: 'current', attention_required: true,
+  category: 'identity-documents', category_label: 'Identity documents', trust_state: 'current', attention_required: true,
 }
 
 const pensionSummary: ProcedureSummary = {
   service_id: 'kerala-ign-oap', title: 'Kerala Indira Gandhi National Old Age Pension',
   short_description: 'Verified Kerala guidance for a preliminary readiness check and local-body application.',
   intent_phrases: ['old age pension Kerala', 'Kerala senior pension'],
-  category: 'social-security-pension', trust_state: 'current', attention_required: false,
+  category: 'social-security-pension', category_label: 'Social security pension', trust_state: 'current', attention_required: false,
 }
 
 const detail: ProcedureDetail = {
   ...summary,
+  locale: 'en', translation: englishTranslation,
   official_publisher: 'Unique Identification Authority of India', interaction_modes: ['online'], pack_version: '1.2.0', last_verified_at: '2026-08-28T10:10:25+05:30', review_due_at: '2026-09-11T10:10:25+05:30',
   jurisdiction: { level: 'national', name: 'India' }, department: 'Unique Identification Authority of India',
   requirements: [{ fact_id: 'registered-mobile', text: 'Your mobile number must already be registered with Aadhaar.', source_ids: ['uidai-update-overview'] }],
@@ -65,6 +74,7 @@ const response = (body: unknown) => Promise.resolve({ ok: true, json: async () =
 
 const readinessSource = detail.sources[0]
 const readinessStep = (question: NonNullable<ReadinessResponse['next_question']>, answered: number, total: number): ReadinessResponse => ({
+  locale: 'en', translation: englishTranslation,
   pack_version: '1.2.0', pack_digest: 'b'.repeat(64), evaluation_status: 'incomplete', complete: false,
   progress: { answered, total }, next_question: question, outcome: null,
   reason_trace: [{ trace_type: 'question', trace_id: question.question_id, source_ids: [readinessSource.source_id] }],
@@ -76,6 +86,7 @@ const routeQuestion: NonNullable<ReadinessResponse['next_question']> = { questio
 const poaQuestion: NonNullable<ReadinessResponse['next_question']> = { question_id: 'accepted-poa-ready', prompt: 'Do you have an accepted proof-of-address document?', help_text: 'Do not upload or describe the document here.', answer_type: 'boolean', options: null, minimum: null, maximum: null, required: true, sensitivity: 'non_sensitive' }
 const pensionSensitiveQuestion: NonNullable<ReadinessResponse['next_question']> = { question_id: 'family-income-category', prompt: 'Is annual family income within Rs. 1 lakh?', help_text: 'Choose only a category.', answer_type: 'single_choice', options: [{ option_id: 'within', label: 'Within Rs. 1 lakh' }, { option_id: 'prefer-not-to-answer', label: 'Prefer not to answer' }], minimum: null, maximum: null, required: true, sensitivity: 'sensitive' }
 const completeReadiness: ReadinessResponse = {
+  locale: 'en', translation: englishTranslation,
   pack_version: '1.2.0', pack_digest: 'b'.repeat(64), evaluation_status: 'ready', complete: true, progress: { answered: 3, total: 3 }, next_question: null,
   outcome: { outcome_id: 'own-document-ready', status: 'ready', title: 'You appear ready for the own-document route', explanation: 'Your choices indicate access to mobile authentication and an accepted proof-of-address route.' },
   reason_trace: [{ trace_type: 'rule', trace_id: 'own-document-ready', source_ids: [readinessSource.source_id] }], sources: [readinessSource],
@@ -86,10 +97,11 @@ const completeReadiness: ReadinessResponse = {
 function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: ProcedureDetail; readinessInitial?: ReadinessResponse; failCatalogue?: boolean; failDetail?: boolean; failReadiness?: boolean } = {}) {
   const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    if (url.endsWith('/health')) return response({ status: 'ok' })
-    if (url.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true })
-    if (url.endsWith('/procedures')) return options.failCatalogue ? Promise.reject(new Error('offline')) : response({ procedures: options.procedures ?? [summary] })
-    if (url.endsWith('/readiness/evaluate')) {
+    const parsed = new URL(url, 'http://test')
+    if (parsed.pathname.endsWith('/health')) return response({ status: 'ok' })
+    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true })
+    if (parsed.pathname.endsWith('/procedures')) return options.failCatalogue ? Promise.reject(new Error('offline')) : response({ locale: parsed.searchParams.get('locale') ?? 'en', translation: englishTranslation, procedures: options.procedures ?? [summary] })
+    if (parsed.pathname.endsWith('/readiness/evaluate')) {
       if (options.failReadiness) return Promise.reject(new Error('offline'))
       const answers = JSON.parse(String(init?.body)).answers as Record<string, unknown>
       if (Object.keys(answers).length === 0) return response(options.readinessInitial ?? readinessStep(mobileQuestion, 0, 1))
@@ -98,7 +110,7 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
       if (answers['accepted-poa-ready'] === true) return response(completeReadiness)
       return response({ ...completeReadiness, evaluation_status: 'alternative_path', outcome: { ...completeReadiness.outcome, outcome_id: 'use-alternative-channel', status: 'alternative_path', title: 'Use an alternative official channel' } })
     }
-    if (url.includes('/procedures/')) return options.failDetail ? Promise.reject(new Error('offline')) : response(options.procedure ?? detail)
+    if (parsed.pathname.includes('/procedures/')) return options.failDetail ? Promise.reject(new Error('offline')) : response(options.procedure ?? detail)
     return Promise.reject(new Error(`Unexpected request: ${url}`))
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -138,6 +150,25 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getByRole('button', { name: /Update your Aadhaar address online/ })).toBeInTheDocument()
     expect(screen.getByText(/Official UIDAI guidance/)).toBeInTheDocument()
     expect(screen.getByText('Fee needs confirmation')).toBeInTheDocument()
+  })
+
+  it('offers exactly three accessible languages, updates document language, and keeps the choice in memory across Start Over', async () => {
+    const fetchMock = mockApi()
+    render(<App />)
+    const selector = screen.getByLabelText('Language')
+    expect(within(selector).getAllByRole('option').map(option => option.textContent)).toEqual(['English', 'हिन्दी', 'മലയാളം'])
+    fireEvent.change(selector, { target: { value: 'hi' } })
+    expect(document.documentElement.lang).toBe('hi')
+    expect(screen.getByText('आपकी ज़रूरत के अनुसार समझाई गई सरकारी सेवाएँ।')).toBeInTheDocument()
+    expect(screen.getByRole('note')).toHaveTextContent('मशीन-सहायित प्रोटोटाइप')
+    fireEvent.click(await screen.findByRole('button', { name: 'शुरू करें' }))
+    await screen.findByRole('heading', { name: 'आपको किस काम में मदद चाहिए?' })
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/procedures?locale=hi'))).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'फिर से शुरू करें' }))
+    expect(screen.getByLabelText('भाषा')).toHaveValue('hi')
+    fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
+    expect(document.documentElement.lang).toBe('ml')
+    expect(screen.getByText('നിങ്ങളുടെ ആവശ്യം അടിസ്ഥാനമാക്കി വിശദീകരിച്ച സർക്കാർ സേവനങ്ങൾ.')).toBeInTheDocument()
   })
 
   it('renders both services and Kerala form, destination, respectful review, and sensitive-choice guidance', async () => {
@@ -240,6 +271,8 @@ describe('Sahayi verified procedure flow', () => {
     const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
     mockApi()
     render(<App />)
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
+    fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'en' } })
     await openProcedure()
     expect(storageWrite).not.toHaveBeenCalled()
   })
@@ -288,7 +321,7 @@ describe('Sahayi verified procedure flow', () => {
     expect(await screen.findByRole('heading', { name: mobileQuestion.prompt })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Start Over' }))
     expect(screen.getByRole('heading', { name: 'Sahayi' })).toBeInTheDocument()
-    const postedBodies = fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/readiness/evaluate')).map(call => JSON.parse(String(call[1]?.body)))
+    const postedBodies = fetchMock.mock.calls.filter(call => new URL(String(call[0]), 'http://test').pathname.endsWith('/readiness/evaluate')).map(call => JSON.parse(String(call[1]?.body)))
     expect(postedBodies.at(-1)).toEqual({ answers: {} })
   })
 

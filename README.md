@@ -1,6 +1,8 @@
 # Sahayi
 
-Sahayi is a privacy-first local kiosk prototype for making government services easier to understand. It starts with a browser-only service finder: describe the service needed, confirm a deterministic suggestion from verified pack phrases, or browse all supported services. Raw text is not sent to the backend or stored. The current slice serves verified, versioned procedure guidance without accounts or stored citizen data.
+Sahayi is a privacy-first local kiosk prototype for making government services easier to understand in English, Hindi, and Malayalam. It starts with a browser-only service finder: describe the service needed, confirm a deterministic suggestion from verified pack phrases, or browse all supported services. Raw text is not sent to the backend or stored. The current slice serves verified, versioned procedure guidance without accounts or stored citizen data.
+
+English is the canonical verified guidance. Hindi and Malayalam are machine-assisted prototype translations of that already-validated content, require native-speaker and legal review before production use, and defer to the linked official source wording. Sahayi uses no runtime translation API, external translation resource, or external font.
 
 The hackathon deliverable will be a hosted web demonstration of the intended kiosk experience. Project context and implementation decisions are in [`.ai/`](.ai/PROJECT_CONTEXT.md).
 
