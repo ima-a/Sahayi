@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: sahayi
+    runtime: docker
+    plan: free
+    branch: feat/sahayi-deployment
+    autoDeployTrigger: off
+    healthCheckPath: /api/v1/health
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
