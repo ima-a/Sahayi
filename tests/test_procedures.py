@@ -20,9 +20,10 @@ from sahayi_api.procedures import (
     default_pack_root,
     load_procedure_registry,
     pack_digest,
+    summarize_procedure,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.0.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.1.0" / "pack.json"
 SCHEMA_PATH = PACK_PATH.parents[3] / "schemas" / "procedure-pack-v1.schema.json"
 
 
@@ -34,6 +35,25 @@ def write_pack(root: Path, name: str, data: dict[str, object]) -> None:
     target = root / name / "pack.json"
     target.parent.mkdir(parents=True)
     target.write_text(json.dumps(data), encoding="utf-8")
+
+
+def confirmed_fee() -> dict[str, object]:
+    return {
+        "verification_status": "confirmed",
+        "amount": "50.00",
+        "currency": "INR",
+        "display_message": "Official sources agree on the fee.",
+        "claims": [
+            {
+                "amount": "50.00",
+                "currency": "INR",
+                "qualifier": "Online address update, including GST.",
+                "source_ids": ["uidai-enrolment-update-faq"],
+            }
+        ],
+        "resolution_guidance": None,
+        "source_ids": ["uidai-enrolment-update-faq"],
+    }
 
 
 @pytest.fixture
@@ -102,6 +122,87 @@ def test_missing_and_nonexistent_source_references_are_rejected() -> None:
         ProcedurePack.model_validate(unmapped)
 
 
+def test_confirmed_fee_validation() -> None:
+    data = pack_data()
+    data["fee"] = confirmed_fee()
+    validated = ProcedurePack.model_validate(data)
+    assert validated.fee.verification_status == "confirmed"
+    assert str(validated.fee.amount) == "50.00"
+
+
+def test_conflicting_fee_validation_and_distinct_claims() -> None:
+    validated = ProcedurePack.model_validate(pack_data())
+    assert validated.fee.verification_status == "conflicting"
+    assert validated.fee.amount is None
+
+    duplicate = pack_data()
+    duplicate["fee"]["claims"][1]["amount"] = "50.00"
+    with pytest.raises(ValidationError, match="at least two distinct claims with different values"):
+        ProcedurePack.model_validate(duplicate)
+
+
+def test_conflicting_fee_rejects_a_canonical_amount() -> None:
+    data = pack_data()
+    data["fee"]["amount"] = "50.00"
+    data["fee"]["currency"] = "INR"
+    with pytest.raises(ValidationError, match="must not expose a canonical amount"):
+        ProcedurePack.model_validate(data)
+
+
+def test_fee_claim_provenance_must_exist() -> None:
+    data = pack_data()
+    data["fee"]["claims"][0]["source_ids"] = ["not-a-source"]
+    data["fee"]["source_ids"] = ["not-a-source", "uidai-my-aadhaar-services"]
+    with pytest.raises(ValidationError, match="unknown source references: not-a-source"):
+        ProcedurePack.model_validate(data)
+
+
+def test_confirmed_fee_claims_cannot_disagree() -> None:
+    data = pack_data()
+    fee = confirmed_fee()
+    fee["claims"].append(
+        {
+            "amount": "75.00",
+            "currency": "INR",
+            "qualifier": "A second official statement.",
+            "source_ids": ["uidai-my-aadhaar-services"],
+        }
+    )
+    fee["source_ids"] = ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
+    data["fee"] = fee
+    with pytest.raises(ValidationError, match="confirmed fee claims must agree"):
+        ProcedurePack.model_validate(data)
+
+
+def test_free_and_not_stated_fee_validation() -> None:
+    free = pack_data()
+    free["fee"] = {
+        "verification_status": "free",
+        "amount": "0.00",
+        "currency": "INR",
+        "display_message": "This service is free.",
+        "claims": [{"amount": "0.00", "currency": "INR", "qualifier": "No fee is charged.", "source_ids": ["uidai-my-aadhaar-services"]}],
+        "resolution_guidance": None,
+        "source_ids": ["uidai-my-aadhaar-services"],
+    }
+    assert ProcedurePack.model_validate(free).fee.verification_status == "free"
+
+    not_stated = pack_data()
+    not_stated["fee"] = {
+        "verification_status": "not_stated",
+        "amount": None,
+        "currency": None,
+        "display_message": "The reviewed source does not state a fee.",
+        "claims": [],
+        "resolution_guidance": None,
+        "source_ids": ["uidai-update-overview"],
+    }
+    assert ProcedurePack.model_validate(not_stated).fee.verification_status == "not_stated"
+    not_stated["fee"]["amount"] = "1.00"
+    with pytest.raises(ValidationError, match="not_stated fee must not include an amount"):
+        ProcedurePack.model_validate(not_stated)
+
+
 def test_duplicate_service_version_is_rejected(tmp_path: Path) -> None:
     data = pack_data()
     write_pack(tmp_path, "one", data)
@@ -113,7 +214,7 @@ def test_duplicate_service_version_is_rejected(tmp_path: Path) -> None:
 def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
     first = pack_data()
     second = copy.deepcopy(first)
-    second["pack_version"] = "1.1.0"
+    second["pack_version"] = "1.2.0"
     write_pack(tmp_path, "one", first)
     write_pack(tmp_path, "two", second)
     with pytest.raises(PackLoadError, match="exactly one active"):
@@ -123,12 +224,12 @@ def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
 def test_draft_pack_is_not_selected(tmp_path: Path) -> None:
     active = pack_data()
     draft = copy.deepcopy(active)
-    draft["pack_version"] = "1.1.0"
+    draft["pack_version"] = "1.2.0"
     draft["status"] = "draft"
     write_pack(tmp_path, "active", active)
     write_pack(tmp_path, "draft", draft)
     registry = load_procedure_registry(tmp_path)
-    assert registry[active["service_id"]].pack.pack_version == "1.0.0"
+    assert registry[active["service_id"]].pack.pack_version == "1.1.0"
 
 
 def test_no_active_pack_fails_closed(tmp_path: Path) -> None:
@@ -141,8 +242,10 @@ def test_no_active_pack_fails_closed(tmp_path: Path) -> None:
 
 def test_stale_trust_calculation() -> None:
     loaded = load_procedure_registry(default_pack_root())["uidai-aadhaar-address-update"]
-    assert loaded.trust_state(datetime(2026, 11, 27, tzinfo=UTC)) is TrustState.CURRENT
-    assert loaded.trust_state(datetime(2026, 11, 29, tzinfo=UTC)) is TrustState.STALE
+    assert loaded.trust_state(datetime(2026, 9, 10, tzinfo=UTC)) is TrustState.CURRENT
+    assert loaded.trust_state(datetime(2026, 9, 12, tzinfo=UTC)) is TrustState.STALE
+    assert summarize_procedure(loaded, datetime(2026, 9, 10, tzinfo=UTC)).attention_required is True
+    assert summarize_procedure(loaded, datetime(2026, 9, 12, tzinfo=UTC)).attention_required is True
 
 
 def test_pack_digest_is_deterministic() -> None:
@@ -150,7 +253,22 @@ def test_pack_digest_is_deterministic() -> None:
     reordered_json = json.dumps(pack_data(), sort_keys=True)
     reordered = ProcedurePack.model_validate_json(reordered_json)
     assert pack_digest(original) == pack_digest(reordered)
-    assert pack_digest(original) == "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
+    assert pack_digest(original) == "320e137685df3680972895b28d989d0fd00b3b8afcaa963fa10b565919c8fb84"
+    assert pack_digest(original) != "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
+
+
+def test_active_aadhaar_pack_never_presents_a_conflicting_amount_as_definitive() -> None:
+    data = pack_data()
+    assert data["fee"]["verification_status"] == "conflicting"
+    assert data["fee"]["amount"] is None
+    assert data["fee"]["currency"] is None
+    citizen_guidance = " ".join(
+        [data["fee"]["display_message"], data["fee"]["resolution_guidance"]]
+        + [step["instruction"] for step in data["steps"]]
+    )
+    assert "fee is ₹50" not in citizen_guidance
+    assert "fee is ₹75" not in citizen_guidance
+    assert "official fee for an online address update is" not in citizen_guidance.lower()
 
 
 @pytest.mark.anyio
@@ -163,6 +281,7 @@ async def test_list_endpoint_returns_safe_active_summaries(client: AsyncClient) 
     summary = payload["procedures"][0]
     assert summary["service_id"] == "uidai-aadhaar-address-update"
     assert summary["trust_state"] == "current"
+    assert summary["attention_required"] is True
     assert "requirements" not in summary
     assert "official_handoff_url" not in summary
 
@@ -173,10 +292,15 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
-    assert payload["fee"]["amount"] == "50.00"
+    assert payload["fee"]["verification_status"] == "conflicting"
+    assert payload["fee"]["amount"] is None
+    assert payload["fee"]["currency"] is None
+    assert [claim["amount"] for claim in payload["fee"]["claims"]] == ["50.00", "75.00"]
+    assert payload["fee"]["resolution_guidance"].endswith("Confirm the fee on the official portal before payment.")
+    assert payload["attention_required"] is True
     assert payload["official_handoff_url"] == "https://myaadhaar.uidai.gov.in/"
-    assert payload["pack_digest"] == "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
-    assert payload["provenance"]["fee"] == ["uidai-online-address-fee"]
+    assert payload["pack_digest"] == "320e137685df3680972895b28d989d0fd00b3b8afcaa963fa10b565919c8fb84"
+    assert payload["provenance"]["fee"] == ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
     assert all(source["url"].startswith("https://") for source in payload["sources"])
 
 

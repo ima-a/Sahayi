@@ -56,7 +56,7 @@ function App() {
       : procedures === null ? <div className="state-panel" role="status" aria-live="polite">Loading supported services…</div>
         : procedures.length === 0 ? <div className="state-panel" role="status"><h2>No procedures are available</h2><p>No verified service guidance can be shown right now.</p></div>
           : <ul className="service-list">{procedures.map(procedure => <li key={procedure.service_id}><button className="service-card" type="button" onClick={() => selectProcedure(procedure.service_id)}>
-            <span><strong>{procedure.title}</strong><small>{procedure.short_description}</small></span><span aria-hidden="true">→</span>
+            <span><strong>{procedure.title}</strong><small>{procedure.short_description}</small>{procedure.attention_required && <small className="attention-badge">Fee needs confirmation</small>}</span><span aria-hidden="true">→</span>
           </button></li>)}</ul>}
   </section></main>
 
@@ -76,6 +76,7 @@ function App() {
 }
 
 function ProcedureOverview({ procedure }: { procedure: ProcedureDetail }) {
+  const sourceById = new Map(procedure.sources.map(source => [source.source_id, source]))
   return <article aria-labelledby="procedure-title">
     <p className="eyebrow">{procedure.category.replaceAll('-', ' ')}</p><h1 id="procedure-title">{procedure.title}</h1><p className="lead">{procedure.short_description}</p>
     {procedure.trust_state === 'stale' && <div className="stale-warning" role="alert"><strong>This guidance needs review.</strong> The review date has passed. Confirm every detail on the official UIDAI website before continuing.</div>}
@@ -85,7 +86,15 @@ function ProcedureOverview({ procedure }: { procedure: ProcedureDetail }) {
     </section>
     <p className="disclaimer"><strong>Sahayi is guidance only.</strong> It is not UIDAI or a government service. Sahayi cannot authenticate you, submit this update, or track it.</p>
     <div className="detail-grid"><section><h2>Before you start</h2><ul>{procedure.requirements.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul><h3>Document guidance</h3>{procedure.required_documents.map(document => <div key={document.document_id}><strong>{document.name}</strong><p>{document.guidance}</p></div>)}</section>
-      <section className="fee-card"><h2>Current fee</h2><p className="fee-amount">{procedure.fee.amount === null ? 'Unknown' : `₹${Number(procedure.fee.amount).toLocaleString('en-IN')}`}</p><p>{procedure.fee.statement}</p>{procedure.fee.qualifiers.map(qualifier => <small key={qualifier}>{qualifier}</small>)}</section></div>
+      <section className={`fee-card ${procedure.fee.verification_status}`} role={procedure.fee.verification_status === 'conflicting' ? 'alert' : undefined} aria-labelledby="fee-title">
+        <h2 id="fee-title">{procedure.fee.verification_status === 'conflicting' ? 'Fee needs confirmation' : 'Fee information'}</h2>
+        <p>{procedure.fee.display_message}</p>
+        {procedure.fee.claims.length > 0 && <ul className="fee-claims">{procedure.fee.claims.map(claim => <li key={`${claim.currency}-${claim.amount}-${claim.source_ids.join('-')}`}>
+          <strong>₹{Number(claim.amount).toLocaleString('en-IN')}</strong><span>{claim.qualifier}</span>
+          <span className="claim-sources">Source: {claim.source_ids.map((sourceId, index) => { const source = sourceById.get(sourceId); return source ? <span key={sourceId}>{index > 0 && ', '}<a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a></span> : null })}</span>
+        </li>)}</ul>}
+        {procedure.fee.resolution_guidance && <p className="resolution-guidance"><strong>Before paying:</strong> {procedure.fee.resolution_guidance}</p>}
+      </section></div>
     <section><h2>Steps</h2><ol className="steps">{procedure.steps.map(step => <li key={step.step_id}><div><span>{step.order}</span></div><section><h3>{step.title}</h3><p>{step.instruction}</p></section></li>)}</ol></section>
     {procedure.tracking_guidance && <section><h2>Tracking</h2><p>{procedure.tracking_guidance.text}</p></section>}
     <section><h2>Important limitations</h2><ul>{procedure.limitations.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul></section>

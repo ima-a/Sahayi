@@ -70,6 +70,13 @@ class TrustState(StrEnum):
     STALE = "stale"
 
 
+class FeeVerificationStatus(StrEnum):
+    CONFIRMED = "confirmed"
+    CONFLICTING = "conflicting"
+    FREE = "free"
+    NOT_STATED = "not_stated"
+
+
 class Jurisdiction(StrictModel):
     level: JurisdictionLevel
     name: ShortText
@@ -113,12 +120,53 @@ class DocumentGuidance(StrictModel):
     source_ids: SourceIds
 
 
-class FeeInformation(StrictModel):
-    amount: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)] | None
+class FeeClaim(StrictModel):
+    amount: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)]
     currency: Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")]
-    statement: ShortText
-    qualifiers: Annotated[list[ShortText], Field(max_length=8)]
+    qualifier: ShortText
     source_ids: SourceIds
+
+
+class FeeInformation(StrictModel):
+    verification_status: FeeVerificationStatus
+    amount: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)] | None
+    currency: Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$")] | None
+    display_message: ShortText
+    claims: Annotated[list[FeeClaim], Field(max_length=8)]
+    resolution_guidance: ShortText | None = None
+    source_ids: SourceIds
+
+    @model_validator(mode="after")
+    def validate_status(self) -> FeeInformation:
+        status = self.verification_status
+        claim_values = {(claim.amount, claim.currency) for claim in self.claims}
+        claim_sources = {source_id for claim in self.claims for source_id in claim.source_ids}
+
+        if status is FeeVerificationStatus.CONFIRMED:
+            if self.amount is None or self.currency is None or not self.claims:
+                raise ValueError("confirmed fee requires a canonical amount, currency, and at least one claim")
+            if self.amount == 0:
+                raise ValueError("a zero fee must use free verification status")
+            if claim_values != {(self.amount, self.currency)}:
+                raise ValueError("confirmed fee claims must agree with the canonical amount and currency")
+        elif status is FeeVerificationStatus.CONFLICTING:
+            if self.amount is not None or self.currency is not None:
+                raise ValueError("conflicting fee must not expose a canonical amount or currency")
+            if len(self.claims) < 2 or len(claim_values) < 2:
+                raise ValueError("conflicting fee requires at least two distinct claims with different values")
+            if self.resolution_guidance is None:
+                raise ValueError("conflicting fee requires resolution guidance")
+        elif status is FeeVerificationStatus.FREE:
+            if self.amount != 0 or self.currency is None or not self.claims:
+                raise ValueError("free fee requires a zero canonical amount, currency, and at least one claim")
+            if claim_values != {(Decimal("0"), self.currency)}:
+                raise ValueError("free fee claims must state zero in the canonical currency")
+        elif self.amount is not None or self.currency is not None or self.claims:
+            raise ValueError("not_stated fee must not include an amount, currency, or claims")
+
+        if self.claims and claim_sources != set(self.source_ids):
+            raise ValueError("fee source_ids must match the sources referenced by its claims")
+        return self
 
 
 class ProcedureStep(StrictModel):
@@ -201,7 +249,7 @@ class ProcedurePack(StrictModel):
         known_sources = set(source_ids)
 
         references: list[str] = []
-        for item in [*self.requirements, *self.required_documents, self.fee, *self.steps, *self.submission_channels, *self.limitations]:
+        for item in [*self.requirements, *self.required_documents, self.fee, *self.fee.claims, *self.steps, *self.submission_channels, *self.limitations]:
             references.extend(item.source_ids)
         if self.tracking_guidance:
             references.extend(self.tracking_guidance.source_ids)
@@ -294,6 +342,7 @@ class ProcedureSummary(StrictModel):
     last_verified_at: datetime
     review_due_at: datetime
     trust_state: TrustState
+    attention_required: bool
 
 
 class ProcedureListResponse(StrictModel):
@@ -323,7 +372,12 @@ class ProcedureDetail(StrictModel):
     last_verified_at: datetime
     review_due_at: datetime
     trust_state: TrustState
+    attention_required: bool
     limitations: list[CitedFact]
+
+
+def fee_attention_required(fee: FeeInformation) -> bool:
+    return fee.verification_status is FeeVerificationStatus.CONFLICTING
 
 
 def summarize_procedure(loaded: LoadedProcedure, now: datetime | None = None) -> ProcedureSummary:
@@ -339,6 +393,7 @@ def summarize_procedure(loaded: LoadedProcedure, now: datetime | None = None) ->
         last_verified_at=pack.last_verified_at,
         review_due_at=pack.review_due_at,
         trust_state=loaded.trust_state(now),
+        attention_required=fee_attention_required(pack.fee),
     )
 
 
@@ -367,5 +422,6 @@ def detail_procedure(loaded: LoadedProcedure, now: datetime | None = None) -> Pr
         last_verified_at=pack.last_verified_at,
         review_due_at=pack.review_due_at,
         trust_state=loaded.trust_state(now),
+        attention_required=fee_attention_required(pack.fee),
         limitations=pack.limitations,
     )

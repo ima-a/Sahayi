@@ -1,6 +1,7 @@
 export type HealthStatus = { status: 'ok' }
 export type PublicConfig = { application_name: string; kiosk_mode: boolean }
 export type TrustState = 'current' | 'stale'
+export type FeeVerificationStatus = 'confirmed' | 'conflicting' | 'free' | 'not_stated'
 export type ProcedureSummary = {
   service_id: string
   title: string
@@ -12,10 +13,20 @@ export type ProcedureSummary = {
   last_verified_at: string
   review_due_at: string
   trust_state: TrustState
+  attention_required: boolean
 }
 export type CitedFact = { fact_id: string; text: string; source_ids: string[] }
 export type DocumentGuidance = { document_id: string; name: string; guidance: string; source_ids: string[] }
-export type FeeInformation = { amount: string | null; currency: string; statement: string; qualifiers: string[]; source_ids: string[] }
+export type FeeClaim = { amount: string; currency: string; qualifier: string; source_ids: string[] }
+export type FeeInformation = {
+  verification_status: FeeVerificationStatus
+  amount: string | null
+  currency: string | null
+  display_message: string
+  claims: FeeClaim[]
+  resolution_guidance: string | null
+  source_ids: string[]
+}
 export type ProcedureStep = { step_id: string; order: number; title: string; instruction: string; source_ids: string[] }
 export type ProcedureSource = {
   source_id: string
@@ -50,6 +61,7 @@ export type ProcedureDetail = {
   last_verified_at: string
   review_due_at: string
   trust_state: TrustState
+  attention_required: boolean
   limitations: CitedFact[]
 }
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'

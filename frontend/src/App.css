@@ -34,6 +34,7 @@ button:focus-visible, a:focus-visible { outline: 4px solid #d6a312; outline-offs
 .service-card strong, .service-card small { display: block; }
 .service-card strong { margin-bottom: 7px; font-size: 1.15rem; }
 .service-card small { color: #47675b; line-height: 1.45; }
+.service-card .attention-badge { width: fit-content; margin-top: 10px; padding: 4px 8px; border: 1px solid #b76500; border-radius: 6px; background: #fff3d5; color: #593600; font-weight: 750; }
 .page-actions { display: flex; justify-content: space-between; margin-bottom: 36px; }
 .trust-card { margin: 34px 0 24px; padding: clamp(22px, 5vw, 34px); border: 2px solid #6ca48d; border-radius: 20px; background: #eff9f4; }
 .trust-card.stale { border-color: #bd7816; background: #fff8e8; }
@@ -50,8 +51,16 @@ a { color: #006b43; font-weight: 700; }
 .detail-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 24px; margin-top: 34px; }
 .detail-grid h2 { margin-top: 0; }
 .fee-card { padding: 24px; border-radius: 18px; background: #e6f4ed; }
+.fee-card.conflicting { border: 2px solid #b76500; background: #fff8e8; }
 .fee-amount { margin: 6px 0; color: #075a3b; font-size: 2.4rem; font-weight: 850; }
 .fee-card small { display: block; color: #47675b; line-height: 1.5; }
+.fee-claims { padding-left: 20px; }
+.fee-claims li + li { margin-top: 16px; }
+.fee-claims strong, .fee-claims span { display: block; }
+.fee-claims strong { color: #593600; font-size: 1.35rem; }
+.claim-sources { margin-top: 4px; font-size: .88rem; }
+.claim-sources span { display: inline; }
+.resolution-guidance { margin-bottom: 0; padding-top: 14px; border-top: 1px solid #d7ac64; color: #4b3100; }
 .steps { padding: 0; list-style: none; }
 .steps li { display: grid; grid-template-columns: 46px 1fr; gap: 14px; padding: 18px 0; border-bottom: 1px solid #d9e6e0; }
 .steps li > div span { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: #087a4d; color: white; font-weight: 800; }

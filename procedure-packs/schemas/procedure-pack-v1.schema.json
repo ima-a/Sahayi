@@ -77,6 +77,54 @@
       "title": "DocumentGuidance",
       "type": "object"
     },
+    "FeeClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,8}|(?=[\\d.]{1,11}0*$)\\d{0,8}\\.\\d{0,2}0*$)",
+              "type": "string"
+            }
+          ],
+          "title": "Amount"
+        },
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "qualifier": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Qualifier",
+          "type": "string"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "amount",
+        "currency",
+        "qualifier",
+        "source_ids"
+      ],
+      "title": "FeeClaim",
+      "type": "object"
+    },
     "FeeInformation": {
       "additionalProperties": false,
       "properties": {
@@ -96,20 +144,45 @@
           ],
           "title": "Amount"
         },
-        "currency": {
-          "pattern": "^[A-Z]{3}$",
-          "title": "Currency",
-          "type": "string"
-        },
-        "qualifiers": {
+        "claims": {
           "items": {
-            "maxLength": 240,
-            "minLength": 1,
-            "type": "string"
+            "$ref": "#/$defs/FeeClaim"
           },
           "maxItems": 8,
-          "title": "Qualifiers",
+          "title": "Claims",
           "type": "array"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Currency"
+        },
+        "display_message": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Display Message",
+          "type": "string"
+        },
+        "resolution_guidance": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution Guidance"
         },
         "source_ids": {
           "items": {
@@ -122,22 +195,30 @@
           "title": "Source Ids",
           "type": "array"
         },
-        "statement": {
-          "maxLength": 240,
-          "minLength": 1,
-          "title": "Statement",
-          "type": "string"
+        "verification_status": {
+          "$ref": "#/$defs/FeeVerificationStatus"
         }
       },
       "required": [
+        "verification_status",
         "amount",
         "currency",
-        "statement",
-        "qualifiers",
+        "display_message",
+        "claims",
         "source_ids"
       ],
       "title": "FeeInformation",
       "type": "object"
+    },
+    "FeeVerificationStatus": {
+      "enum": [
+        "confirmed",
+        "conflicting",
+        "free",
+        "not_stated"
+      ],
+      "title": "FeeVerificationStatus",
+      "type": "string"
     },
     "InteractionMode": {
       "enum": [
