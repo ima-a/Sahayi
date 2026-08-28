@@ -24,6 +24,7 @@ from sahayi_api.procedures import (
 )
 
 PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.2.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.0.0" / "pack.json"
 SCHEMA_PATH = PACK_PATH.parents[3] / "schemas" / "procedure-pack-v1.schema.json"
 
 
@@ -72,6 +73,23 @@ def test_valid_pack_loads() -> None:
     loaded = registry["uidai-aadhaar-address-update"]
     assert loaded.pack.status is LifecycleStatus.ACTIVE
     assert loaded.pack.title["en"] == "Update your Aadhaar address online"
+
+
+def test_two_active_packs_are_independently_versioned_and_verified() -> None:
+    registry = load_procedure_registry(default_pack_root())
+    kerala = registry["kerala-ign-oap"]
+    aadhaar = registry["uidai-aadhaar-address-update"]
+    assert kerala.pack.pack_version == "1.0.0"
+    assert kerala.digest != aadhaar.digest
+    assert kerala.pack.jurisdiction.name == "Kerala"
+    assert {source.source_id for source in kerala.pack.sources} == {
+        "kerala-sevana-criteria", "kerala-sevana-application-forms", "kerala-ign-oap-application-form"
+    }
+    assert kerala.pack.fee.verification_status.value == "not_stated"
+    assert kerala.pack.fee.amount is None
+    assert "pension amount" not in " ".join(item.text.lower() for item in kerala.pack.requirements)
+    assert all(question.sensitivity.value == "sensitive" for question in kerala.pack.readiness.questions[2:])
+    assert len(kerala.pack.readiness.additional_review_items) == 3
 
 
 def test_checked_in_json_schema_matches_model() -> None:
@@ -277,13 +295,28 @@ async def test_list_endpoint_returns_safe_active_summaries(client: AsyncClient) 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     payload = response.json()
-    assert len(payload["procedures"]) == 1
-    summary = payload["procedures"][0]
+    assert len(payload["procedures"]) == 2
+    summary = next(item for item in payload["procedures"] if item["service_id"] == "uidai-aadhaar-address-update")
     assert summary["service_id"] == "uidai-aadhaar-address-update"
     assert summary["trust_state"] == "current"
     assert summary["attention_required"] is True
     assert "requirements" not in summary
     assert "official_handoff_url" not in summary
+
+
+@pytest.mark.anyio
+async def test_kerala_detail_exposes_sourced_form_and_respectful_review_items(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/procedures/kerala-ign-oap")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    payload = response.json()
+    assert payload["fee"]["verification_status"] == "not_stated"
+    assert payload["fee"]["amount"] is None
+    assert payload["fee"]["claims"] == []
+    assert payload["official_handoff_url"].endswith("ApplicationFormsEng.aspx")
+    assert payload["submission_channels"][0]["name"] == "Local body of permanent residence"
+    assert len(payload["additional_review_items"]) == 3
+    assert "2000" not in json.dumps(payload)
 
 
 @pytest.mark.anyio

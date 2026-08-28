@@ -24,3 +24,6 @@
 | 2026-08-28 | Encode readiness rules as a strict bounded JSON AST | Deterministic operators, load-time validation, and evaluation budgets avoid executable expressions and unbounded work. |
 | 2026-08-28 | Keep readiness evaluation stateless | Each request carries a bounded answer map; no session, database, answer logging, or external call is required. |
 | 2026-08-28 | Permit only non-sensitive structured readiness questions | Boolean, enumerated choice, and bounded integer answers preserve the no-PII boundary; free text and identifiers are excluded. |
+| 2026-08-28 | Permit pack-labelled sensitive closed-choice readiness questions | Income, pension, and tax categories can provide useful preliminary guidance without exact values or identifiers; they require a privacy explanation and an optional withheld choice, remain memory/request only, and are never logged. |
+| 2026-08-28 | Keep subjective and intrusive Kerala pension criteria outside automated screening | Respectful source-cited local-body review items preserve the official conditions without asking about or inferring personal circumstances. |
+| 2026-08-28 | Omit Kerala pension amount pending a resolving official order | The reviewed Sevana criteria page presents inconsistent current-table, history, and special-amount material; no amount is needed for safe procedure guidance. |

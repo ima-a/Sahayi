@@ -8,6 +8,7 @@ from sahayi_api.procedures import (
     Identifier,
     LoadedProcedure,
     QuestionAnswerType,
+    QuestionSensitivity,
     ReadinessOutcome,
     ReadinessQuestion,
     ReadinessStatus,
@@ -46,6 +47,7 @@ class ReadinessQuestionResponse(StrictModel):
     minimum: int | None
     maximum: int | None
     required: bool
+    sensitivity: QuestionSensitivity
 
 
 class ReadinessOutcomeResponse(StrictModel):
@@ -211,6 +213,7 @@ def _question_response(question: ReadinessQuestion) -> ReadinessQuestionResponse
         minimum=question.minimum,
         maximum=question.maximum,
         required=question.required,
+        sensitivity=question.sensitivity,
     )
 
 

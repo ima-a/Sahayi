@@ -162,12 +162,12 @@ function ProcedureOverview({ procedure, onStartReadiness }: { procedure: Procedu
   const sourceById = new Map(procedure.sources.map(source => [source.source_id, source]))
   return <article aria-labelledby="procedure-title">
     <p className="eyebrow">{procedure.category.replaceAll('-', ' ')}</p><h1 id="procedure-title">{procedure.title}</h1><p className="lead">{procedure.short_description}</p>
-    {procedure.trust_state === 'stale' && <div className="stale-warning" role="alert"><strong>This guidance needs review.</strong> The review date has passed. Confirm every detail on the official UIDAI website before continuing.</div>}
+    {procedure.trust_state === 'stale' && <div className="stale-warning" role="alert"><strong>This guidance needs review.</strong> The review date has passed. Confirm every detail on the official service website before continuing.</div>}
     <section className={`trust-card ${procedure.trust_state}`} aria-labelledby="trust-title"><div><p className="overline">Trust and provenance</p><h2 id="trust-title">Verified official guidance</h2></div>
       <dl><div><dt>Official publisher</dt><dd>{procedure.official_publisher}</dd></div><div><dt>Pack version</dt><dd>{procedure.pack_version}</dd></div><div><dt>Verified</dt><dd>{formatDate(procedure.last_verified_at)}</dd></div><div><dt>Freshness</dt><dd>{procedure.trust_state === 'current' ? 'Current' : 'Stale — review overdue'}</dd></div></dl>
       <div><h3>Official sources</h3><ul className="source-list">{procedure.sources.map(source => <li key={source.source_id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} <span aria-hidden="true">↗</span></a></li>)}</ul></div>
     </section>
-    <p className="disclaimer"><strong>Sahayi is guidance only.</strong> It is not UIDAI or a government service. Sahayi cannot authenticate you, submit this update, or track it.</p>
+    <p className="disclaimer"><strong>Sahayi is guidance only.</strong> It is not the official service or a government service. Sahayi cannot authenticate you, submit an application, or track it.</p>
     <section className="readiness-callout" aria-labelledby="readiness-callout-title"><div><h2 id="readiness-callout-title">Check what you need</h2><p>Answer simple choices to see which verified official path may fit your situation.</p></div><button type="button" onClick={onStartReadiness}>Check what you need</button></section>
     <div className="detail-grid"><section><h2>Before you start</h2><ul>{procedure.requirements.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul><h3>Document guidance</h3>{procedure.required_documents.map(document => <div key={document.document_id}><strong>{document.name}</strong><p>{document.guidance}</p></div>)}</section>
       <section className={`fee-card ${procedure.fee.verification_status}`} role={procedure.fee.verification_status === 'conflicting' ? 'alert' : undefined} aria-labelledby="fee-title">
@@ -180,9 +180,11 @@ function ProcedureOverview({ procedure, onStartReadiness }: { procedure: Procedu
         {procedure.fee.resolution_guidance && <p className="resolution-guidance"><strong>Before paying:</strong> {procedure.fee.resolution_guidance}</p>}
       </section></div>
     <section><h2>Steps</h2><ol className="steps">{procedure.steps.map(step => <li key={step.step_id}><div><span>{step.order}</span></div><section><h3>{step.title}</h3><p>{step.instruction}</p></section></li>)}</ol></section>
+    <section><h2>Where to apply</h2>{procedure.submission_channels.map(channel => <div key={channel.channel_id}><h3>{channel.name}</h3><p>{channel.guidance}</p></div>)}</section>
     {procedure.tracking_guidance && <section><h2>Tracking</h2><p>{procedure.tracking_guidance.text}</p></section>}
+    {procedure.additional_review_items.length > 0 && <section><h2>Additional local-body review</h2><p>These official conditions need respectful review by the relevant local body. Sahayi does not ask about or infer them.</p><ul>{procedure.additional_review_items.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul></section>}
     <section><h2>Important limitations</h2><ul>{procedure.limitations.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul></section>
-    <a className="official-handoff" href={procedure.official_handoff_url} target="_blank" rel="noopener noreferrer">Open the official MyAadhaar website <span aria-hidden="true">↗</span></a>
+    <a className="official-handoff" href={procedure.official_handoff_url} target="_blank" rel="noopener noreferrer">Open the official service <span aria-hidden="true">↗</span></a>
   </article>
 }
 
@@ -234,6 +236,7 @@ function ReadinessFlow({ response, loading, error, onBegin, onAnswer, onBack, on
       <p className="progress" role="status" aria-live="polite">Question {response.progress.answered + 1} of {response.progress.total}</p>
       <h1 id="question-title" ref={focusTarget} tabIndex={-1}>{response.next_question.prompt}</h1>
       {response.next_question.help_text && <p id="question-help" className="question-help">{response.next_question.help_text}</p>}
+      {response.next_question.sensitivity === 'sensitive' && <p className="question-help"><strong>Privacy:</strong> Choose a category only. You may select “Prefer not to answer”; Sahayi does not store this answer.</p>}
       <form onSubmit={submit}>
         <fieldset aria-describedby={`${response.next_question.help_text ? 'question-help ' : ''}${validationError ? 'answer-error' : ''}`.trim()}>
           <legend className="visually-hidden">Choose one answer</legend>

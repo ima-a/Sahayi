@@ -326,7 +326,8 @@
     },
     "QuestionSensitivity": {
       "enum": [
-        "non_sensitive"
+        "non_sensitive",
+        "sensitive"
       ],
       "title": "QuestionSensitivity",
       "type": "string"
@@ -334,6 +335,14 @@
     "ReadinessDefinition": {
       "additionalProperties": false,
       "properties": {
+        "additional_review_items": {
+          "items": {
+            "$ref": "#/$defs/CitedFact"
+          },
+          "maxItems": 20,
+          "title": "Additional Review Items",
+          "type": "array"
+        },
         "outcomes": {
           "items": {
             "$ref": "#/$defs/ReadinessOutcome"

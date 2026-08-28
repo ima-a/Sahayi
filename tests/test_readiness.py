@@ -25,6 +25,7 @@ from sahayi_api.readiness import (
 )
 
 PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.2.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.0.0" / "pack.json"
 
 
 def pack_data() -> dict:
@@ -33,6 +34,40 @@ def pack_data() -> dict:
 
 def loaded_procedure():
     return load_procedure_registry(default_pack_root())["uidai-aadhaar-address-update"]
+
+
+def loaded_kerala_procedure():
+    return load_procedure_registry(default_pack_root())["kerala-ign-oap"]
+
+
+@pytest.mark.parametrize(
+    ("answers", "outcome_id", "status"),
+    [
+        ({"age-60-or-higher": "no"}, "age-preliminary-mismatch", "alternative_path"),
+        ({"age-60-or-higher": "yes", "kerala-residence-three-years": "no"}, "residence-preliminary-mismatch", "alternative_path"),
+        ({"age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "above"}, "income-preliminary-mismatch", "alternative_path"),
+        ({"age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "within", "service-or-family-pension": "no", "income-tax-payer": "yes"}, "tax-preliminary-mismatch", "alternative_path"),
+        ({"age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "within", "service-or-family-pension": "yes"}, "pension-local-body-review", "cannot_confirm"),
+        ({"age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "prefer-not-to-answer"}, "more-information-needed", "needs_information"),
+        ({"age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "within", "service-or-family-pension": "no", "income-tax-payer": "no", "other-social-welfare-pension": "no"}, "preliminary-conditions-aligned", "ready"),
+    ],
+)
+def test_kerala_readiness_golden_outcomes(answers: dict, outcome_id: str, status: str) -> None:
+    result = evaluate_readiness(loaded_kerala_procedure(), answers)
+    payload = result.model_dump(mode="json")
+    assert result.complete is True
+    assert result.outcome and result.outcome.outcome_id == outcome_id
+    assert result.evaluation_status == status
+    assert "answers" not in payload
+    assert "2000" not in json.dumps(payload)
+
+
+def test_kerala_sensitive_question_metadata_and_withheld_answer_are_safe() -> None:
+    initial = evaluate_readiness(loaded_kerala_procedure(), {})
+    assert initial.next_question and initial.next_question.sensitivity.value == "non_sensitive"
+    income = evaluate_readiness(loaded_kerala_procedure(), {"age-60-or-higher": "yes", "kerala-residence-three-years": "yes"})
+    assert income.next_question and income.next_question.sensitivity.value == "sensitive"
+    assert "Prefer not to answer" in [option.label for option in income.next_question.options or []]
 
 
 @pytest.fixture

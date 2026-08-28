@@ -93,6 +93,7 @@ class QuestionAnswerType(StrEnum):
 
 class QuestionSensitivity(StrEnum):
     NON_SENSITIVE = "non_sensitive"
+    SENSITIVE = "sensitive"
 
 
 class RuleOperator(StrEnum):
@@ -336,6 +337,7 @@ class ReadinessRule(StrictModel):
 
 class ReadinessDefinition(StrictModel):
     questions: Annotated[list[ReadinessQuestion], Field(min_length=1, max_length=30)]
+    additional_review_items: Annotated[list[CitedFact], Field(default_factory=list, max_length=20)]
     outcomes: Annotated[list[ReadinessOutcome], Field(min_length=2, max_length=30)]
     rules: Annotated[list[ReadinessRule], Field(min_length=1, max_length=60)]
 
@@ -492,7 +494,7 @@ class ProcedurePack(StrictModel):
         known_sources = set(source_ids)
 
         references: list[str] = []
-        for item in [*self.requirements, *self.required_documents, self.fee, *self.fee.claims, *self.steps, *self.submission_channels, *self.limitations, *self.readiness.questions, *self.readiness.outcomes, *self.readiness.rules]:
+        for item in [*self.requirements, *self.required_documents, self.fee, *self.fee.claims, *self.steps, *self.submission_channels, *self.limitations, *self.readiness.questions, *self.readiness.additional_review_items, *self.readiness.outcomes, *self.readiness.rules]:
             references.extend(item.source_ids)
         if self.tracking_guidance:
             references.extend(self.tracking_guidance.source_ids)
@@ -538,7 +540,12 @@ class LoadedProcedure(StrictModel):
 
 
 def pack_digest(pack: ProcedurePack) -> str:
-    canonical = json.dumps(pack.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    payload = pack.model_dump(mode="json")
+    # Preserve v1 digest compatibility for packs that do not use the later,
+    # optional additional-review guidance.
+    if not payload["readiness"]["additional_review_items"]:
+        del payload["readiness"]["additional_review_items"]
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -617,6 +624,7 @@ class ProcedureDetail(StrictModel):
     trust_state: TrustState
     attention_required: bool
     limitations: list[CitedFact]
+    additional_review_items: list[CitedFact]
 
 
 def fee_attention_required(fee: FeeInformation) -> bool:
@@ -667,4 +675,5 @@ def detail_procedure(loaded: LoadedProcedure, now: datetime | None = None) -> Pr
         trust_state=loaded.trust_state(now),
         attention_required=fee_attention_required(pack.fee),
         limitations=pack.limitations,
+        additional_review_items=pack.readiness.additional_review_items,
     )

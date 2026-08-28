@@ -63,6 +63,7 @@ export type ProcedureDetail = {
   trust_state: TrustState
   attention_required: boolean
   limitations: CitedFact[]
+  additional_review_items: CitedFact[]
 }
 export type ReadinessAnswer = boolean | number | string
 export type ReadinessQuestion = {
@@ -74,6 +75,7 @@ export type ReadinessQuestion = {
   minimum: number | null
   maximum: number | null
   required: boolean
+  sensitivity: 'non_sensitive' | 'sensitive'
 }
 export type ReadinessResponse = {
   pack_version: string
