@@ -23,7 +23,7 @@ from sahayi_api.procedures import (
     summarize_procedure,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.1.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.2.0" / "pack.json"
 SCHEMA_PATH = PACK_PATH.parents[3] / "schemas" / "procedure-pack-v1.schema.json"
 
 
@@ -214,7 +214,7 @@ def test_duplicate_service_version_is_rejected(tmp_path: Path) -> None:
 def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
     first = pack_data()
     second = copy.deepcopy(first)
-    second["pack_version"] = "1.2.0"
+    second["pack_version"] = "1.3.0"
     write_pack(tmp_path, "one", first)
     write_pack(tmp_path, "two", second)
     with pytest.raises(PackLoadError, match="exactly one active"):
@@ -224,12 +224,12 @@ def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
 def test_draft_pack_is_not_selected(tmp_path: Path) -> None:
     active = pack_data()
     draft = copy.deepcopy(active)
-    draft["pack_version"] = "1.2.0"
+    draft["pack_version"] = "1.3.0"
     draft["status"] = "draft"
     write_pack(tmp_path, "active", active)
     write_pack(tmp_path, "draft", draft)
     registry = load_procedure_registry(tmp_path)
-    assert registry[active["service_id"]].pack.pack_version == "1.1.0"
+    assert registry[active["service_id"]].pack.pack_version == "1.2.0"
 
 
 def test_no_active_pack_fails_closed(tmp_path: Path) -> None:
@@ -253,7 +253,7 @@ def test_pack_digest_is_deterministic() -> None:
     reordered_json = json.dumps(pack_data(), sort_keys=True)
     reordered = ProcedurePack.model_validate_json(reordered_json)
     assert pack_digest(original) == pack_digest(reordered)
-    assert pack_digest(original) == "320e137685df3680972895b28d989d0fd00b3b8afcaa963fa10b565919c8fb84"
+    assert pack_digest(original) == "f9b989709149bf5c51b60a1879a53f29e6050188c591878b7832f6850bc6659f"
     assert pack_digest(original) != "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
 
 
@@ -299,7 +299,7 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert payload["fee"]["resolution_guidance"].endswith("Confirm the fee on the official portal before payment.")
     assert payload["attention_required"] is True
     assert payload["official_handoff_url"] == "https://myaadhaar.uidai.gov.in/"
-    assert payload["pack_digest"] == "320e137685df3680972895b28d989d0fd00b3b8afcaa963fa10b565919c8fb84"
+    assert payload["pack_digest"] == "f9b989709149bf5c51b60a1879a53f29e6050188c591878b7832f6850bc6659f"
     assert payload["provenance"]["fee"] == ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
     assert all(source["url"].startswith("https://") for source in payload["sources"])
 

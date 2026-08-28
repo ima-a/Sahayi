@@ -7,13 +7,15 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     HttpUrl,
+    StrictBool,
+    StrictInt,
     StringConstraints,
     field_validator,
     model_validator,
@@ -24,6 +26,7 @@ ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
 SourceId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 SourceIds = Annotated[list[SourceId], Field(min_length=1, max_length=12)]
+LocalizedText = Annotated[dict[str, ShortText], Field(min_length=1, max_length=12)]
 
 _HTML = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
 _REQUIRED_PROVENANCE = {
@@ -36,7 +39,12 @@ _REQUIRED_PROVENANCE = {
     "submission-channels",
     "official-handoff-url",
     "limitations",
+    "readiness",
 }
+
+MAX_RULE_DEPTH = 8
+MAX_RULE_NODES = 128
+MAX_RULE_LIST_SIZE = 16
 
 
 class StrictModel(BaseModel):
@@ -75,6 +83,36 @@ class FeeVerificationStatus(StrEnum):
     CONFLICTING = "conflicting"
     FREE = "free"
     NOT_STATED = "not_stated"
+
+
+class QuestionAnswerType(StrEnum):
+    BOOLEAN = "boolean"
+    SINGLE_CHOICE = "single_choice"
+    INTEGER = "integer"
+
+
+class QuestionSensitivity(StrEnum):
+    NON_SENSITIVE = "non_sensitive"
+
+
+class RuleOperator(StrEnum):
+    ALL = "all"
+    ANY = "any"
+    NOT = "not"
+    KNOWN = "known"
+    EQUALS = "equals"
+    IN = "in"
+    LT = "lt"
+    LTE = "lte"
+    GT = "gt"
+    GTE = "gte"
+
+
+class ReadinessStatus(StrEnum):
+    READY = "ready"
+    ALTERNATIVE_PATH = "alternative_path"
+    NEEDS_INFORMATION = "needs_information"
+    CANNOT_CONFIRM = "cannot_confirm"
 
 
 class Jurisdiction(StrictModel):
@@ -185,6 +223,210 @@ class SubmissionChannel(StrictModel):
     source_ids: SourceIds
 
 
+class RuleExpression(StrictModel):
+    op: RuleOperator
+    expressions: Annotated[list[RuleExpression], Field(min_length=1, max_length=MAX_RULE_LIST_SIZE)] | None = None
+    expression: RuleExpression | None = None
+    question_id: Identifier | None = None
+    value: StrictBool | StrictInt | ShortText | None = None
+    values: Annotated[list[StrictBool | StrictInt | ShortText], Field(min_length=1, max_length=MAX_RULE_LIST_SIZE)] | None = None
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> RuleExpression:
+        allowed = {
+            RuleOperator.ALL: {"op", "expressions"},
+            RuleOperator.ANY: {"op", "expressions"},
+            RuleOperator.NOT: {"op", "expression"},
+            RuleOperator.KNOWN: {"op", "question_id"},
+            RuleOperator.EQUALS: {"op", "question_id", "value"},
+            RuleOperator.IN: {"op", "question_id", "values"},
+            RuleOperator.LT: {"op", "question_id", "value"},
+            RuleOperator.LTE: {"op", "question_id", "value"},
+            RuleOperator.GT: {"op", "question_id", "value"},
+            RuleOperator.GTE: {"op", "question_id", "value"},
+        }[self.op]
+        supplied = self.model_fields_set
+        if supplied != allowed:
+            raise ValueError(f"{self.op} expression requires exactly: {', '.join(sorted(allowed))}")
+        return self
+
+
+class ReadinessOption(StrictModel):
+    option_id: Identifier
+    label: LocalizedText
+
+    @field_validator("label")
+    @classmethod
+    def require_english_label(cls, value: dict[str, str]) -> dict[str, str]:
+        return _validate_localized_text(value)
+
+
+class ReadinessQuestion(StrictModel):
+    question_id: Identifier
+    prompt: LocalizedText
+    help_text: LocalizedText | None = None
+    answer_type: QuestionAnswerType
+    options: Annotated[list[ReadinessOption], Field(min_length=2, max_length=12)] | None = None
+    minimum: Annotated[StrictInt, Field(ge=-1000, le=1000)] | None = None
+    maximum: Annotated[StrictInt, Field(ge=-1000, le=1000)] | None = None
+    required: StrictBool
+    sensitivity: QuestionSensitivity
+    source_ids: SourceIds
+    visible_when: RuleExpression | None = None
+
+    @field_validator("prompt", "help_text")
+    @classmethod
+    def require_english_text(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        return _validate_localized_text(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_answer_contract(self) -> ReadinessQuestion:
+        if self.answer_type is QuestionAnswerType.SINGLE_CHOICE:
+            if self.options is None or self.minimum is not None or self.maximum is not None:
+                raise ValueError("single_choice questions require options and no numeric bounds")
+            option_ids = [option.option_id for option in self.options]
+            if len(option_ids) != len(set(option_ids)):
+                raise ValueError("question option IDs must be unique")
+        elif self.answer_type is QuestionAnswerType.INTEGER:
+            if self.options is not None or self.minimum is None or self.maximum is None:
+                raise ValueError("integer questions require numeric bounds and no options")
+            if self.minimum > self.maximum:
+                raise ValueError("integer question minimum must not exceed maximum")
+        elif self.options is not None or self.minimum is not None or self.maximum is not None:
+            raise ValueError("boolean questions cannot define options or numeric bounds")
+        return self
+
+
+class ReadinessOutcome(StrictModel):
+    outcome_id: Identifier
+    status: ReadinessStatus
+    title: LocalizedText
+    explanation: LocalizedText
+    recommended_next_steps: Annotated[list[LocalizedText], Field(min_length=1, max_length=12)]
+    official_handoff_url: HttpUrl
+    source_ids: SourceIds
+    disclaimer: LocalizedText
+    is_default: StrictBool = False
+
+    @field_validator("title", "explanation", "disclaimer")
+    @classmethod
+    def require_english_text(cls, value: dict[str, str]) -> dict[str, str]:
+        return _validate_localized_text(value)
+
+    @field_validator("recommended_next_steps")
+    @classmethod
+    def require_english_steps(cls, value: list[dict[str, str]]) -> list[dict[str, str]]:
+        return [_validate_localized_text(item) for item in value]
+
+    @field_validator("official_handoff_url")
+    @classmethod
+    def require_https_handoff(cls, value: HttpUrl) -> HttpUrl:
+        if value.scheme != "https":
+            raise ValueError("official handoff URL must use HTTPS")
+        return value
+
+
+class ReadinessRule(StrictModel):
+    rule_id: Identifier
+    priority: Annotated[StrictInt, Field(ge=1, le=10000)]
+    expression: RuleExpression
+    outcome_id: Identifier
+    source_ids: SourceIds
+
+
+class ReadinessDefinition(StrictModel):
+    questions: Annotated[list[ReadinessQuestion], Field(min_length=1, max_length=30)]
+    outcomes: Annotated[list[ReadinessOutcome], Field(min_length=2, max_length=30)]
+    rules: Annotated[list[ReadinessRule], Field(min_length=1, max_length=60)]
+
+    @model_validator(mode="after")
+    def validate_definition(self) -> ReadinessDefinition:
+        _require_unique([question.question_id for question in self.questions], "question IDs")
+        _require_unique([outcome.outcome_id for outcome in self.outcomes], "outcome IDs")
+        _require_unique([rule.rule_id for rule in self.rules], "rule IDs")
+        _require_unique([rule.priority for rule in self.rules], "rule priorities")
+
+        defaults = [outcome for outcome in self.outcomes if outcome.is_default]
+        if len(defaults) != 1 or defaults[0].status is not ReadinessStatus.NEEDS_INFORMATION:
+            raise ValueError("readiness requires exactly one needs_information default outcome")
+
+        questions = {question.question_id: question for question in self.questions}
+        outcomes = {outcome.outcome_id for outcome in self.outcomes}
+        earlier: set[str] = set()
+        total_nodes = 0
+        for question in self.questions:
+            if question.visible_when is not None:
+                nodes, referenced = _validate_expression(question.visible_when, questions)
+                total_nodes += nodes
+                if not referenced <= earlier:
+                    raise ValueError("question visibility may reference only earlier questions")
+            earlier.add(question.question_id)
+        for rule in self.rules:
+            if rule.outcome_id not in outcomes:
+                raise ValueError(f"unknown outcome reference: {rule.outcome_id}")
+            nodes, _ = _validate_expression(rule.expression, questions)
+            total_nodes += nodes
+        if total_nodes > MAX_RULE_NODES:
+            raise ValueError(f"readiness expressions exceed {MAX_RULE_NODES} total nodes")
+        return self
+
+
+def _validate_localized_text(value: dict[str, str]) -> dict[str, str]:
+    if "en" not in value:
+        raise ValueError("English content is required")
+    if any(not re.fullmatch(r"[a-z]{2}(?:-[A-Z]{2})?", locale) for locale in value):
+        raise ValueError("invalid locale key")
+    return value
+
+
+def _require_unique(values: list[Any], label: str) -> None:
+    if len(values) != len(set(values)):
+        raise ValueError(f"{label} must be unique")
+
+
+def _validate_expression(
+    expression: RuleExpression,
+    questions: dict[str, ReadinessQuestion],
+    depth: int = 1,
+) -> tuple[int, set[str]]:
+    if depth > MAX_RULE_DEPTH:
+        raise ValueError(f"rule expression exceeds maximum depth {MAX_RULE_DEPTH}")
+    if expression.op in {RuleOperator.ALL, RuleOperator.ANY}:
+        nodes, references = 1, set()
+        for child in expression.expressions or []:
+            child_nodes, child_references = _validate_expression(child, questions, depth + 1)
+            nodes += child_nodes
+            references.update(child_references)
+        return nodes, references
+    if expression.op is RuleOperator.NOT:
+        child_nodes, references = _validate_expression(expression.expression, questions, depth + 1)  # type: ignore[arg-type]
+        return child_nodes + 1, references
+
+    question = questions.get(expression.question_id or "")
+    if question is None:
+        raise ValueError(f"unknown question reference: {expression.question_id}")
+    value = expression.value
+    if expression.op is RuleOperator.IN:
+        if question.answer_type is not QuestionAnswerType.SINGLE_CHOICE:
+            raise ValueError("in operator requires a single_choice question")
+        valid_options = {option.option_id for option in question.options or []}
+        if any(not isinstance(item, str) or item not in valid_options for item in expression.values or []):
+            raise ValueError("in operator contains an invalid option")
+    elif expression.op in {RuleOperator.LT, RuleOperator.LTE, RuleOperator.GT, RuleOperator.GTE}:
+        if question.answer_type is not QuestionAnswerType.INTEGER or type(value) is not int:
+            raise ValueError("comparison operators require an integer question and integer value")
+    elif expression.op is RuleOperator.EQUALS:
+        if question.answer_type is QuestionAnswerType.BOOLEAN and type(value) is not bool:
+            raise ValueError("boolean equals requires a boolean value")
+        if question.answer_type is QuestionAnswerType.INTEGER and type(value) is not int:
+            raise ValueError("integer equals requires an integer value")
+        if question.answer_type is QuestionAnswerType.SINGLE_CHOICE:
+            valid_options = {option.option_id for option in question.options or []}
+            if not isinstance(value, str) or value not in valid_options:
+                raise ValueError("single_choice equals requires a valid option")
+    return 1, {question.question_id}
+
+
 class ProcedurePack(StrictModel):
     schema_version: Literal["1.0"]
     service_id: Identifier
@@ -209,6 +451,7 @@ class ProcedurePack(StrictModel):
     official_handoff_url: HttpUrl
     tracking_guidance: CitedFact | None = None
     limitations: Annotated[list[CitedFact], Field(min_length=1, max_length=20)]
+    readiness: ReadinessDefinition
     provenance: Annotated[dict[Identifier, SourceIds], Field(min_length=1, max_length=100)]
 
     @field_validator("title", "short_description")
@@ -249,7 +492,7 @@ class ProcedurePack(StrictModel):
         known_sources = set(source_ids)
 
         references: list[str] = []
-        for item in [*self.requirements, *self.required_documents, self.fee, *self.fee.claims, *self.steps, *self.submission_channels, *self.limitations]:
+        for item in [*self.requirements, *self.required_documents, self.fee, *self.fee.claims, *self.steps, *self.submission_channels, *self.limitations, *self.readiness.questions, *self.readiness.outcomes, *self.readiness.rules]:
             references.extend(item.source_ids)
         if self.tracking_guidance:
             references.extend(self.tracking_guidance.source_ids)

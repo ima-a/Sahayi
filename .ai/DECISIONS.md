@@ -20,3 +20,7 @@
 | 2026-08-28 | Represent conflicting official-source claims explicitly | Preserve each authoritative claim and its provenance instead of selecting a value without evidence. |
 | 2026-08-28 | Never silently resolve conflicting authoritative claims | Direct citizens to confirm on the official service when Sahayi cannot establish one canonical fact. |
 | 2026-08-28 | Keep review freshness and factual conflict as separate states | Current unaffected guidance can remain available while a specific unresolved fact receives attention. |
+| 2026-08-28 | Use “readiness check” rather than eligibility terminology | Outcomes are personalised procedural guidance and never an official decision or approval. |
+| 2026-08-28 | Encode readiness rules as a strict bounded JSON AST | Deterministic operators, load-time validation, and evaluation budgets avoid executable expressions and unbounded work. |
+| 2026-08-28 | Keep readiness evaluation stateless | Each request carries a bounded answer map; no session, database, answer logging, or external call is required. |
+| 2026-08-28 | Permit only non-sensitive structured readiness questions | Boolean, enumerated choice, and bounded integer answers preserve the no-PII boundary; free text and identifiers are excluded. |

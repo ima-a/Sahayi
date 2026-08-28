@@ -41,3 +41,10 @@ async def test_cors_allows_only_configured_development_origin(client: AsyncClien
     denied = await client.get("/api/v1/health", headers={"Origin": "https://example.test"})
     assert allowed.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
     assert "access-control-allow-origin" not in denied.headers
+
+    preflight = await client.options(
+        "/api/v1/procedures/uidai-aadhaar-address-update/readiness/evaluate",
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-methods"] == "GET, POST"

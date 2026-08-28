@@ -64,9 +64,45 @@ export type ProcedureDetail = {
   attention_required: boolean
   limitations: CitedFact[]
 }
+export type ReadinessAnswer = boolean | number | string
+export type ReadinessQuestion = {
+  question_id: string
+  prompt: string
+  help_text: string | null
+  answer_type: 'boolean' | 'single_choice' | 'integer'
+  options: Array<{ option_id: string; label: string }> | null
+  minimum: number | null
+  maximum: number | null
+  required: boolean
+}
+export type ReadinessResponse = {
+  pack_version: string
+  pack_digest: string
+  evaluation_status: 'incomplete' | 'ready' | 'alternative_path' | 'needs_information' | 'cannot_confirm'
+  complete: boolean
+  progress: { answered: number; total: number }
+  next_question: ReadinessQuestion | null
+  outcome: { outcome_id: string; status: 'ready' | 'alternative_path' | 'needs_information' | 'cannot_confirm'; title: string; explanation: string } | null
+  reason_trace: Array<{ trace_type: 'question' | 'rule' | 'outcome' | 'default'; trace_id: string; source_ids: string[] }>
+  sources: ProcedureSource[]
+  recommended_next_steps: string[]
+  official_handoff_url: string | null
+  disclaimer: string
+}
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 async function getJson<T>(path: string): Promise<T> { const response = await fetch(`${apiBase}${path}`, { headers: { Accept: 'application/json' } }); if (!response.ok) throw new Error('Service unavailable'); return response.json() as Promise<T> }
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${apiBase}${path}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw new Error('Service unavailable')
+  return response.json() as Promise<T>
+}
 export const getHealth = () => getJson<HealthStatus>('/health')
 export const getPublicConfig = () => getJson<PublicConfig>('/public-config')
 export const getProcedures = () => getJson<{ procedures: ProcedureSummary[] }>('/procedures')
 export const getProcedure = (serviceId: string) => getJson<ProcedureDetail>(`/procedures/${encodeURIComponent(serviceId)}`)
+export const evaluateReadiness = (serviceId: string, answers: Record<string, ReadinessAnswer>) =>
+  postJson<ReadinessResponse>(`/procedures/${encodeURIComponent(serviceId)}/readiness/evaluate`, { answers })

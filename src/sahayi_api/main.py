@@ -18,6 +18,12 @@ from sahayi_api.procedures import (
     load_procedure_registry,
     summarize_procedure,
 )
+from sahayi_api.readiness import (
+    ReadinessEvaluationRequest,
+    ReadinessEvaluationResponse,
+    ReadinessInputError,
+    evaluate_readiness,
+)
 
 settings = get_settings()
 app = FastAPI(title="Sahayi API", docs_url=None, redoc_url=None, openapi_url=None)
@@ -41,7 +47,7 @@ async def exact_development_cors(request: Request, call_next):
     if request.method == "OPTIONS" and request.url.path.startswith("/api/v1/"):
         if origin != settings.dev_frontend_origin:
             return JSONResponse({"error": "Request not allowed"}, status_code=403)
-        return JSONResponse({}, headers={"Access-Control-Allow-Origin": settings.dev_frontend_origin, "Access-Control-Allow-Methods": "GET", "Access-Control-Allow-Headers": "Content-Type", "Vary": "Origin"})
+        return JSONResponse({}, headers={"Access-Control-Allow-Origin": settings.dev_frontend_origin, "Access-Control-Allow-Methods": "GET, POST", "Access-Control-Allow-Headers": "Content-Type", "Vary": "Origin"})
     response = await call_next(request)
     if origin == settings.dev_frontend_origin and request.url.path.startswith("/api/v1/"):
         response.headers["Access-Control-Allow-Origin"] = settings.dev_frontend_origin
@@ -90,6 +96,22 @@ async def procedure_detail(service_id: str) -> ProcedureDetail | JSONResponse:
     if loaded is None:
         return JSONResponse({"error": "Procedure not found"}, status_code=404)
     return detail_procedure(loaded)
+
+
+@app.post("/api/v1/procedures/{service_id}/readiness/evaluate", response_model=ReadinessEvaluationResponse)
+async def readiness_evaluate(
+    service_id: str,
+    request: ReadinessEvaluationRequest,
+) -> ReadinessEvaluationResponse | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    loaded = procedure_registry.get(service_id)
+    if loaded is None:
+        return JSONResponse({"error": "Procedure not found"}, status_code=404)
+    try:
+        return evaluate_readiness(loaded, request.answers)
+    except ReadinessInputError:
+        return JSONResponse({"error": "Invalid readiness answers"}, status_code=422)
 
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
