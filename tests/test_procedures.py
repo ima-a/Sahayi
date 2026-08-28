@@ -298,10 +298,14 @@ async def test_list_endpoint_returns_safe_active_summaries(client: AsyncClient) 
     assert len(payload["procedures"]) == 2
     summary = next(item for item in payload["procedures"] if item["service_id"] == "uidai-aadhaar-address-update")
     assert summary["service_id"] == "uidai-aadhaar-address-update"
+    assert summary["intent_phrases"] == ["change Aadhaar address", "update address in Aadhaar", "moved to a new address"]
     assert summary["trust_state"] == "current"
     assert summary["attention_required"] is True
     assert "requirements" not in summary
     assert "official_handoff_url" not in summary
+    assert "readiness" not in summary
+    assert "sources" not in summary
+    assert "provenance" not in summary
 
 
 @pytest.mark.anyio

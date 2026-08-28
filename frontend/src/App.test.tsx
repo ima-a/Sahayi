@@ -7,19 +7,20 @@ const summary: ProcedureSummary = {
   service_id: 'uidai-aadhaar-address-update',
   title: 'Update your Aadhaar address online',
   short_description: 'Official UIDAI guidance for requesting an address update through the MyAadhaar portal.',
-  category: 'identity-documents', interaction_modes: ['online'], official_publisher: 'Unique Identification Authority of India',
-  pack_version: '1.2.0', last_verified_at: '2026-08-28T10:10:25+05:30', review_due_at: '2026-09-11T10:10:25+05:30', trust_state: 'current', attention_required: true,
+  intent_phrases: ['change Aadhaar address', 'update address in Aadhaar'],
+  category: 'identity-documents', trust_state: 'current', attention_required: true,
 }
 
 const pensionSummary: ProcedureSummary = {
   service_id: 'kerala-ign-oap', title: 'Kerala Indira Gandhi National Old Age Pension',
   short_description: 'Verified Kerala guidance for a preliminary readiness check and local-body application.',
-  category: 'social-security-pension', interaction_modes: ['in_person'], official_publisher: 'Government of Kerala, Sevana Pension – Social Security System',
-  pack_version: '1.0.0', last_verified_at: '2026-08-28T14:15:00+05:30', review_due_at: '2026-09-11T14:15:00+05:30', trust_state: 'current', attention_required: false,
+  intent_phrases: ['old age pension Kerala', 'Kerala senior pension'],
+  category: 'social-security-pension', trust_state: 'current', attention_required: false,
 }
 
 const detail: ProcedureDetail = {
   ...summary,
+  official_publisher: 'Unique Identification Authority of India', interaction_modes: ['online'], pack_version: '1.2.0', last_verified_at: '2026-08-28T10:10:25+05:30', review_due_at: '2026-09-11T10:10:25+05:30',
   jurisdiction: { level: 'national', name: 'India' }, department: 'Unique Identification Authority of India',
   requirements: [{ fact_id: 'registered-mobile', text: 'Your mobile number must already be registered with Aadhaar.', source_ids: ['uidai-update-overview'] }],
   required_documents: [{ document_id: 'proof-of-address', name: 'Valid proof of address', guidance: 'Upload a clear colour scan of an accepted document.', source_ids: ['uidai-update-overview'] }],
@@ -48,7 +49,7 @@ const detail: ProcedureDetail = {
 }
 
 const pensionDetail: ProcedureDetail = {
-  ...detail, ...pensionSummary, jurisdiction: { level: 'state', name: 'Kerala' }, department: 'Local Self Government Department, Government of Kerala',
+  ...detail, ...pensionSummary, official_publisher: 'Government of Kerala, Sevana Pension – Social Security System', interaction_modes: ['in_person'], pack_version: '1.0.0', last_verified_at: '2026-08-28T14:15:00+05:30', review_due_at: '2026-09-11T14:15:00+05:30', jurisdiction: { level: 'state', name: 'Kerala' }, department: 'Local Self Government Department, Government of Kerala',
   requirements: [{ fact_id: 'minimum-age', text: 'The official criteria state that the applicant must be age 60 or higher.', source_ids: ['kerala-sevana-criteria'] }],
   required_documents: [{ document_id: 'official-application-form', name: 'Official application form', guidance: 'Use the official application-form page.', source_ids: ['kerala-sevana-application-forms'] }],
   fee: { verification_status: 'not_stated', amount: null, currency: null, display_message: 'No application fee is stated in the official Kerala pages reviewed by Sahayi.', claims: [], resolution_guidance: null, source_ids: ['kerala-sevana-criteria'] },
@@ -107,6 +108,8 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
 async function openCatalogue() {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+  await screen.findByRole('heading', { name: 'What do you need help with?' })
+  fireEvent.click(screen.getByRole('button', { name: 'Browse all services' }))
   await screen.findByRole('heading', { name: 'Supported services' })
 }
 
@@ -219,6 +222,7 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Browse all services' }))
     expect(await screen.findByText('No procedures are available')).toBeInTheDocument()
   })
 
@@ -325,6 +329,56 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Sahayi' })).toBeInTheDocument())
     expect(screen.queryByText(mobileQuestion.prompt)).not.toBeInTheDocument()
+  })
+
+  it('keeps a natural-language query in the browser, suggests Aadhaar, and clears it on confirmation', async () => {
+    const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    const query = await screen.findByLabelText('Tell us what service you need')
+    fireEvent.change(query, { target: { value: 'I moved recently and want to update my Aadhaar address.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    expect(await screen.findByText('Is this the service you mean?')).toBeInTheDocument()
+    expect(screen.getByText(summary.title)).toBeInTheDocument()
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(String(url)).not.toContain('moved recently')
+      expect(String(init?.body ?? '')).not.toContain('moved recently')
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, continue' }))
+    expect(await screen.findByRole('heading', { name: summary.title })).toBeInTheDocument()
+    expect(screen.queryByDisplayValue(/moved recently/)).not.toBeInTheDocument()
+  })
+
+  it('supports both example services, ambiguous/no-match fallback, and local PII warning', async () => {
+    mockApi({ procedures: [summary, pensionSummary], procedure: pensionDetail })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'old age pension Kerala' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    expect(await screen.findByText(pensionSummary.title)).toBeInTheDocument()
+    const query = screen.getByLabelText('Tell us what service you need')
+    fireEvent.change(query, { target: { value: '1234 5678 9012' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('remove personal identifiers')
+    fireEvent.change(query, { target: { value: 'something unsupported' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    expect(await screen.findByText('We could not find a matching service')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Browse all services' }).at(-1)!)
+    expect(await screen.findByRole('heading', { name: 'Supported services' })).toBeInTheDocument()
+  })
+
+  it('asks the citizen to choose when catalogue phrases are tied', async () => {
+    mockApi({ procedures: [{ ...summary, intent_phrases: ['address update'] }, { ...pensionSummary, intent_phrases: ['address update'] }] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'address update' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    expect(await screen.findByRole('heading', { name: 'Choose the service you mean' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: new RegExp(summary.title) })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: new RegExp(pensionSummary.title) })).toBeInTheDocument()
   })
 
   it('shows an unavailable backend state on initial failure', async () => {

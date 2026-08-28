@@ -6,12 +6,8 @@ export type ProcedureSummary = {
   service_id: string
   title: string
   short_description: string
+  intent_phrases: string[]
   category: string
-  interaction_modes: Array<'online' | 'in_person'>
-  official_publisher: string
-  pack_version: string
-  last_verified_at: string
-  review_due_at: string
   trust_state: TrustState
   attention_required: boolean
 }

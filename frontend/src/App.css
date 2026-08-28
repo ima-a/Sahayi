@@ -36,6 +36,18 @@ button:focus-visible, a:focus-visible { outline: 4px solid #d6a312; outline-offs
 .service-card small { color: #47675b; line-height: 1.45; }
 .service-card .attention-badge { width: fit-content; margin-top: 10px; padding: 4px 8px; border: 1px solid #b76500; border-radius: 6px; background: #fff3d5; color: #593600; font-weight: 750; }
 .page-actions { display: flex; justify-content: space-between; margin-bottom: 36px; }
+.intake-page { max-width: 760px; }
+.intake-page h1 { font-size: clamp(2rem, 6vw, 3.4rem); letter-spacing: 0; }
+.intake-label { display: block; color: #173d2e; font-weight: 750; }
+.intake-page textarea { width: 100%; min-height: 120px; padding: 14px; border: 2px solid #78988b; border-radius: 12px; color: #173d2e; resize: vertical; }
+.intake-page textarea:focus-visible { outline: 4px solid #d6a312; outline-offset: 3px; }
+.privacy-note { margin: 10px 0 18px; font-weight: 700; }
+.example-chips, .intake-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
+.chip { min-height: 42px; padding: 8px 12px; text-align: left; font-size: .9rem; }
+.intake-actions > button { padding: 0 18px; }
+.match-result { margin-top: 28px; padding: 22px; border: 2px solid #6ca48d; border-radius: 16px; background: #eff9f4; }
+.match-result h2 { margin-top: 0; }
+.candidate-list { display: grid; gap: 12px; margin: 16px 0; }
 .trust-card { margin: 34px 0 24px; padding: clamp(22px, 5vw, 34px); border: 2px solid #6ca48d; border-radius: 20px; background: #eff9f4; }
 .trust-card.stale { border-color: #bd7816; background: #fff8e8; }
 .trust-card h2, .trust-card h3 { margin-top: 3px; }

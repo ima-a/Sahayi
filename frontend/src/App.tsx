@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { evaluateReadiness, getHealth, getProcedure, getProcedures, getPublicConfig, type HealthStatus, type ProcedureDetail, type ProcedureSummary, type ReadinessAnswer, type ReadinessResponse } from './api'
+import { detectHighRiskPii, matchProcedures, MAX_QUERY_LENGTH, type MatchResult } from './matcher'
 import './App.css'
 
 type Availability = 'loading' | 'available' | 'unavailable'
-type Screen = 'welcome' | 'catalogue' | 'detail' | 'readiness'
+type Screen = 'welcome' | 'intake' | 'catalogue' | 'detail' | 'readiness'
 
 const formatDate = (value: string) => new Date(`${value.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
@@ -20,6 +21,9 @@ function App() {
   const [readinessHistory, setReadinessHistory] = useState<Array<Record<string, ReadinessAnswer>>>([])
   const [readinessLoading, setReadinessLoading] = useState(false)
   const [readinessError, setReadinessError] = useState(false)
+  const [query, setQuery] = useState('')
+  const [match, setMatch] = useState<MatchResult | null>(null)
+  const [piiWarning, setPiiWarning] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -32,7 +36,7 @@ function App() {
   }, [])
 
   const start = () => {
-    setScreen('catalogue')
+    setScreen('intake')
     setProcedures(null)
     setCatalogueError(false)
     getProcedures().then(({ procedures: items }) => setProcedures(items)).catch(() => setCatalogueError(true))
@@ -40,9 +44,31 @@ function App() {
 
   const selectProcedure = (serviceId: string) => {
     setScreen('detail')
+    setQuery('')
+    setMatch(null)
+    setPiiWarning(false)
     setDetail(null)
     setDetailError(false)
     getProcedure(serviceId).then(setDetail).catch(() => setDetailError(true))
+  }
+
+  const findService = () => {
+    if (detectHighRiskPii(query)) { setPiiWarning(true); setMatch(null); return }
+    setPiiWarning(false)
+    setMatch(matchProcedures(query, procedures ?? []))
+  }
+
+  const useExample = (example: string) => {
+    setQuery(example)
+    setMatch(null)
+    setPiiWarning(false)
+  }
+
+  const confirmProcedure = (serviceId: string) => {
+    setQuery('')
+    setMatch(null)
+    setPiiWarning(false)
+    selectProcedure(serviceId)
   }
 
   const startOver = () => {
@@ -56,6 +82,9 @@ function App() {
     setReadinessHistory([])
     setReadinessLoading(false)
     setReadinessError(false)
+    setQuery('')
+    setMatch(null)
+    setPiiWarning(false)
   }
 
   const openReadiness = () => {
@@ -122,6 +151,21 @@ function App() {
 
   const statusText = availability === 'loading' ? 'Checking service availability…' : availability === 'available' ? 'Service is ready' : 'Service is temporarily unavailable'
 
+  if (screen === 'intake') return <Intake
+    procedures={procedures}
+    error={catalogueError}
+    query={query}
+    match={match}
+    piiWarning={piiWarning}
+    onQueryChange={(value) => { setQuery(value); setMatch(null); setPiiWarning(false) }}
+    onFind={findService}
+    onExample={useExample}
+    onBrowse={() => setScreen('catalogue')}
+    onConfirm={confirmProcedure}
+    onChooseAnother={() => { setMatch(null); setQuery('') }}
+    onStartOver={startOver}
+  />
+
   if (screen === 'catalogue') return <main className="kiosk-shell"><section className="content-card" aria-labelledby="catalogue-title">
     <header className="page-header"><div><p className="eyebrow">Verified guidance</p><h1 id="catalogue-title">Supported services</h1><p>Choose a service to see steps verified from official sources.</p></div><button className="secondary compact" type="button" onClick={startOver}>Start Over</button></header>
     {catalogueError ? <div className="state-panel error" role="alert"><h2>We could not load services</h2><p>The guidance service is temporarily unavailable. Please try again later.</p></div>
@@ -155,6 +199,48 @@ function App() {
     <h1 id="sahayi-title">{name}</h1><p className="tagline">Government services, explained around what you need.</p>
     <p className={`availability ${availability}`} role="status" aria-live="polite"><span className="status-dot" aria-hidden="true" />{statusText}</p>
     <button type="button" disabled={availability !== 'available'} onClick={start} aria-describedby="start-note">Start</button><p id="start-note" className="start-note">Sahayi offers guidance and does not submit applications.</p>
+  </section></main>
+}
+
+function Intake({ procedures, error, query, match, piiWarning, onQueryChange, onFind, onExample, onBrowse, onConfirm, onChooseAnother, onStartOver }: {
+  procedures: ProcedureSummary[] | null
+  error: boolean
+  query: string
+  match: MatchResult | null
+  piiWarning: boolean
+  onQueryChange: (value: string) => void
+  onFind: () => void
+  onExample: (value: string) => void
+  onBrowse: () => void
+  onConfirm: (serviceId: string) => void
+  onChooseAnother: () => void
+  onStartOver: () => void
+}) {
+  const focusTarget = useRef<HTMLHeadingElement>(null)
+  const resultTarget = useRef<HTMLDivElement>(null)
+  useEffect(() => { focusTarget.current?.focus() }, [])
+  useEffect(() => { if (match || piiWarning) resultTarget.current?.focus() }, [match, piiWarning])
+  const examples = (procedures ?? []).flatMap(procedure => procedure.intent_phrases.slice(0, 1)).slice(0, 2)
+  return <main className="kiosk-shell"><section className="content-card intake-page" aria-labelledby="intake-title">
+    <nav className="page-actions" aria-label="Service intake navigation"><button className="secondary compact" type="button" onClick={onStartOver}>Start Over</button></nav>
+    <p className="eyebrow">Private service finder</p><h1 id="intake-title" ref={focusTarget} tabIndex={-1}>What do you need help with?</h1>
+    <p className="lead">Describe the service, not your personal situation. Matching happens on this device.</p>
+    {error ? <div className="state-panel error" role="alert"><h2>We could not load services</h2><p>You can try again later.</p><button type="button" className="secondary compact" onClick={onBrowse}>Browse all services</button></div>
+      : procedures === null ? <div className="state-panel" role="status" aria-live="polite">Loading supported services…</div>
+        : <>
+          <label className="intake-label" htmlFor="service-query">Tell us what service you need</label>
+          <p id="service-query-help" className="question-help">Do not enter an Aadhaar number, phone number, address, OTP, email, or other personal details.</p>
+          <textarea id="service-query" value={query} maxLength={MAX_QUERY_LENGTH} rows={4} aria-describedby="service-query-help" onChange={event => onQueryChange(event.target.value)} />
+          <p className="privacy-note">Your words stay in this browser and are not sent to Sahayi.</p>
+          {examples.length > 0 && <div className="example-chips" aria-label="Examples">{examples.map(example => <button className="secondary chip" type="button" key={example} onClick={() => onExample(example)}>{example}</button>)}</div>}
+          <div className="intake-actions"><button type="button" onClick={onFind} disabled={!query.trim()}>Find my service</button><button type="button" className="secondary" onClick={onBrowse}>Browse all services</button></div>
+        </>}
+    <div ref={resultTarget} tabIndex={-1}>
+      {piiWarning && <p className="inline-error" role="alert">Please remove personal identifiers before continuing. This simple check cannot guarantee that all personal information is removed.</p>}
+      {match?.kind === 'confident' && <section className="match-result" aria-labelledby="suggested-title"><h2 id="suggested-title">Is this the service you mean?</h2><h3>{match.candidate.procedure.title}</h3><p>{match.candidate.procedure.short_description}</p><div className="intake-actions"><button type="button" onClick={() => onConfirm(match.candidate.procedure.service_id)}>Yes, continue</button><button type="button" className="secondary" onClick={onChooseAnother}>Choose another service</button></div></section>}
+      {match?.kind === 'ambiguous' && <section className="match-result" aria-labelledby="choose-title"><h2 id="choose-title">Choose the service you mean</h2><div className="candidate-list">{match.candidates.map(candidate => <button type="button" className="service-card" key={candidate.procedure.service_id} onClick={() => onConfirm(candidate.procedure.service_id)}><span><strong>{candidate.procedure.title}</strong><small>{candidate.procedure.short_description}</small></span><span aria-hidden="true">→</span></button>)}</div><button type="button" className="secondary compact" onClick={onChooseAnother}>Choose another service</button></section>}
+      {match?.kind === 'none' && <section className="match-result" aria-labelledby="no-match-title"><h2 id="no-match-title">We could not find a matching service</h2><p>Sahayi currently supports a limited number of services. You can browse the complete catalogue.</p><button type="button" className="secondary" onClick={onBrowse}>Browse all services</button></section>}
+    </div>
   </section></main>
 }
 

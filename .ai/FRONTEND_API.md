@@ -2,7 +2,7 @@
 
 `GET /api/v1/health` returns `{"status":"ok"}`. `GET /api/v1/public-config` returns `{"application_name":"Sahayi","kiosk_mode":true}`. Both return JSON with `Cache-Control: no-store`.
 
-`GET /api/v1/procedures` returns `{ procedures: ProcedureSummary[] }`. A summary contains `service_id`, English `title`, English `short_description`, `category`, `interaction_modes`, `official_publisher`, `pack_version`, ISO 8601 `last_verified_at`, ISO 8601 `review_due_at`, `trust_state` (`current` or `stale`), and boolean `attention_required`. The attention flag is derived from unresolved structured fact conflicts and is independent of freshness. Only active validated packs are listed; procedure facts and handoff URLs are not included in summaries.
+`GET /api/v1/procedures` returns `{ procedures: ProcedureSummary[] }`. This is the narrow browser matching catalogue: a summary contains only `service_id`, English `title`, English `short_description`, English pack-authored `intent_phrases`, `category`, `trust_state` (`current` or `stale`), and boolean `attention_required`. The attention flag is derived from unresolved structured fact conflicts and is independent of freshness. Only active validated packs are listed; procedure facts, readiness content, sources, provenance, handoff URLs, and other internal-pack material are not included in summaries. The browser must use this response only for deterministic local matching; it must never submit the raw citizen query.
 
 `GET /api/v1/procedures/{service_id}` returns one `ProcedureDetail` with:
 

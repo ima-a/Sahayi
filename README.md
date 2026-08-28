@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first local kiosk prototype for making government services easier to understand. The current slice serves verified, versioned procedure guidance without citizen inputs, accounts, or stored data.
+Sahayi is a privacy-first local kiosk prototype for making government services easier to understand. It starts with a browser-only service finder: describe the service needed, confirm a deterministic suggestion from verified pack phrases, or browse all supported services. Raw text is not sent to the backend or stored. The current slice serves verified, versioned procedure guidance without accounts or stored citizen data.
 
 The hackathon deliverable will be a hosted web demonstration of the intended kiosk experience. Project context and implementation decisions are in [`.ai/`](.ai/PROJECT_CONTEXT.md).
 

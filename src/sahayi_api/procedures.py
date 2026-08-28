@@ -582,15 +582,13 @@ def default_pack_root() -> Path:
 
 
 class ProcedureSummary(StrictModel):
+    """The intentionally small, browser-safe catalogue used for local matching."""
+
     service_id: Identifier
     title: ShortText
     short_description: ShortText
+    intent_phrases: Annotated[list[ShortText], Field(min_length=1, max_length=30)]
     category: Identifier
-    interaction_modes: list[InteractionMode]
-    official_publisher: ShortText
-    pack_version: str
-    last_verified_at: datetime
-    review_due_at: datetime
     trust_state: TrustState
     attention_required: bool
 
@@ -637,12 +635,8 @@ def summarize_procedure(loaded: LoadedProcedure, now: datetime | None = None) ->
         service_id=pack.service_id,
         title=pack.title["en"],
         short_description=pack.short_description["en"],
+        intent_phrases=pack.intent_phrases,
         category=pack.category,
-        interaction_modes=pack.interaction_modes,
-        official_publisher=pack.publisher,
-        pack_version=pack.pack_version,
-        last_verified_at=pack.last_verified_at,
-        review_due_at=pack.review_due_at,
         trust_state=loaded.trust_state(now),
         attention_required=fee_attention_required(pack.fee),
     )
