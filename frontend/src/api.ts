@@ -1,7 +1,7 @@
 import type { Locale } from './i18n'
 
 export type HealthStatus = { status: 'ok' }
-export type PublicConfig = { application_name: string; kiosk_mode: boolean }
+export type PublicConfig = { application_name: string; kiosk_mode: boolean; agent_available: boolean }
 export type TrustState = 'current' | 'stale'
 export type FeeVerificationStatus = 'confirmed' | 'conflicting' | 'free' | 'not_stated'
 export type TranslationInfo = {
@@ -102,6 +102,63 @@ export type ReadinessResponse = {
   official_handoff_url: string | null
   disclaimer: string
 }
+export type ChecklistItem = { item_id: string; text: string; source_ids: string[] }
+export type PersonalizedChecklist = {
+  locale: Locale
+  translation: TranslationInfo
+  service_id: string
+  title: string
+  pack_version: string
+  pack_digest: string
+  result: ChecklistItem
+  ready: ChecklistItem[]
+  documents: DocumentGuidance[]
+  confirm: ChecklistItem[]
+  steps: ChecklistItem[]
+  warnings: ChecklistItem[]
+  where: ChecklistItem[]
+  sources: ProcedureSource[]
+  not_verified: ChecklistItem[]
+  official_handoff_url: string
+  disclaimer: string
+}
+export type SyntheticFormAssistance = {
+  locale: Locale
+  translation: TranslationInfo
+  service_id: string
+  title: string
+  mode: 'official_form_worksheet' | 'preparation_worksheet'
+  persona: { persona_id: string; display_name: string; synthetic: true; readiness_answers: Record<string, ReadinessAnswer> }
+  available_personas: Array<{ persona_id: string; display_name: string; synthetic: true; readiness_answers: Record<string, ReadinessAnswer> }>
+  fields: Array<{
+    field_id: string
+    label: string
+    explanation: string
+    value: string | null
+    handling: 'fictional_demo' | 'citizen_private' | 'not_collected'
+    status: 'verified_official_form' | 'preparation_only'
+    source_ids: string[]
+  }>
+  sources: ProcedureSource[]
+  watermark: string
+  privacy_notice: string
+  disclaimer: string
+  official_handoff_url: string
+  pack_version: string
+  pack_digest: string
+}
+export type AssistantTurnResponse = {
+  status: 'ok' | 'fallback' | 'blocked' | 'unavailable' | 'rate_limited'
+  locale: Locale
+  message: string
+  selection: { state: 'none' | 'clarification' | 'selected'; service_id: string | null; choices: Array<{ service_id: string; title: string }> }
+  fact_cards: Array<{ card_id: string; title: string; text: string; source_ids: string[] }>
+  sources: ProcedureSource[]
+  actions: Array<{ action_id: string; label: string; service_id: string | null }>
+  tool_trace: string[]
+  disclaimer: string
+  fallback: boolean
+}
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 const localizedPath = (path: string, locale: Locale) => `${path}${path.includes('?') ? '&' : '?'}locale=${locale}`
 async function getJson<T>(path: string): Promise<T> { const response = await fetch(`${apiBase}${path}`, { headers: { Accept: 'application/json' } }); if (!response.ok) throw new Error('Service unavailable'); return response.json() as Promise<T> }
@@ -120,3 +177,15 @@ export const getProcedures = (locale: Locale = 'en') => getJson<{ locale: Locale
 export const getProcedure = (serviceId: string, locale: Locale = 'en') => getJson<ProcedureDetail>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}`, locale))
 export const evaluateReadiness = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en') =>
   postJson<ReadinessResponse>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/readiness/evaluate`, locale), { answers })
+export const buildChecklist = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en') =>
+  postJson<PersonalizedChecklist>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/checklist`, locale), { answers })
+export const prepareSyntheticForm = (serviceId: string, locale: Locale = 'en', personaId: string | null = null) =>
+  postJson<SyntheticFormAssistance>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/synthetic-form-assistance`, locale), { persona_id: personaId })
+export const assistantTurn = (body: {
+  locale: Locale
+  message: string
+  history: Array<{ role: 'user' | 'assistant'; content: string }>
+  service_id: string | null
+  readiness_answers: Record<string, ReadinessAnswer>
+  consent: true
+}) => postJson<AssistantTurnResponse>('/assistant/turn', body)

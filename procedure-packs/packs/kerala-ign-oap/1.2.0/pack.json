@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "service_id": "kerala-ign-oap",
-  "pack_version": "1.1.0",
-  "status": "superseded",
+  "pack_version": "1.2.0",
+  "status": "active",
   "jurisdiction": { "level": "state", "name": "Kerala" },
   "department": "Local Self Government Department, Government of Kerala",
   "publisher": "Government of Kerala, Sevana Pension – Social Security System",
@@ -110,6 +110,107 @@
       { "rule_id": "income-tax-payer", "priority": 5, "expression": { "op": "equals", "question_id": "income-tax-payer", "value": "yes" }, "outcome_id": "tax-preliminary-mismatch", "source_ids": ["kerala-sevana-criteria"] },
       { "rule_id": "other-welfare-pension-review", "priority": 6, "expression": { "op": "equals", "question_id": "other-social-welfare-pension", "value": "yes" }, "outcome_id": "pension-local-body-review", "source_ids": ["kerala-sevana-criteria"] },
       { "rule_id": "all-preliminary-conditions-aligned", "priority": 7, "expression": { "op": "all", "expressions": [{ "op": "equals", "question_id": "age-60-or-higher", "value": "yes" }, { "op": "equals", "question_id": "kerala-residence-three-years", "value": "yes" }, { "op": "equals", "question_id": "family-income-category", "value": "within" }, { "op": "equals", "question_id": "service-or-family-pension", "value": "no" }, { "op": "equals", "question_id": "income-tax-payer", "value": "no" }, { "op": "equals", "question_id": "other-social-welfare-pension", "value": "no" }] }, "outcome_id": "preliminary-conditions-aligned", "source_ids": ["kerala-sevana-criteria", "kerala-sevana-application-forms"] }
+    ]
+  },
+  "assistance": {
+    "form_mode": "official_form_worksheet",
+    "title": {
+      "en": "Kerala pension official-form preparation worksheet",
+      "hi": "केरल पेंशन आधिकारिक-फॉर्म तैयारी वर्कशीट",
+      "ml": "കേരള പെൻഷൻ ഔദ്യോഗിക-ഫോം തയ്യാറെടുപ്പ് വർക്ക്‌ഷീറ്റ്"
+    },
+    "form_source_ids": ["kerala-ign-oap-application-form"],
+    "fields": [
+      {
+        "field_id": "applicant-name",
+        "label": { "en": "Applicant name (English and Malayalam)", "hi": "आवेदक का नाम (अंग्रेज़ी और मलयालम)", "ml": "അപേക്ഷകന്റെ പേര് (ഇംഗ്ലീഷിലും മലയാളത്തിലും)" },
+        "explanation": { "en": "Citizen must provide privately on the official form; not collected by Sahayi.", "hi": "नागरिक इसे आधिकारिक फॉर्म पर निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।", "ml": "പൗരൻ ഔദ്യോഗിക ഫോമിൽ സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല." },
+        "demo_value": null,
+        "handling": "citizen_private",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "gender-category",
+        "label": { "en": "Gender category", "hi": "लिंग श्रेणी", "ml": "ലിംഗ വിഭാഗം" },
+        "explanation": { "en": "Fictional closed choice corresponding to the official form options.", "hi": "आधिकारिक फॉर्म विकल्पों के अनुरूप काल्पनिक बंद चयन।", "ml": "ഔദ്യോഗിക ഫോം ഓപ്ഷനുകൾക്ക് അനുയോജ്യമായ സാങ്കൽപ്പിക അടച്ച തിരഞ്ഞെടുപ്പ്." },
+        "demo_value": { "en": "Woman (fictional)", "hi": "महिला (काल्पनिक)", "ml": "സ്ത്രീ (സാങ്കൽപ്പികം)" },
+        "handling": "fictional_demo",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "contact-and-address",
+        "label": { "en": "Address, PIN code and mobile number", "hi": "पता, पिन कोड और मोबाइल नंबर", "ml": "വിലാസം, പിൻ കോഡ്, മൊബൈൽ നമ്പർ" },
+        "explanation": { "en": "Citizen must provide privately to the local body; not collected by Sahayi.", "hi": "नागरिक इसे स्थानीय निकाय को निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।", "ml": "പൗരൻ തദ്ദേശസ്ഥാപനത്തിന് സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല." },
+        "demo_value": null,
+        "handling": "not_collected",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "identity-card-numbers",
+        "label": { "en": "Electoral, ration-card and Aadhaar numbers", "hi": "मतदाता, राशन कार्ड और आधार नंबर", "ml": "ഇലക്ടറൽ, റേഷൻ കാർഡ്, ആധാർ നമ്പറുകൾ" },
+        "explanation": { "en": "Citizen must provide privately on the official form; identifiers are not collected by Sahayi.", "hi": "नागरिक आधिकारिक फॉर्म पर निजी रूप से दें; Sahayi पहचान संख्याएँ एकत्र नहीं करता।", "ml": "പൗരൻ ഔദ്യോഗിക ഫോമിൽ സ്വകാര്യമായി നൽകണം; Sahayi തിരിച്ചറിയൽ നമ്പറുകൾ ശേഖരിക്കുന്നില്ല." },
+        "demo_value": null,
+        "handling": "not_collected",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "kerala-residence-years",
+        "label": { "en": "Years residing in Kerala", "hi": "केरल में निवास के वर्ष", "ml": "കേരളത്തിൽ താമസിച്ച വർഷങ്ങൾ" },
+        "explanation": { "en": "Fictional demonstration value for a field present on the official form.", "hi": "आधिकारिक फॉर्म पर मौजूद क्षेत्र के लिए काल्पनिक प्रदर्शन मान।", "ml": "ഔദ്യോഗിക ഫോമിലുള്ള ഫീൽഡിന്റെ സാങ്കൽപ്പിക പ്രദർശന മൂല്യം." },
+        "demo_value": { "en": "5 years (fictional)", "hi": "5 वर्ष (काल्पनिक)", "ml": "5 വർഷം (സാങ്കൽപ്പികം)" },
+        "handling": "fictional_demo",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "income-tax-declaration",
+        "label": { "en": "Income-tax payer declaration", "hi": "आयकर दाता घोषणा", "ml": "ആദായനികുതി അടയ്ക്കുന്നയാളുടെ പ്രഖ്യാപനം" },
+        "explanation": { "en": "Fictional Yes/No demonstration; the local body verifies the official condition.", "hi": "काल्पनिक हाँ/नहीं प्रदर्शन; स्थानीय निकाय आधिकारिक शर्त की जाँच करता है।", "ml": "സാങ്കൽപ്പിക അതെ/അല്ല പ്രദർശനം; ഔദ്യോഗിക വ്യവസ്ഥ തദ്ദേശസ്ഥാപനം പരിശോധിക്കുന്നു." },
+        "demo_value": { "en": "No (fictional)", "hi": "नहीं (काल्पनिक)", "ml": "ഇല്ല (സാങ്കൽപ്പികം)" },
+        "handling": "fictional_demo",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "bank-details",
+        "label": { "en": "Bank delivery and account details", "hi": "बैंक भुगतान और खाता विवरण", "ml": "ബാങ്ക് വിതരണവും അക്കൗണ്ട് വിവരങ്ങളും" },
+        "explanation": { "en": "If applicable, citizen must provide privately to the local body; not collected by Sahayi.", "hi": "यदि लागू हो तो नागरिक स्थानीय निकाय को निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।", "ml": "ബാധകമാണെങ്കിൽ പൗരൻ തദ്ദേശസ്ഥാപനത്തിന് സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല." },
+        "demo_value": null,
+        "handling": "not_collected",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "supporting-records",
+        "label": { "en": "Age, identity, income and other supporting records", "hi": "आयु, पहचान, आय और अन्य सहायक रिकॉर्ड", "ml": "പ്രായം, തിരിച്ചറിയൽ, വരുമാനം, മറ്റ് സഹായ രേഖകൾ" },
+        "explanation": { "en": "Citizen must provide applicable records privately; files are not collected by Sahayi.", "hi": "नागरिक लागू रिकॉर्ड निजी रूप से दें; Sahayi फाइलें एकत्र नहीं करता।", "ml": "പൗരൻ ബാധകമായ രേഖകൾ സ്വകാര്യമായി നൽകണം; Sahayi ഫയലുകൾ ശേഖരിക്കുന്നില്ല." },
+        "demo_value": null,
+        "handling": "not_collected",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      },
+      {
+        "field_id": "place-date-signature",
+        "label": { "en": "Place, date and applicant signature", "hi": "स्थान, तारीख और आवेदक के हस्ताक्षर", "ml": "സ്ഥലം, തീയതി, അപേക്ഷകന്റെ ഒപ്പ്" },
+        "explanation": { "en": "Citizen completes these privately on the official form; Sahayi does not collect a signature.", "hi": "नागरिक इन्हें आधिकारिक फॉर्म पर निजी रूप से पूरा करें; Sahayi हस्ताक्षर एकत्र नहीं करता।", "ml": "പൗരൻ ഇവ ഔദ്യോഗിക ഫോമിൽ സ്വകാര്യമായി പൂരിപ്പിക്കണം; Sahayi ഒപ്പ് ശേഖരിക്കുന്നില്ല." },
+        "demo_value": null,
+        "handling": "citizen_private",
+        "status": "verified_official_form",
+        "source_ids": ["kerala-ign-oap-application-form"]
+      }
+    ],
+    "personas": [
+      {
+        "persona_id": "fictional-preliminary-demo",
+        "display_name": { "en": "DEMO — fictional preliminary-readiness citizen", "hi": "DEMO — काल्पनिक प्रारंभिक-तैयारी नागरिक", "ml": "DEMO — സാങ്കൽപ്പിക പ്രാഥമിക-തയ്യാറെടുപ്പ് പൗരൻ" },
+        "synthetic": true,
+        "field_ids": ["gender-category", "kerala-residence-years", "income-tax-declaration"],
+        "readiness_answers": { "age-60-or-higher": "yes", "kerala-residence-three-years": "yes", "family-income-category": "within", "service-or-family-pension": "no", "income-tax-payer": "no", "other-social-welfare-pension": "no" }
+      }
     ]
   },
   "localization": {

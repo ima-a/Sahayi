@@ -43,6 +43,7 @@ describe('pack-driven local matcher', () => {
     expect(detectHighRiskPii('person@example.in')).toBe(true)
     expect(detectHighRiskPii('१२३४ ५६७८ ९०१२')).toBe(true)
     expect(detectHighRiskPii('൧൨൩൪ ൫൬൭൮ ൯൦൧൨')).toBe(true)
+    expect(detectHighRiskPii('house 42 Example Road')).toBe(true)
     expect(detectHighRiskPii('update my Aadhaar address')).toBe(false)
   })
   it('matches native-script authored phrases', () => {

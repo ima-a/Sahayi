@@ -24,8 +24,8 @@ from sahayi_api.procedures import (
     summarize_procedure,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.3.0" / "pack.json"
-KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.1.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.4.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.2.0" / "pack.json"
 SCHEMA_PATH = PACK_PATH.parents[3] / "schemas" / "procedure-pack-v1.schema.json"
 
 
@@ -80,7 +80,7 @@ def test_two_active_packs_are_independently_versioned_and_verified() -> None:
     registry = load_procedure_registry(default_pack_root())
     kerala = registry["kerala-ign-oap"]
     aadhaar = registry["uidai-aadhaar-address-update"]
-    assert kerala.pack.pack_version == "1.1.0"
+    assert kerala.pack.pack_version == "1.2.0"
     assert kerala.digest != aadhaar.digest
     assert kerala.pack.jurisdiction.name == "Kerala"
     assert {source.source_id for source in kerala.pack.sources} == {
@@ -107,6 +107,17 @@ def test_unknown_fields_and_html_are_rejected() -> None:
     html["title"] = {"en": "<strong>Unsafe</strong>"}
     with pytest.raises(ValidationError, match="HTML content is not permitted"):
         ProcedurePack.model_validate(html)
+
+
+def test_identifier_shaped_synthetic_demo_values_are_rejected() -> None:
+    data = pack_data()
+    data["assistance"]["fields"][0]["demo_value"] = {
+        "en": "1234 5678 9012",
+        "hi": "१२३४ ५६७८ ९०१२",
+        "ml": "൧൨൩൪ ൫൬൭൮ ൯൦൧൨",
+    }
+    with pytest.raises(ValidationError, match="identifier-shaped"):
+        ProcedurePack.model_validate(data)
 
 
 @pytest.mark.parametrize(
@@ -237,7 +248,7 @@ def test_duplicate_service_version_is_rejected(tmp_path: Path) -> None:
 def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
     first = pack_data()
     second = copy.deepcopy(first)
-    second["pack_version"] = "1.4.0"
+    second["pack_version"] = "1.5.0"
     write_pack(tmp_path, "one", first)
     write_pack(tmp_path, "two", second)
     with pytest.raises(PackLoadError, match="exactly one active"):
@@ -247,12 +258,12 @@ def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
 def test_draft_pack_is_not_selected(tmp_path: Path) -> None:
     active = pack_data()
     draft = copy.deepcopy(active)
-    draft["pack_version"] = "1.4.0"
+    draft["pack_version"] = "1.5.0"
     draft["status"] = "draft"
     write_pack(tmp_path, "active", active)
     write_pack(tmp_path, "draft", draft)
     registry = load_procedure_registry(tmp_path)
-    assert registry[active["service_id"]].pack.pack_version == "1.3.0"
+    assert registry[active["service_id"]].pack.pack_version == "1.4.0"
 
 
 def test_no_active_pack_fails_closed(tmp_path: Path) -> None:
@@ -276,7 +287,7 @@ def test_pack_digest_is_deterministic() -> None:
     reordered_json = json.dumps(pack_data(), sort_keys=True)
     reordered = ProcedurePack.model_validate_json(reordered_json)
     assert pack_digest(original) == pack_digest(reordered)
-    assert pack_digest(original) == "0de2547531a1c6b366c3dfacfe9e6dd3080923ba89d58050fd7ea2d09312534e"
+    assert pack_digest(original) == "f9c4847b1dda19c25409e17db75c3b05dfd72541066bf2d3fdfa2ed5bbb83dcb"
     assert pack_digest(original) != "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
 
 
@@ -344,7 +355,7 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert payload["fee"]["resolution_guidance"].endswith("Confirm the fee on the official portal before payment.")
     assert payload["attention_required"] is True
     assert payload["official_handoff_url"] == "https://myaadhaar.uidai.gov.in/"
-    assert payload["pack_digest"] == "0de2547531a1c6b366c3dfacfe9e6dd3080923ba89d58050fd7ea2d09312534e"
+    assert payload["pack_digest"] == "f9c4847b1dda19c25409e17db75c3b05dfd72541066bf2d3fdfa2ed5bbb83dcb"
     assert payload["provenance"]["fee"] == ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
     assert all(source["url"].startswith("https://") for source in payload["sources"])
 

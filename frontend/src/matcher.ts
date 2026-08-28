@@ -28,11 +28,13 @@ export function meaningfulTokens(text: string): string[] {
 }
 
 export function detectHighRiskPii(text: string): boolean {
-  const compactDigits = normaliseDecimalDigits(text).replace(/[\s-]/g, '')
+  const normalisedDigits = normaliseDecimalDigits(text)
+  const compactDigits = normalisedDigits.replace(/[\s-]/g, '')
   const hasAadhaarLike = /(?<!\d)\d{12}(?!\d)/.test(compactDigits)
   const hasPhoneLike = /(?<!\d)\d{10}(?!\d)/.test(compactDigits)
   const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)
-  return hasAadhaarLike || hasPhoneLike || hasEmail
+  const hasAddressWithNumber = /(?:\b(?:house|flat|door|street|road|lane|ward|pin(?:code)?)\b|मकान|फ्लैट|गली|सड़क|वार्ड|पिन|വീട്|ഫ്ലാറ്റ്|റോഡ്|വാർഡ്|പിൻ).{0,40}\d/iu.test(normalisedDigits)
+  return hasAadhaarLike || hasPhoneLike || hasEmail || hasAddressWithNumber
 }
 
 export function normaliseDecimalDigits(text: string): string {

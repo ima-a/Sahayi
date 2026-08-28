@@ -35,3 +35,23 @@
 | 2026-08-28 | Treat Hindi and Malayalam as machine-assisted prototype translations requiring native/legal review | Complete official translated equivalents were unavailable for every field; only validated canonical English content is translated and linked official wording prevails. |
 | 2026-08-28 | Keep translations static in validated packs and a typed UI catalogue | No runtime translation API, third-party policy translation, external font, storage, or network translation dependency enters the privacy/trust boundary. |
 | 2026-08-28 | Normalize relevant Unicode decimal digits before local identifier blocking | ASCII, Devanagari, and Malayalam identifier-shaped input receives the same browser-only protection without transmitting the value. |
+| 2026-08-28 | Use a small explicit Responses API loop with fixed GPT-5.6 Luna | Tool ordering can be agentic while strict local functions, structured output, low reasoning, no retry/streaming, and hard budgets retain control. |
+| 2026-08-28 | Keep AI optional, consent-gated, and disabled by default | Deterministic guidance must work without a key; cloud processing is separately disclosed and `store: false` is not claimed as Zero Data Retention. |
+| 2026-08-28 | Reconstruct every factual card and action server-side | Model prose guides; validated pack IDs and local tool results remain the sole source for facts, sources, fees, outcomes, URLs, and actions. |
+| 2026-08-28 | Use process-local abuse controls only as prototype safeguards | An ephemeral salted client hash, stale cleanup, semaphore, rate window, and request budget limit cost without claiming distributed production protection. |
+| 2026-08-28 | Permit synthetic form preparation only | Bundled DEMO personas and blank private fields demonstrate preparation without citizen free text, official form filling, files, submission, or retention. |
+
+## Official OpenAI documentation basis
+
+Retrieved 2026-08-28, using only official OpenAI domains:
+
+- [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+- [Responses create reference](https://developers.openai.com/api/reference/cli/resources/responses/methods/create)
+- [Function calling](https://developers.openai.com/api/docs/guides/function-calling)
+- [Structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- [Python API library](https://developers.openai.com/api/reference/python)
+- [Latest model guidance](https://developers.openai.com/api/docs/guides/latest-model)
+- [Your data / retention controls](https://developers.openai.com/api/docs/guides/your-data)
+- [Production best practices](https://developers.openai.com/api/docs/guides/production-best-practices)
+
+The official Python library page requires Python 3.10+, documents `pip install openai`, async clients, configuration, and SemVer caveats but does not publish the current package number in-page. The compatible `openai==3.0.0` pin was therefore additionally resolution-checked without installation; no provider request was made.

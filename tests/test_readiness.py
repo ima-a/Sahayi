@@ -24,8 +24,8 @@ from sahayi_api.readiness import (
     evaluate_readiness,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.3.0" / "pack.json"
-KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.1.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.4.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.2.0" / "pack.json"
 
 
 def pack_data() -> dict:
@@ -230,6 +230,7 @@ def test_pack_readiness_booleans_and_numbers_are_strict(mutation) -> None:
 def test_integer_bounds_are_enforced_by_generic_evaluator() -> None:
     data = pack_data()
     data["readiness"]["questions"][0].update(answer_type="integer", minimum=1, maximum=3)
+    data["assistance"]["personas"][0]["readiness_answers"]["mobile-auth-access"] = 1
 
     def replace_boolean_constants(expression: dict) -> None:
         if expression.get("question_id") == "mobile-auth-access" and expression.get("op") == "equals":

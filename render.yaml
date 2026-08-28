@@ -8,3 +8,8 @@ services:
     healthCheckPath: /api/v1/health
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SAHAYI_AGENT_ENABLED
+        value: "false"

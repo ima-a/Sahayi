@@ -21,6 +21,8 @@ from pydantic import (
     model_validator,
 )
 
+from sahayi_api.privacy import contains_high_risk_pii
+
 Identifier = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=80)]
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
@@ -129,6 +131,22 @@ class TranslationReviewStatus(StrEnum):
     NATIVE_REVIEW_REQUIRED = "native_review_required"
 
 
+class FormAssistanceMode(StrEnum):
+    OFFICIAL_FORM_WORKSHEET = "official_form_worksheet"
+    PREPARATION_WORKSHEET = "preparation_worksheet"
+
+
+class FormFieldHandling(StrEnum):
+    FICTIONAL_DEMO = "fictional_demo"
+    CITIZEN_PRIVATE = "citizen_private"
+    NOT_COLLECTED = "not_collected"
+
+
+class FormFieldStatus(StrEnum):
+    VERIFIED_OFFICIAL_FORM = "verified_official_form"
+    PREPARATION_ONLY = "preparation_only"
+
+
 class Jurisdiction(StrictModel):
     level: JurisdictionLevel
     name: ShortText
@@ -163,6 +181,83 @@ class CitedFact(StrictModel):
     fact_id: Identifier
     text: LongText
     source_ids: SourceIds
+
+
+class FormAssistanceField(StrictModel):
+    field_id: Identifier
+    label: LocalizedText
+    explanation: LocalizedText
+    demo_value: LocalizedText | None = None
+    handling: FormFieldHandling
+    status: FormFieldStatus
+    source_ids: SourceIds
+
+    @field_validator("label", "explanation", "demo_value")
+    @classmethod
+    def require_complete_locales(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is None:
+            return None
+        _validate_localized_text(value)
+        if set(value) != set(SUPPORTED_LOCALES):
+            raise ValueError("form assistance text must contain exactly en, hi, and ml")
+        return value
+
+    @model_validator(mode="after")
+    def validate_handling(self) -> FormAssistanceField:
+        if self.handling is FormFieldHandling.FICTIONAL_DEMO and self.demo_value is None:
+            raise ValueError("fictional demo fields require a demo value")
+        if self.handling is not FormFieldHandling.FICTIONAL_DEMO and self.demo_value is not None:
+            raise ValueError("private and uncollected fields must not contain demo values")
+        if self.demo_value is not None and any(contains_high_risk_pii(value) for value in self.demo_value.values()):
+            raise ValueError("fictional demo values must not contain identifier-shaped data")
+        return self
+
+
+class SyntheticPersona(StrictModel):
+    persona_id: Identifier
+    display_name: LocalizedText
+    synthetic: Literal[True]
+    field_ids: Annotated[list[Identifier], Field(default_factory=list, max_length=20)]
+    readiness_answers: Annotated[dict[Identifier, StrictBool | StrictInt | ShortText], Field(min_length=1, max_length=30)]
+
+    @field_validator("display_name")
+    @classmethod
+    def require_complete_locales(cls, value: dict[str, str]) -> dict[str, str]:
+        _validate_localized_text(value)
+        if set(value) != set(SUPPORTED_LOCALES):
+            raise ValueError("persona text must contain exactly en, hi, and ml")
+        return value
+
+
+class AssistanceDefinition(StrictModel):
+    form_mode: FormAssistanceMode
+    title: LocalizedText
+    form_source_ids: Annotated[list[SourceId], Field(default_factory=list, max_length=4)]
+    fields: Annotated[list[FormAssistanceField], Field(min_length=1, max_length=30)]
+    personas: Annotated[list[SyntheticPersona], Field(min_length=1, max_length=8)]
+
+    @field_validator("title")
+    @classmethod
+    def require_complete_locales(cls, value: dict[str, str]) -> dict[str, str]:
+        _validate_localized_text(value)
+        if set(value) != set(SUPPORTED_LOCALES):
+            raise ValueError("assistance title must contain exactly en, hi, and ml")
+        return value
+
+    @model_validator(mode="after")
+    def validate_definition(self) -> AssistanceDefinition:
+        _require_unique([field.field_id for field in self.fields], "form assistance field IDs")
+        _require_unique([persona.persona_id for persona in self.personas], "synthetic persona IDs")
+        known_fields = {field.field_id for field in self.fields}
+        demo_fields = {field.field_id for field in self.fields if field.handling is FormFieldHandling.FICTIONAL_DEMO}
+        for persona in self.personas:
+            if not set(persona.field_ids) <= known_fields:
+                raise ValueError("synthetic persona references an unknown form field")
+            if not set(persona.field_ids) <= demo_fields:
+                raise ValueError("synthetic personas may reference only fictional demo fields")
+        if self.form_mode is FormAssistanceMode.OFFICIAL_FORM_WORKSHEET and not self.form_source_ids:
+            raise ValueError("official form worksheet requires an official form source")
+        return self
 
 
 class DocumentGuidance(StrictModel):
@@ -499,6 +594,7 @@ class ProcedurePack(StrictModel):
     tracking_guidance: CitedFact | None = None
     limitations: Annotated[list[CitedFact], Field(min_length=1, max_length=20)]
     readiness: ReadinessDefinition
+    assistance: AssistanceDefinition | None = None
     localization: PackLocalization | None = None
     provenance: Annotated[dict[Identifier, SourceIds], Field(min_length=1, max_length=100)]
 
@@ -542,6 +638,32 @@ class ProcedurePack(StrictModel):
         references: list[str] = []
         for item in [*self.requirements, *self.required_documents, self.fee, *self.fee.claims, *self.steps, *self.submission_channels, *self.limitations, *self.readiness.questions, *self.readiness.additional_review_items, *self.readiness.outcomes, *self.readiness.rules]:
             references.extend(item.source_ids)
+        if self.assistance is not None:
+            references.extend(self.assistance.form_source_ids)
+            for field in self.assistance.fields:
+                references.extend(field.source_ids)
+            questions = {question.question_id: question for question in self.readiness.questions}
+            for persona in self.assistance.personas:
+                if not set(persona.readiness_answers) <= questions.keys():
+                    raise ValueError("synthetic persona references an unknown readiness question")
+                for question_id, value in persona.readiness_answers.items():
+                    question = questions[question_id]
+                    if question.answer_type is QuestionAnswerType.BOOLEAN and type(value) is not bool:
+                        raise ValueError("synthetic persona has an invalid boolean readiness answer")
+                    if question.answer_type is QuestionAnswerType.INTEGER and type(value) is not int:
+                        raise ValueError("synthetic persona has an invalid integer readiness answer")
+                    if question.answer_type is QuestionAnswerType.SINGLE_CHOICE:
+                        options = {option.option_id for option in question.options or []}
+                        if not isinstance(value, str) or value not in options:
+                            raise ValueError("synthetic persona has an invalid choice readiness answer")
+            if self.assistance.form_mode is FormAssistanceMode.OFFICIAL_FORM_WORKSHEET:
+                sources_by_id = {source.source_id: source for source in self.sources}
+                if any(sources_by_id[source_id].source_type is not SourceType.PDF for source_id in self.assistance.form_source_ids):
+                    raise ValueError("official form worksheet sources must be PDF sources")
+                if any(field.status is not FormFieldStatus.VERIFIED_OFFICIAL_FORM for field in self.assistance.fields):
+                    raise ValueError("official form worksheet fields must be verified against the official form")
+            elif self.assistance.form_source_ids:
+                raise ValueError("preparation worksheets must not claim an official form source")
         if self.tracking_guidance:
             references.extend(self.tracking_guidance.source_ids)
         for mapped_sources in self.provenance.values():
@@ -671,6 +793,8 @@ def pack_digest(pack: ProcedurePack) -> str:
     # optional additional-review guidance.
     if not payload["readiness"]["additional_review_items"]:
         del payload["readiness"]["additional_review_items"]
+    if payload["assistance"] is None:
+        del payload["assistance"]
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 

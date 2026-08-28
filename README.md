@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first local kiosk prototype for making government services easier to understand in English, Hindi, and Malayalam. It starts with a browser-only service finder: describe the service needed, confirm a deterministic suggestion from verified pack phrases, or browse all supported services. Raw text is not sent to the backend or stored. The current slice serves verified, versioned procedure guidance without accounts or stored citizen data.
+Sahayi is a privacy-first local kiosk prototype for making government services easier to understand in English, Hindi, and Malayalam. Its deterministic journey includes a browser-only service finder, verified procedures, closed-choice readiness, source-linked personalized checklists, and synthetic preparation worksheets. An optional consent-gated AI guide can choose among six verified local tools; it is disabled by default and never becomes the source of procedure facts.
 
 English is the canonical verified guidance. Hindi and Malayalam are machine-assisted prototype translations of that already-validated content, require native-speaker and legal review before production use, and defer to the linked official source wording. Sahayi uses no runtime translation API, external translation resource, or external font.
 
@@ -15,7 +15,7 @@ The hackathon deliverable will be a hosted web demonstration of the intended kio
 
 Create and activate a virtual environment, then run `python -m pip install -e '.[test]'`. Install frontend packages with `cd frontend && npm install`.
 
-Copy `.env.example` to `.env` only when configuration is needed. Never place secrets in it for this phase.
+Copy `.env.example` to `.env` only when configuration is needed. The complete deterministic application requires no OpenAI key. For an intentionally enabled local AI test, keep `OPENAI_API_KEY` server-only and set `SAHAYI_AGENT_ENABLED=true`; never place a real key in source or Git.
 
 ## Development
 
@@ -34,3 +34,9 @@ After `npm run build`, run `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 
 `Dockerfile` builds the Vite frontend and serves it with FastAPI as one same-origin, non-root container. `render.yaml` defines one free Render Docker Web Service from `feat/sahayi-deployment`, with `/api/v1/health` and manual deploys. In Render, create a Blueprint from this repository and branch, review the single service, deploy it, and complete the post-deployment checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). No live URL is committed.
 
 Sahayi is a hackathon prototype, not an official government service. It does not submit real applications, collect OTPs or payments, or integrate with government systems.
+
+## Optional AI and synthetic assistance
+
+“Ask Sahayi AI” requires a localized disclosure and affirmative memory-only consent. Sanitized bounded turns may then be processed by OpenAI using the Responses API with `gpt-5.6-luna`, low reasoning, strict local functions, `store: false`, no streaming, and explicit cost bounds. `store: false` is not represented as a Zero Data Retention guarantee. Missing configuration, privacy blocks, provider failures, malformed output, rate limits, or exhausted budgets return citizens to deterministic guidance. The dependency-free process-local limiter is a prototype control, not distributed production abuse protection.
+
+Form assistance uses bundled fictional DEMO personas only. It creates a prominently watermarked preparation worksheet for browser printing; it never fills a live site, generates a server file, submits an application, or accepts citizen free-text PII. Voice is not supported.

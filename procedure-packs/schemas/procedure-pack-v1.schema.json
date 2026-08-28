@@ -1,5 +1,60 @@
 {
   "$defs": {
+    "AssistanceDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FormAssistanceField"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "form_mode": {
+          "$ref": "#/$defs/FormAssistanceMode"
+        },
+        "form_source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Form Source Ids",
+          "type": "array"
+        },
+        "personas": {
+          "items": {
+            "$ref": "#/$defs/SyntheticPersona"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Personas",
+          "type": "array"
+        },
+        "title": {
+          "additionalProperties": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxProperties": 12,
+          "minProperties": 1,
+          "title": "Title",
+          "type": "object"
+        }
+      },
+      "required": [
+        "form_mode",
+        "title",
+        "fields",
+        "personas"
+      ],
+      "title": "AssistanceDefinition",
+      "type": "object"
+    },
     "CitedFact": {
       "additionalProperties": false,
       "properties": {
@@ -218,6 +273,110 @@
         "not_stated"
       ],
       "title": "FeeVerificationStatus",
+      "type": "string"
+    },
+    "FormAssistanceField": {
+      "additionalProperties": false,
+      "properties": {
+        "demo_value": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxProperties": 12,
+              "minProperties": 1,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Demo Value"
+        },
+        "explanation": {
+          "additionalProperties": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxProperties": 12,
+          "minProperties": 1,
+          "title": "Explanation",
+          "type": "object"
+        },
+        "field_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Field Id",
+          "type": "string"
+        },
+        "handling": {
+          "$ref": "#/$defs/FormFieldHandling"
+        },
+        "label": {
+          "additionalProperties": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxProperties": 12,
+          "minProperties": 1,
+          "title": "Label",
+          "type": "object"
+        },
+        "source_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Source Ids",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/FormFieldStatus"
+        }
+      },
+      "required": [
+        "field_id",
+        "label",
+        "explanation",
+        "handling",
+        "status",
+        "source_ids"
+      ],
+      "title": "FormAssistanceField",
+      "type": "object"
+    },
+    "FormAssistanceMode": {
+      "enum": [
+        "official_form_worksheet",
+        "preparation_worksheet"
+      ],
+      "title": "FormAssistanceMode",
+      "type": "string"
+    },
+    "FormFieldHandling": {
+      "enum": [
+        "fictional_demo",
+        "citizen_private",
+        "not_collected"
+      ],
+      "title": "FormFieldHandling",
+      "type": "string"
+    },
+    "FormFieldStatus": {
+      "enum": [
+        "verified_official_form",
+        "preparation_only"
+      ],
+      "title": "FormFieldStatus",
       "type": "string"
     },
     "InteractionMode": {
@@ -1043,6 +1202,77 @@
       "title": "SubmissionChannel",
       "type": "object"
     },
+    "SyntheticPersona": {
+      "additionalProperties": false,
+      "properties": {
+        "display_name": {
+          "additionalProperties": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxProperties": 12,
+          "minProperties": 1,
+          "title": "Display Name",
+          "type": "object"
+        },
+        "field_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Field Ids",
+          "type": "array"
+        },
+        "persona_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Persona Id",
+          "type": "string"
+        },
+        "readiness_answers": {
+          "maxProperties": 30,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z0-9]+(?:-[a-z0-9]+)*$": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "maxLength": 240,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "propertyNames": {
+            "maxLength": 80
+          },
+          "title": "Readiness Answers",
+          "type": "object"
+        },
+        "synthetic": {
+          "const": true,
+          "title": "Synthetic",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "persona_id",
+        "display_name",
+        "synthetic",
+        "readiness_answers"
+      ],
+      "title": "SyntheticPersona",
+      "type": "object"
+    },
     "TranslationMethod": {
       "enum": [
         "canonical_source",
@@ -1062,6 +1292,17 @@
   },
   "additionalProperties": false,
   "properties": {
+    "assistance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AssistanceDefinition"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "category": {
       "maxLength": 80,
       "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",

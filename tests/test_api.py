@@ -29,7 +29,7 @@ async def test_public_config_has_no_secret_configuration(client: AsyncClient) ->
     response = await client.get("/api/v1/public-config")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json() == {"application_name": "Sahayi", "kiosk_mode": True}
+    assert response.json() == {"application_name": "Sahayi", "kiosk_mode": True, "agent_available": False}
     serialized = response.text.lower()
     for prohibited in ("secret", "token", "password", "api_key", "origin", "environment"):
         assert prohibited not in serialized

@@ -9,6 +9,15 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sahayi_api.config import get_settings
+from sahayi_api.agent import AgentRuntime, AssistantTurnRequest, AssistantTurnResponse, run_assistant_turn
+from sahayi_api.assistance import (
+    ChecklistRequest,
+    PersonalizedChecklist,
+    SyntheticFormAssistance,
+    SyntheticFormRequest,
+    build_personalized_checklist,
+    prepare_synthetic_form_assistance,
+)
 from sahayi_api.procedures import (
     PackLoadError,
     ProcedureDetail,
@@ -28,6 +37,7 @@ from sahayi_api.readiness import (
 )
 
 settings = get_settings()
+agent_runtime = AgentRuntime(settings)
 app = FastAPI(title="Sahayi API", docs_url=None, redoc_url=None, openapi_url=None)
 
 try:
@@ -79,7 +89,7 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/v1/public-config")
 async def public_config() -> dict[str, str | bool]:
-    return {"application_name": "Sahayi", "kiosk_mode": True}
+    return {"application_name": "Sahayi", "kiosk_mode": True, "agent_available": agent_runtime.available}
 
 
 @app.get("/api/v1/procedures", response_model=ProcedureListResponse)
@@ -116,6 +126,48 @@ async def readiness_evaluate(
         return evaluate_readiness(loaded, request.answers, locale=locale)
     except ReadinessInputError:
         return JSONResponse({"error": "Invalid readiness answers"}, status_code=422)
+
+
+@app.post("/api/v1/procedures/{service_id}/checklist", response_model=PersonalizedChecklist)
+async def personalized_checklist(
+    service_id: str,
+    request: ChecklistRequest,
+    locale: SupportedLocale = "en",
+) -> PersonalizedChecklist | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    loaded = procedure_registry.get(service_id)
+    if loaded is None:
+        return JSONResponse({"error": "Procedure not found"}, status_code=404)
+    try:
+        return build_personalized_checklist(loaded, request.answers, locale=locale)
+    except ReadinessInputError:
+        return JSONResponse({"error": "Invalid readiness answers"}, status_code=422)
+
+
+@app.post("/api/v1/procedures/{service_id}/synthetic-form-assistance", response_model=SyntheticFormAssistance)
+async def synthetic_form_assistance(
+    service_id: str,
+    request: SyntheticFormRequest,
+    locale: SupportedLocale = "en",
+) -> SyntheticFormAssistance | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    loaded = procedure_registry.get(service_id)
+    if loaded is None:
+        return JSONResponse({"error": "Procedure not found"}, status_code=404)
+    try:
+        return prepare_synthetic_form_assistance(loaded, request.persona_id, locale=locale)
+    except ValueError:
+        return JSONResponse({"error": "Invalid synthetic form request"}, status_code=422)
+
+
+@app.post("/api/v1/assistant/turn", response_model=AssistantTurnResponse)
+async def assistant_turn(request: Request, turn: AssistantTurnRequest) -> AssistantTurnResponse | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    address = request.client.host if request.client is not None else "unknown"
+    return await run_assistant_turn(turn, procedure_registry, agent_runtime, address)
 
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"

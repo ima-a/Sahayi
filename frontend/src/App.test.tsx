@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { ProcedureDetail, ProcedureSummary, ReadinessResponse } from './api'
+import type { AssistantTurnResponse, PersonalizedChecklist, ProcedureDetail, ProcedureSummary, ReadinessResponse, SyntheticFormAssistance } from './api'
 
 const englishTranslation = {
   locale: 'en' as const,
@@ -94,12 +94,42 @@ const completeReadiness: ReadinessResponse = {
   disclaimer: 'This readiness result is personalised guidance, not an eligibility decision or official approval.',
 }
 
-function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: ProcedureDetail; readinessInitial?: ReadinessResponse; failCatalogue?: boolean; failDetail?: boolean; failReadiness?: boolean } = {}) {
+const agentReply: AssistantTurnResponse = {
+  status: 'ok', locale: 'en', message: 'Choose the verified Aadhaar path.',
+  selection: { state: 'selected', service_id: summary.service_id, choices: [] },
+  fact_cards: [{ card_id: 'fee-information', title: 'Fee information', text: 'Fee needs confirmation on the official portal.', source_ids: ['uidai-update-overview'] }],
+  sources: [readinessSource], actions: [{ action_id: 'start-readiness', label: 'Start deterministic readiness check', service_id: summary.service_id }],
+  tool_trace: ['get_verified_procedure'], disclaimer: 'AI guidance is a prototype and never an approval.', fallback: false,
+}
+
+const checklistFixture: PersonalizedChecklist = {
+  locale: 'en', translation: englishTranslation, service_id: summary.service_id, title: summary.title, pack_version: '1.4.0', pack_digest: 'd'.repeat(64),
+  result: { item_id: 'result-ready', text: 'Ready for the demonstrated path.', source_ids: ['uidai-update-overview'] },
+  ready: [{ item_id: 'ready-one', text: 'Use the verified official path.', source_ids: ['uidai-update-overview'] }],
+  documents: detail.required_documents, confirm: [{ item_id: 'confirm-fee', text: 'Confirm the fee before paying.', source_ids: ['uidai-update-overview'] }],
+  steps: [{ item_id: 'step-open', text: 'Open the official service.', source_ids: ['uidai-update-overview'] }], warnings: [], where: [], sources: [readinessSource],
+  not_verified: [{ item_id: 'not-verified', text: 'Approval is not verified.', source_ids: ['uidai-update-overview'] }], official_handoff_url: detail.official_handoff_url,
+  disclaimer: 'Preparation guidance only.',
+}
+
+const formFixture: SyntheticFormAssistance = {
+  locale: 'en', translation: englishTranslation, service_id: summary.service_id, title: 'Aadhaar preparation worksheet', mode: 'preparation_worksheet',
+  persona: { persona_id: 'fictional-demo', display_name: 'DEMO — fictional citizen', synthetic: true, readiness_answers: { 'mobile-auth-access': true } },
+  available_personas: [{ persona_id: 'fictional-demo', display_name: 'DEMO — fictional citizen', synthetic: true, readiness_answers: { 'mobile-auth-access': true } }],
+  fields: [{ field_id: 'aadhaar-number', label: 'Aadhaar number', explanation: 'Citizen must provide privately.', value: null, handling: 'not_collected', status: 'preparation_only', source_ids: ['uidai-update-overview'] }],
+  sources: [readinessSource], watermark: 'SYNTHETIC DEMO — NOT AN OFFICIAL APPLICATION — DO NOT SUBMIT', privacy_notice: 'Identifiers are not collected.', disclaimer: 'Preparation only.',
+  official_handoff_url: detail.official_handoff_url, pack_version: '1.4.0', pack_digest: 'd'.repeat(64),
+}
+
+function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: ProcedureDetail; readinessInitial?: ReadinessResponse; failCatalogue?: boolean; failDetail?: boolean; failReadiness?: boolean; agentAvailable?: boolean; agentReply?: AssistantTurnResponse } = {}) {
   const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     const parsed = new URL(url, 'http://test')
     if (parsed.pathname.endsWith('/health')) return response({ status: 'ok' })
-    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true })
+    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false })
+    if (parsed.pathname.endsWith('/assistant/turn')) return response(options.agentReply ?? agentReply)
+    if (parsed.pathname.endsWith('/checklist')) return response(checklistFixture)
+    if (parsed.pathname.endsWith('/synthetic-form-assistance')) return response(formFixture)
     if (parsed.pathname.endsWith('/procedures')) return options.failCatalogue ? Promise.reject(new Error('offline')) : response({ locale: parsed.searchParams.get('locale') ?? 'en', translation: englishTranslation, procedures: options.procedures ?? [summary] })
     if (parsed.pathname.endsWith('/readiness/evaluate')) {
       if (options.failReadiness) return Promise.reject(new Error('offline'))
@@ -419,5 +449,78 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByText('Service is temporarily unavailable')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
+  })
+
+  it('requires AI disclosure consent, sends only bounded turn fields, renders verified activity, and Start Over clears memory', async () => {
+    const fetchMock = mockApi({ agentAvailable: true })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ask Sahayi AI' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
+    expect(screen.getByText(/does not claim Zero Data Retention/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('General service question')).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant/turn'))).toBe(false)
+    fireEvent.click(screen.getByRole('checkbox', { name: /consent to this AI turn/ }))
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'How do I update my Aadhaar address?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    expect((await screen.findAllByText('Choose the verified Aadhaar path.')).length).toBe(2)
+    expect(screen.getByText(/Checked verified procedures/)).toBeInTheDocument()
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
+    const body = JSON.parse(String(call[1]?.body))
+    expect(Object.keys(body).sort()).toEqual(['consent', 'history', 'locale', 'message', 'readiness_answers', 'service_id'])
+    expect(body.message).toBe('How do I update my Aadhaar address?')
+    fireEvent.click(screen.getByRole('button', { name: 'Start deterministic readiness check' }))
+    expect(await screen.findByRole('heading', { name: 'Check what you need' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Over' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+    expect(screen.queryAllByText('Choose the verified Aadhaar path.')).toHaveLength(0)
+  })
+
+  it('uses the selected locale for the AI turn and clears conversation when language changes', async () => {
+    const hindiReply: AssistantTurnResponse = { ...agentReply, locale: 'hi', message: 'सत्यापित प्रक्रिया चुनें।', disclaimer: 'AI मार्गदर्शन स्वीकृति नहीं है।' }
+    const fetchMock = mockApi({ agentAvailable: true, agentReply: hindiReply })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ask Sahayi AI' })).toBeEnabled())
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText('सामान्य सेवा प्रश्न'), { target: { value: 'आधार पता अपडेट में मदद' } })
+    fireEvent.click(screen.getByRole('button', { name: 'AI को भेजें' }))
+    expect((await screen.findAllByText('सत्यापित प्रक्रिया चुनें।')).length).toBe(2)
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
+    expect(JSON.parse(String(call[1]?.body)).locale).toBe('hi')
+    fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
+    expect(screen.queryAllByText('सत्यापित प्रक्रिया चुनें।')).toHaveLength(0)
+    expect(screen.getByText(/Zero Data Retention/)).toBeInTheDocument()
+  })
+
+  it('blocks multilingual identifier-shaped AI input in the browser without a provider request', async () => {
+    const fetchMock = mockApi({ agentAvailable: true })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ask Sahayi AI' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'मेरा आधार १२३४ ५६७८ ९०१२ है' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('remove personal identifiers')
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant/turn'))).toBe(false)
+  })
+
+  it('renders printable deterministic checklist and synthetic worksheet without private prefill', async () => {
+    const print = vi.fn()
+    vi.stubGlobal('print', print)
+    mockApi()
+    render(<App />)
+    await openProcedure()
+    fireEvent.click(screen.getByRole('button', { name: 'Build personalized checklist' }))
+    expect(await screen.findByRole('heading', { name: 'Personalized preparation checklist' })).toBeInTheDocument()
+    expect(screen.getByText('Confirm the fee before paying.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Print' }))
+    expect(print).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
+    expect(await screen.findByText('SYNTHETIC DEMO — NOT AN OFFICIAL APPLICATION — DO NOT SUBMIT')).toBeInTheDocument()
+    expect(screen.getByLabelText('Try with sample citizen')).toHaveValue('fictional-demo')
+    expect(screen.getByText(/Citizen must provide privately — not collected/)).toBeInTheDocument()
+    expect(screen.queryByText(/1234 5678 9012/)).not.toBeInTheDocument()
   })
 })
