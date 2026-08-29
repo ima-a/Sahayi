@@ -1,6 +1,6 @@
 # Deployment
 
-Sahayi is configured for one Render Docker Web Service at https://sahayi.onrender.com. The public URL currently serves the older deployed release and must not be updated until the release candidate passes a separately authorized hosted verification. The hosted experience is a hackathon prototype, not an official government service. It does not submit applications, receive OTPs or payments, authenticate citizens, or integrate with a government system.
+Sahayi is configured for one Render Docker Web Service at https://sahayi.onrender.com. The unified-conversation commit must not be deployed until its complete local gates pass and both tracked release branches point to that exact commit. The hosted experience is a hackathon prototype, not an official government service. It does not submit applications, receive OTPs or payments, authenticate citizens, or integrate with a government system.
 
 ## Architecture and runtime
 

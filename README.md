@@ -19,20 +19,20 @@ English is the canonical verified guidance. Hindi and Malayalam are machine-assi
 
 ## Citizen journey
 
-1. Choose English, Hindi, or Malayalam and describe the need, or browse both services.
-2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. The text is not sent online for this finder action.
-3. Confirm the proposed service before opening it.
-4. Enter one progressive **Your Sahayi journey** workspace with the confirmed goal, service, current step, trust information, and factual preparation record.
-5. Answer one bounded closed-choice readiness question at a time; Sahayi automatically prepares the deterministic personalized checklist when the evaluation completes.
-6. Optionally use explicit browser voice input/read-aloud, explore a one-field-at-a-time fictional worksheet carrying `DEMO — NOT FOR SUBMISSION`, and view simulated submission/status, or explicitly consent to the separately gated cloud assistant when it is configured.
-7. Select **End session** at any time; inactivity expiry uses the same in-memory clearing boundary.
+1. Choose English, Hindi, or Malayalam, press **Start**, and enter one conversation with text or optional voice; browsing the two verified services remains secondary.
+2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. Finder text is not sent online.
+3. Confirm the proposed verified service. Ambiguous address requests inside the pension task are clarified using only catalogue entries.
+4. Stay in the same conversation while Sahayi asks the next bounded readiness question and shows only relevant suggested responses.
+5. When readiness completes, Sahayi automatically derives the deterministic checklist and synthetic preparation worksheet and presents the verified official handoff. Citizens do not select separate readiness, checklist, or form modes in the primary journey.
+6. Detailed provenance and synthetic demo views remain secondary. The optional GroqCloud assistant remains separately disclosed and consent-gated when configured; it is not required for the deterministic conversation.
+7. Select **Start Over** or **End session** at any time; inactivity expiry uses the same in-memory clearing boundary.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     C[Citizen browser] --> L[Local phrase matcher + Naive Bayes model]
-    L -->|confirmed service ID only| UI[React journey]
+    L -->|confirmed service ID only| UI[Browser-memory conversation orchestrator]
     UI -->|same-origin, no-store JSON| API[FastAPI]
     API --> P[Validated Procedure Packs]
     P --> R[Deterministic readiness, checklist, worksheet, simulation]
@@ -47,7 +47,7 @@ The production image builds React with Vite and serves the compiled files and `/
 
 | Area | Status | Boundary |
 | --- | --- | --- |
-| Conversation-first journey, local service finder, multilingual catalogue, procedures, readiness, checklist, End Session and inactivity clearing | Fully working and deterministic | Browser-local matching plus validated server-side rules; no AI decides facts or outcomes |
+| Unified conversation, local service finder, multilingual catalogue, automatic readiness/checklist/preparation/handoff, End Session and inactivity clearing | Fully working and deterministic | Browser-local orchestration plus validated server-side rules; no AI decides facts or outcomes |
 | Procedure Pack provenance, version selection, freshness, fee-conflict display and schema validation | Fully working and deterministic | Active packs fail closed; reviewed facts remain source-linked |
 | Optional “Ask Sahayi AI” guidance | Consent-gated GroqCloud feature; disabled without both flag and server key | Groq's selected model may guide tool order/prose, while Sahayi validates output and reconstructs facts/actions from deterministic results |
 | Voice input and read-aloud | Progressive browser enhancement | Explicit start only; browser/vendor recognition may not be on-device; transcript is memory-only and text remains complete fallback |

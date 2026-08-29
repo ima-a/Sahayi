@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { assistantTurn, buildChecklist, evaluateReadiness, getDemoStatus, getHealth, getProcedure, getProcedures, getPublicConfig, prepareSyntheticForm, startDemoSubmission, type AssistantTurnResponse, type DemoJourneyResponse, type DemoScenarioId, type PersonalizedChecklist, type ProcedureDetail, type ProcedureSummary, type ReadinessAnswer, type ReadinessResponse, type SyntheticFormAssistance } from './api'
+import { routeCitizenRequest } from './conversation'
 import { formatMessage, LANGUAGE_NAMES, LOCALES, UI_MESSAGES, type Locale, type Messages } from './i18n'
-import { classifyServiceQuery, detectHighRiskPii, MAX_QUERY_LENGTH, type Candidate, type MatchResult } from './matcher'
+import { detectHighRiskPii, MAX_QUERY_LENGTH, type Candidate, type MatchResult } from './matcher'
 import { useVoiceAssistance, type VoiceInputState } from './voice'
 import './App.css'
 
@@ -63,6 +64,7 @@ function App() {
   const [readinessError, setReadinessError] = useState(false)
   const [query, setQuery] = useState('')
   const [journeyGoal, setJourneyGoal] = useState('')
+  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([])
   const [match, setMatch] = useState<MatchResult | null>(null)
   const [piiWarning, setPiiWarning] = useState(false)
   const [agentConsent, setAgentConsent] = useState(false)
@@ -91,6 +93,7 @@ function App() {
   const lastInteraction = useRef(0)
   const messages = UI_MESSAGES[locale]
   const voice = useVoiceAssistance(locale, screen)
+  const stopVoice = voice.stopAll
 
   const isAbort = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
   const request = async <T,>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
@@ -106,7 +109,7 @@ function App() {
     }
   }
 
-  const clearCitizenState = (notice: 'ended' | 'inactive' | null) => {
+  const clearCitizenState = useCallback((notice: 'ended' | 'inactive' | null) => {
     sessionGeneration.current += 1
     requestControllers.current.forEach(controller => controller.abort())
     requestControllers.current.clear()
@@ -114,13 +117,13 @@ function App() {
     objectUrls.current.clear()
     setScreen('welcome'); setProcedures(null); setDetail(null); setCatalogueError(false); setDetailError(false)
     setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setReadinessLoading(false); setReadinessError(false)
-    voice.stopAll()
-    setQuery(''); setJourneyGoal(''); setMatch(null); setPiiWarning(false)
+    stopVoice()
+    setQuery(''); setJourneyGoal(''); setConversationHistory([]); setMatch(null); setPiiWarning(false)
     setAgentConsent(false); setAgentInput(''); setAgentHistory([]); setAgentResponse(null); setAgentLoading(false); setAgentError(false); setAgentPiiWarning(false)
     setChecklist(null); setFormAssistance(null); setFormStep(0); setAssistanceLoading(false); setAssistanceError(false)
     setDemo(null); setDemoLoading(false); setDemoError(false); setInactivityWarning(false); setSessionNotice(notice)
     lastInteraction.current = Date.now()
-  }
+  }, [stopVoice])
 
   const startOver = () => clearCitizenState(null)
   const endSession = () => clearCitizenState('ended')
@@ -166,7 +169,7 @@ function App() {
       window.removeEventListener('pointerdown', interact); window.removeEventListener('keydown', interact); window.removeEventListener('touchstart', interact)
       document.removeEventListener('visibilitychange', visibility)
     }
-  }, [screen, inactivityTimeoutSeconds, inactivityWarningSeconds, activityReset])
+  }, [screen, inactivityTimeoutSeconds, inactivityWarningSeconds, activityReset, clearCitizenState])
 
   const loadProcedures = (nextLocale: Locale) => {
     setCatalogueError(false)
@@ -177,6 +180,7 @@ function App() {
     if (nextLocale === locale) return
     setLocale(nextLocale)
     setQuery('')
+    setConversationHistory(screen === 'intake' ? [{ role: 'assistant', content: UI_MESSAGES[nextLocale].helpIntro }] : [])
     setMatch(null)
     setPiiWarning(false)
     setAgentInput('')
@@ -185,12 +189,12 @@ function App() {
     setAgentError(false)
     setAgentPiiWarning(false)
     setFormStep(0)
-    if (screen === 'checklist' && checklist) {
+    if ((screen === 'checklist' || screen === 'intake') && checklist) {
       setChecklist(null)
       setAssistanceLoading(true)
       request(signal => buildChecklist(checklist.service_id, readinessAnswers, nextLocale, signal)).then(setChecklist).catch(error => { if (!isAbort(error)) setAssistanceError(true) }).finally(() => setAssistanceLoading(false))
     } else setChecklist(null)
-    if (screen === 'form' && formAssistance) {
+    if ((screen === 'form' || screen === 'intake') && formAssistance) {
       setFormAssistance(null)
       setAssistanceLoading(true)
       request(signal => prepareSyntheticForm(formAssistance.service_id, nextLocale, formAssistance.persona.persona_id, signal)).then(setFormAssistance).catch(error => { if (!isAbort(error)) setAssistanceError(true) }).finally(() => setAssistanceLoading(false))
@@ -218,6 +222,7 @@ function App() {
   const start = () => {
     setSessionNotice(null)
     setScreen('intake')
+    setConversationHistory([{ role: 'assistant', content: messages.helpIntro }])
     setProcedures(null)
     loadProcedures(locale)
   }
@@ -234,9 +239,58 @@ function App() {
   }
 
   const findService = () => {
-    const result = classifyServiceQuery(query, procedures ?? [])
+    const current = query.trim()
+    const result = routeCitizenRequest(query, procedures ?? [], detail?.service_id ?? null)
     if (result.kind === 'pii') { setPiiWarning(true); setMatch(null); return }
-    setPiiWarning(false); setMatch(result.result)
+    setPiiWarning(false); setMatch(result.result); setJourneyGoal(current); setQuery('')
+    const reply = result.reply === 'address-clarification' ? messages.addressClarification
+      : result.reply === 'pension-address-unsupported' ? messages.pensionAddressUnsupported
+        : result.result.kind === 'confident' ? `${messages.suggestedTitle} ${result.result.candidate.procedure.title}`
+          : result.result.kind === 'ambiguous' ? messages.chooseServiceTitle : `${messages.noMatchTitle}. ${messages.noMatchBody}`
+    setConversationHistory(history => [...history, { role: 'user', content: current }, { role: 'assistant', content: reply }])
+  }
+
+  const startConversationProcedure = async (serviceId: string) => {
+    setMatch(null); setPiiWarning(false); setDetailError(false); setReadinessError(false); setReadinessLoading(true)
+    setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setChecklist(null); setFormAssistance(null); setFormStep(0)
+    try {
+      const selected = await request(signal => getProcedure(serviceId, locale, signal))
+      setDetail(selected)
+      setConversationHistory(history => [...history, { role: 'assistant', content: `${selected.short_description} ${messages.checkNeedBody}` }])
+      const result = await request(signal => evaluateReadiness(serviceId, {}, locale, signal))
+      setReadiness(result)
+    } catch (error) {
+      if (!isAbort(error)) { setReadinessError(true); setConversationHistory(history => [...history, { role: 'assistant', content: messages.readinessUnavailable }]) }
+    } finally { setReadinessLoading(false) }
+  }
+
+  const prepareConversationResult = async (serviceId: string, answers: Record<string, ReadinessAnswer>) => {
+    setAssistanceLoading(true); setAssistanceError(false)
+    const [checklistResult, formResult] = await Promise.allSettled([
+      request(signal => buildChecklist(serviceId, answers, locale, signal)),
+      request(signal => prepareSyntheticForm(serviceId, locale, null, signal)),
+    ])
+    if (checklistResult.status === 'fulfilled') setChecklist(checklistResult.value)
+    if (formResult.status === 'fulfilled') setFormAssistance(formResult.value)
+    if (checklistResult.status === 'rejected' || formResult.status === 'rejected') setAssistanceError(true)
+    if (checklistResult.status === 'fulfilled' || formResult.status === 'fulfilled') {
+      setConversationHistory(history => [...history, { role: 'assistant', content: `${messages.preparedChecklist}. ${messages.preparedForm}.` }])
+    }
+    setAssistanceLoading(false)
+  }
+
+  const answerConversationReadiness = async (answer: ReadinessAnswer, label: string) => {
+    if (!detail || !readiness?.next_question || readinessLoading) return
+    const nextAnswers = { ...readinessAnswers, [readiness.next_question.question_id]: answer }
+    setConversationHistory(history => [...history, { role: 'assistant', content: readiness.next_question!.prompt }, { role: 'user', content: label }])
+    setReadinessLoading(true); setReadinessError(false)
+    try {
+      const result = await request(signal => evaluateReadiness(detail.service_id, nextAnswers, locale, signal))
+      setReadinessHistory(history => [...history, readinessAnswers]); setReadinessAnswers(nextAnswers); setReadiness(result)
+      if (result.complete) await prepareConversationResult(detail.service_id, nextAnswers)
+    } catch (error) {
+      if (!isAbort(error)) { setReadinessError(true); setConversationHistory(history => [...history, { role: 'assistant', content: messages.continueError }]) }
+    } finally { setReadinessLoading(false) }
   }
 
   const openAssistant = () => {
@@ -436,12 +490,14 @@ function App() {
     onBack={() => setScreen(formAssistance ? 'form' : detail ? 'detail' : 'welcome')} onStartOver={startOver} onBegin={beginDemo} onAdvance={advanceDemo}
     onSwitch={beginDemo} onAskAi={openAssistant} />)
 
-  if (screen === 'intake') return wrapSession(<Intake locale={locale} messages={messages} language={language} procedures={procedures} error={catalogueError} query={query} match={match} piiWarning={piiWarning}
+  if (screen === 'intake') return wrapSession(<ConversationAssistant locale={locale} messages={messages} language={language} procedures={procedures} error={catalogueError} query={query} match={match} piiWarning={piiWarning}
+    history={conversationHistory} procedure={detail} readiness={readiness} checklist={checklist} formAssistance={formAssistance}
+    loading={readinessLoading} assistanceLoading={assistanceLoading} readinessError={readinessError} assistanceError={assistanceError}
     onQueryChange={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onFind={findService}
     onExample={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onBrowse={() => setScreen('catalogue')}
     onCandidate={candidate => setMatch({ kind: 'confident', candidate, source: 'deterministic' })}
     voiceState={voice.inputState} voiceSupported={voice.inputSupported} onVoiceStart={() => voice.startInput(value => { if (detectHighRiskPii(value)) { setQuery(''); setPiiWarning(true) } else { setQuery(value); setPiiWarning(false) }; setMatch(null) })} onVoiceStop={() => voice.stopInput()}
-    onConfirm={serviceId => { const goal = procedures?.find(item => item.service_id === serviceId)?.title || ''; setQuery(''); setMatch(null); setPiiWarning(false); selectProcedure(serviceId, goal) }}
+    onConfirm={startConversationProcedure} onAnswer={answerConversationReadiness} onViewDetails={() => detail && selectProcedure(detail.service_id, journeyGoal || detail.title)}
     onChooseAnother={() => { setMatch(null); setQuery('') }} onStartOver={startOver} />)
 
   if (screen === 'catalogue') return wrapSession(<main className="kiosk-shell"><section className="content-card" aria-labelledby="catalogue-title">{language}
@@ -476,34 +532,67 @@ function App() {
   </section></main>
 }
 
-function Intake({ messages, language, procedures, error, query, match, piiWarning, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onQueryChange, onFind, onExample, onBrowse, onCandidate, onConfirm, onChooseAnother, onStartOver }: {
+function ConversationAssistant({ messages, language, procedures, error, query, match, piiWarning, history, procedure, readiness, checklist, formAssistance, loading, assistanceLoading, readinessError, assistanceError, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onQueryChange, onFind, onExample, onBrowse, onCandidate, onConfirm, onAnswer, onViewDetails, onChooseAnother, onStartOver }: {
   locale: Locale; messages: Messages; language: React.ReactNode; procedures: ProcedureSummary[] | null; error: boolean; query: string; match: MatchResult | null; piiWarning: boolean
+  history: ConversationMessage[]; procedure: ProcedureDetail | null; readiness: ReadinessResponse | null; checklist: PersonalizedChecklist | null; formAssistance: SyntheticFormAssistance | null
+  loading: boolean; assistanceLoading: boolean; readinessError: boolean; assistanceError: boolean
   voiceState: VoiceInputState; voiceSupported: boolean; onVoiceStart: () => void; onVoiceStop: () => void
-  onQueryChange: (value: string) => void; onFind: () => void; onExample: (value: string) => void; onBrowse: () => void; onCandidate: (candidate: Candidate) => void; onConfirm: (serviceId: string) => void; onChooseAnother: () => void; onStartOver: () => void
+  onQueryChange: (value: string) => void; onFind: () => void; onExample: (value: string) => void; onBrowse: () => void; onCandidate: (candidate: Candidate) => void; onConfirm: (serviceId: string) => void; onAnswer: (answer: ReadinessAnswer, label: string) => void; onViewDetails: () => void; onChooseAnother: () => void; onStartOver: () => void
 }) {
   const focusTarget = useRef<HTMLHeadingElement>(null)
   const resultTarget = useRef<HTMLDivElement>(null)
+  const [integerAnswer, setIntegerAnswer] = useState('')
   useEffect(() => { focusTarget.current?.focus() }, [])
-  useEffect(() => { if (match || piiWarning) resultTarget.current?.focus() }, [match, piiWarning])
+  useEffect(() => { if (match || piiWarning || readiness) resultTarget.current?.focus() }, [match, piiWarning, readiness])
   const examples = (procedures ?? []).flatMap(procedure => procedure.intent_phrases.slice(0, 1)).slice(0, 2)
-  return <main className="kiosk-shell"><section className="content-card intake-page" aria-labelledby="intake-title">{language}
+  const question = readiness?.next_question
+  const preparationReady = Boolean(checklist || formAssistance)
+  const stage = !procedure ? 0 : !readiness?.complete ? 1 : assistanceLoading ? 2 : 3
+  const answerButtons = question?.answer_type === 'boolean'
+    ? [{ value: true as ReadinessAnswer, label: messages.yes }, { value: false as ReadinessAnswer, label: messages.no }]
+    : question?.answer_type === 'single_choice' ? (question.options ?? []).map(option => ({ value: option.option_id as ReadinessAnswer, label: option.label })) : []
+  return <main className="kiosk-shell"><section className="content-card intake-page conversation-page" aria-labelledby="intake-title">{language}
     <nav className="page-actions" aria-label={messages.intakeNavigation}><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
     <p className="eyebrow">{messages.privateFinder}</p><h1 id="intake-title" ref={focusTarget} tabIndex={-1}>{messages.intakeTitle}</h1><p className="lead">{messages.intakeLead}</p>
+    <ol className="citizen-progress" aria-label={messages.currentStep}>
+      <li className={stage > 0 ? 'complete' : 'current'}>{messages.findService}</li><li className={stage > 1 ? 'complete' : stage === 1 ? 'current' : ''}>{messages.checkNeed}</li><li className={stage > 2 ? 'complete' : stage === 2 ? 'current' : ''}>{messages.preparationPreview}</li><li className={stage === 3 ? 'current' : ''}>{messages.openOfficialNext}</li>
+    </ol>
+    <section className="conversation" aria-labelledby="conversation-title"><h2 id="conversation-title" className="visually-hidden">{messages.aiConversation}</h2>
+      {history.map((item, index) => <p className={`message ${item.role}`} key={`${item.role}-${index}`}>{item.content}</p>)}
+    </section>
     {error ? <div className="state-panel error" role="alert"><h2>{messages.loadServicesTitle}</h2><p>{messages.tryLater}</p><button type="button" className="secondary compact" onClick={onBrowse}>{messages.browseServices}</button></div>
       : procedures === null ? <div className="state-panel" role="status" aria-live="polite">{messages.loadingServices}</div>
-        : <><label className="intake-label" htmlFor="service-query">{messages.queryLabel}</label><p id="service-query-help" className="question-help">{messages.queryHelp}</p>
-          <textarea id="service-query" value={query} maxLength={MAX_QUERY_LENGTH} rows={4} aria-describedby="service-query-help" onChange={event => onQueryChange(event.target.value)} />
-          <p className="privacy-note">{messages.privacyNote}</p>
-          <VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} />
-          {examples.length > 0 && <div className="example-chips" aria-label={messages.examples}>{examples.map(example => <button className="secondary chip" type="button" key={example} onClick={() => onExample(example)}>{example}</button>)}</div>}
-          <div className="intake-actions"><button type="button" onClick={onFind} disabled={!query.trim()}>{messages.findService}</button><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></div></>}
+        : null}
     <div ref={resultTarget} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true">
       {piiWarning && <p className="inline-error" role="alert">{messages.piiWarning}</p>}
       {match && <p className="local-match-status">{match.kind !== 'none' && <><strong>{messages.matchedOnDevice}</strong> </>}{messages.notSentOnline}{match.kind !== 'none' && <> {messages.confirmMatch}</>}</p>}
-      {match?.kind === 'confident' && <section className="match-result" aria-labelledby="suggested-title"><h2 id="suggested-title">{messages.suggestedTitle}</h2><h3>{match.candidate.procedure.title}</h3><p>{match.candidate.procedure.short_description}</p><div className="intake-actions"><button type="button" onClick={() => onConfirm(match.candidate.procedure.service_id)}>{messages.yesContinue}</button><button type="button" className="secondary" onClick={onChooseAnother}>{messages.chooseAnother}</button></div></section>}
-      {match?.kind === 'ambiguous' && <section className="match-result" aria-labelledby="choose-title"><h2 id="choose-title">{messages.chooseServiceTitle}</h2><div className="candidate-list">{match.candidates.map(candidate => <button type="button" className="service-card" key={candidate.procedure.service_id} onClick={() => onCandidate(candidate)}><span><strong>{candidate.procedure.title}</strong><small>{candidate.procedure.short_description}</small></span><span aria-hidden="true">→</span></button>)}</div><button type="button" className="secondary compact" onClick={onChooseAnother}>{messages.chooseAnother}</button></section>}
-      {match?.kind === 'none' && <section className="match-result" aria-labelledby="no-match-title"><h2 id="no-match-title">{messages.noMatchTitle}</h2><p>{messages.noMatchBody}</p><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></section>}
+      {match?.kind === 'confident' && <div className="suggested-responses"><button type="button" onClick={() => onConfirm(match.candidate.procedure.service_id)}>{messages.yesContinue}</button><button type="button" className="secondary" onClick={onChooseAnother}>{messages.chooseAnother}</button></div>}
+      {match?.kind === 'ambiguous' && <div className="match-result"><div className="candidate-list">{match.candidates.map(candidate => <button type="button" className="service-card" key={candidate.procedure.service_id} onClick={() => onCandidate(candidate)}><span><strong>{candidate.procedure.title}</strong><small>{candidate.procedure.short_description}</small></span><span aria-hidden="true">→</span></button>)}</div><button type="button" className="secondary compact" onClick={onChooseAnother}>{messages.chooseAnother}</button></div>}
+      {match?.kind === 'none' && <div className="suggested-responses"><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></div>}
+      {loading && <p className="activity">{messages.checking}</p>}
+      {readinessError && <p className="inline-error" role="alert">{messages.readinessUnavailable}</p>}
+      {question && !loading && <section className="conversation-question" aria-label={question.prompt}>
+        <p className="message assistant">{question.prompt}</p>
+        <p className="progress">{formatMessage(messages.questionProgress, { current: readiness.progress.answered + 1, total: readiness.progress.total })}</p>
+        {question.help_text && <p className="question-help">{question.help_text}</p>}{question.sensitivity === 'sensitive' && <p className="question-help"><strong>{messages.privacy}</strong> {messages.sensitiveHelp}</p>}
+        {answerButtons.length > 0 && <div className="suggested-responses">{answerButtons.map(option => <button type="button" key={String(option.value)} onClick={() => onAnswer(option.value, option.label)}>{option.label}</button>)}</div>}
+        {question.answer_type === 'integer' && <form className="integer-response" onSubmit={event => { event.preventDefault(); if (integerAnswer !== '') { onAnswer(Number(integerAnswer), integerAnswer); setIntegerAnswer('') } }}><label htmlFor="conversation-number">{messages.number}</label><input id="conversation-number" type="number" min={question.minimum ?? undefined} max={question.maximum ?? undefined} value={integerAnswer} onChange={event => setIntegerAnswer(event.target.value)} /><button type="submit" disabled={integerAnswer === ''}>{messages.continue}</button></form>}
+      </section>}
+      {readiness?.complete && readiness.outcome && <section className="conversation-result"><h2>{readiness.outcome.title}</h2><p>{readiness.outcome.explanation}</p><p className="result-disclaimer">{readiness.disclaimer}</p></section>}
+      {assistanceLoading && <p className="activity">{messages.checkingVerified}</p>}
+      {assistanceError && <p className="inline-error" role="alert">{messages.continueError}</p>}
+      {preparationReady && <details className="prepared-guidance"><summary>{messages.howPrepared}</summary>
+        {checklist && <><h2>{messages.checklistTitle}</h2><p>{checklist.result.text}</p><ul>{checklist.ready.map(item => <li key={item.item_id}>{item.text}</li>)}{checklist.documents.map(item => <li key={item.document_id}><strong>{item.name}:</strong> {item.guidance}</li>)}{checklist.confirm.map(item => <li key={item.item_id}>{item.text}</li>)}</ul></>}
+        {formAssistance && <><p className="watermark">{formAssistance.watermark}</p><h2>{formAssistance.title}</h2><p>{formAssistance.privacy_notice}</p></>}
+      </details>}
+      {readiness?.complete && procedure && <section className="official-ready"><h2>{messages.openOfficialNext}</h2><p>{messages.governmentDisclaimer}</p><a className="official-handoff" href={procedure.official_handoff_url} target="_blank" rel="noopener noreferrer">{messages.openOfficialService} <span aria-hidden="true">↗</span></a><button type="button" className="secondary compact" onClick={onViewDetails}>{messages.verifiedOfficial}</button></section>}
     </div>
+    {procedures !== null && <form className="conversation-composer" onSubmit={event => { event.preventDefault(); onFind() }}><label className="intake-label" htmlFor="service-query">{messages.queryLabel}</label><p id="service-query-help" className="question-help">{messages.queryHelp}</p>
+      <textarea id="service-query" value={query} maxLength={MAX_QUERY_LENGTH} rows={3} aria-describedby="service-query-help" onChange={event => onQueryChange(event.target.value)} />
+      <p className="privacy-note">{messages.privacyNote}</p><VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} />
+      {!procedure && examples.length > 0 && <div className="example-chips" aria-label={messages.examples}>{examples.map((example, index) => <button className="secondary chip" type="button" key={`${example}-${index}`} onClick={() => onExample(example)}>{example}</button>)}</div>}
+      <div className="intake-actions"><button type="submit" disabled={!query.trim()}>{messages.conversationSend}</button><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></div>
+    </form>}
   </section></main>
 }
 

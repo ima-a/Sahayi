@@ -6,10 +6,11 @@ Sahayi is a same-origin React/TypeScript and FastAPI application with four delib
 flowchart TB
     subgraph Browser[Citizen browser — ephemeral memory]
       UI[React multilingual conversation-first journey]
+      Orchestrator[Deterministic conversation orchestrator]
       Voice[Optional browser voice and read-aloud]
       Gate[Identifier-shape gate]
       Match[Procedure phrases + bundled MNB classifier]
-      Voice --> UI --> Gate --> Match
+      Voice --> UI --> Orchestrator --> Gate --> Match
     end
 
     subgraph Server[FastAPI — stateless deterministic API]
@@ -42,6 +43,8 @@ The service finder receives the narrow active catalogue in the selected locale, 
 
 The model is imported at build time and embedded in the compiled frontend. Inference is synchronous TypeScript with bounded input/features and no model request, browser LLM, WebGPU, WASM, or generation. Agreement, one-sided confidence, disagreement, unsupported, abstention, and invalid-artifact cases follow explicit confirmation/fallback rules. Only an active catalogue ID can be proposed, and every proposal requires confirmation.
 
+The browser orchestrator is a small deterministic composition layer, not a chatbot authority. It turns a confirmed catalogue ID into procedure detail, starts readiness automatically, renders the current pack question as suggested responses, submits the bounded answer map, derives checklist and synthetic preparation in parallel on completion, and exposes only the pack-owned handoff URL. Within a Kerala pension task it also handles the narrow unqualified-address clarification using only the two loaded catalogue entries; it never creates a pension-record address procedure.
+
 ## Deterministic backend
 
 FastAPI loads Procedure Pack v1 JSON through strict Pydantic models. Exactly one active version per service is allowed; missing packs, duplicate active versions, invalid rules/translations/references, or unsafe budgets fail closed. Canonical pack digests provide reproducible traceability, not signature-based authenticity.
@@ -62,7 +65,7 @@ The model may guide phrasing and tool order, but the server rebuilds factual car
 
 Active sources may declare bounded monitoring metadata. The monitoring CLI is offline-first and one-shot; live public retrieval requires two explicit flags and exact pack allowlists. A read-only daily GitHub Actions workflow may invoke that same bounded command and upload its report, but it cannot publish packs, edit facts, resolve conflicts, deploy, or run from hosted routes. Changed, error, and missing-baseline states fail visibly and require human review while the last reviewed pack stays active.
 
-The conversation-first browser workspace retains only ephemeral journey state. Optional SpeechRecognition/webkitSpeechRecognition starts only after an explicit microphone action and uses `en-IN`, `hi-IN`, or `ml-IN`; it may rely on browser/vendor processing and always has a complete text fallback. Speech synthesis reads only the current visible deterministic question, explanation, checklist, or next step. Recognition and synthesis stop on navigation, language change, session clearing, inactivity expiry, and unmount. Sahayi does not store or log audio or transcripts.
+The conversation-first browser workspace retains only ephemeral journey state. The primary composer, history, suggested answers, progress, automatic preparation summary, and official handoff remain one surface; catalogue/provenance and synthetic demo pages are secondary. Optional SpeechRecognition/webkitSpeechRecognition starts only after an explicit microphone action and uses `en-IN`, `hi-IN`, or `ml-IN`; it may rely on browser/vendor processing and always has a complete text fallback. Speech synthesis reads only the current visible deterministic question, explanation, checklist, or next step. Recognition and synthesis stop on navigation, language change, session clearing, inactivity expiry, and unmount. Sahayi does not store or log audio or transcripts.
 
 Worksheets and submission/status flows use allowlisted fictional personas, closed choices, watermarks, and `DEMO-...` references. They do not fill an official form, create a server file, contact a government system, or track an application.
 

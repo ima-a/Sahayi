@@ -4,7 +4,7 @@ Sahayi minimizes citizen data by separating local service discovery, determinist
 
 ## What remains in browser memory
 
-The raw service-search query and local inference result never leave the browser. Language, selection, readiness answers/history, checklist, worksheet/persona, synthetic demo reference/status, optional-agent consent and conversation, voice transcript, and navigation state live in React memory. Sahayi does not add cookies, `localStorage`, `sessionStorage`, IndexedDB, Cache API, a service worker, analytics, telemetry, or browser-persisted citizen state.
+The raw service-search query, primary conversation history, and local inference result never leave the browser. Language, selection, readiness answers/history, checklist, worksheet/persona, synthetic demo reference/status, optional-agent consent and conversation, voice transcript, and navigation state live in React memory. The browser orchestrator sends only allowlisted service IDs and bounded closed-choice answers to deterministic APIs. Sahayi does not add cookies, `localStorage`, `sessionStorage`, IndexedDB, Cache API, a service worker, analytics, telemetry, or browser-persisted citizen state.
 
 The local finder blocks obvious Aadhaar-, Indian-phone-, email-, and numbered-address-shaped values before matching. This is a warning gate, not a guarantee that every personal detail can be recognized. Citizens are instructed not to enter identifiers or private details.
 

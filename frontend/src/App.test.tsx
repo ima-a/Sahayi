@@ -74,6 +74,19 @@ const pensionDetail: ProcedureDetail = {
 
 const response = (body: unknown) => Promise.resolve({ ok: true, json: async () => body })
 
+class TestRecognition {
+  static instance: TestRecognition | null = null
+  lang = ''; continuous = false; interimResults = false
+  onstart: (() => void) | null = null
+  onresult: (() => void) | null = null
+  onerror: ((event: { error?: string }) => void) | null = null
+  onend: (() => void) | null = null
+  constructor() { TestRecognition.instance = this }
+  start() { this.onstart?.() }
+  stop() { this.onend?.() }
+  abort() { this.onend?.() }
+}
+
 const readinessSource = detail.sources[0]
 const readinessStep = (question: NonNullable<ReadinessResponse['next_question']>, answered: number, total: number): ReadinessResponse => ({
   locale: 'en', translation: englishTranslation,
@@ -169,7 +182,8 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
     }
     if (parsed.pathname.includes('/procedures/')) {
       if (options.pendingDetail) return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))
-      return options.failDetail ? Promise.reject(new Error('offline')) : response(options.procedure ?? detail)
+      const requestedProcedure = parsed.pathname.includes(pensionSummary.service_id) ? pensionDetail : detail
+      return options.failDetail ? Promise.reject(new Error('offline')) : response(options.procedure ?? requestedProcedure)
     }
     return Promise.reject(new Error(`Unexpected request: ${url}`))
   })
@@ -199,7 +213,7 @@ async function openAssistant() {
 
 describe('Sahayi verified procedure flow', () => {
   beforeEach(() => vi.restoreAllMocks())
-  afterEach(() => vi.useRealTimers())
+  afterEach(() => { vi.useRealTimers(); delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition; TestRecognition.instance = null })
 
   it('renders the welcome content and loading state', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
@@ -238,6 +252,26 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
     expect(document.documentElement.lang).toBe('ml')
     expect(screen.getByText('നിങ്ങളുടെ ആവശ്യം അടിസ്ഥാനമാക്കി വിശദീകരിച്ച സർക്കാർ സേവനങ്ങൾ.')).toBeInTheDocument()
+  })
+
+  it('keeps text available when voice is unsupported and reports microphone denial without breaking conversation', async () => {
+    mockApi()
+    const view = render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(await screen.findByRole('button', { name: 'Use microphone' })).toBeDisabled()
+    expect(screen.getByText(/Voice input is unavailable/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Tell us what service you need')).toBeEnabled()
+    view.unmount()
+
+    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: TestRecognition })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use microphone' }))
+    act(() => TestRecognition.instance?.onerror?.({ error: 'not-allowed' }))
+    expect(screen.getByText(/Microphone permission was denied/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Tell us what service you need')).toBeEnabled()
   })
 
   it('renders both services and Kerala form, destination, respectful review, and sensitive-choice guidance', async () => {
@@ -412,7 +446,8 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(await screen.findByRole('radio', { name: 'Yes' })); fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(await screen.findByRole('radio', { name: 'My own accepted proof of address' })); fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(await screen.findByRole('radio', { name: 'Yes' })); fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(await screen.findByRole('heading', { name: completeReadiness.outcome?.title })).toHaveFocus()
+    const resultHeading = await screen.findByRole('heading', { name: completeReadiness.outcome?.title })
+    await waitFor(() => expect(resultHeading).toHaveFocus())
     expect(screen.getByText(completeReadiness.outcome?.explanation ?? '')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Updating Data on Aadhaar/ })).toHaveAttribute('href', readinessSource.url)
     expect(screen.getByText(/personalised guidance, not an eligibility decision or official approval/)).toBeInTheDocument()
@@ -450,16 +485,78 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     const query = await screen.findByLabelText('Tell us what service you need')
     fireEvent.change(query, { target: { value: 'I moved recently and want to update my Aadhaar address.' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
-    expect(await screen.findByText('Is this the service you mean?')).toBeInTheDocument()
-    expect(screen.getByText(summary.title)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/Is this the service you mean\?/)).toHaveTextContent(summary.title)
     for (const [url, init] of fetchMock.mock.calls) {
       expect(String(url)).not.toContain('moved recently')
       expect(String(init?.body ?? '')).not.toContain('moved recently')
     }
     fireEvent.click(screen.getByRole('button', { name: 'Yes, continue' }))
-    expect(await screen.findByRole('heading', { name: summary.title })).toBeInTheDocument()
+    expect(await screen.findByText(mobileQuestion.prompt)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'What do you need help with?' })).toBeInTheDocument()
     expect(screen.queryByDisplayValue(/moved recently/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the deterministic journey in one conversation and prepares the checklist, worksheet, and verified handoff automatically', async () => {
+    const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'I need to change my Aadhaar address' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, continue' }))
+    expect(await screen.findByText(mobileQuestion.prompt)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
+    expect(await screen.findByText(routeQuestion.prompt)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'My own accepted proof of address' }))
+    expect(await screen.findByText(poaQuestion.prompt)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
+    expect(await screen.findByRole('heading', { name: completeReadiness.outcome?.title })).toBeInTheDocument()
+    expect(screen.getAllByText(completeReadiness.outcome?.explanation ?? '')).toHaveLength(1)
+    expect(await screen.findByText('DEMO — NOT FOR SUBMISSION')).toBeInTheDocument()
+    expect(screen.getByText('Ready for the demonstrated path.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Open the official service/ })).toHaveAttribute('href', detail.official_handoff_url)
+    expect(screen.getByRole('heading', { name: 'What do you need help with?' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/checklist?locale=en'))).toBe(true)
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/synthetic-form-assistance?locale=en'))).toBe(true)
+  })
+
+  it('clears the unified conversation and active task with Start Over and End session', async () => {
+    mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'change Aadhaar address' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/Is this the service you mean/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start Over' }))
+    expect(screen.getByRole('heading', { name: 'Sahayi' })).toBeInTheDocument()
+    expect(screen.queryByText(/Is this the service you mean/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'End session' }))
+    expect(screen.getByText(/cleared all in-memory session data/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Tell us what service you need')).not.toBeInTheDocument()
+  })
+
+  it('clarifies an unqualified address change inside the pension task and switches only to a verified catalogue procedure', async () => {
+    const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    const input = await screen.findByLabelText('Tell us what service you need')
+    fireEvent.change(input, { target: { value: 'old age pension Kerala' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, continue' }))
+    await screen.findByText(mobileQuestion.prompt)
+    fireEvent.change(input, { target: { value: 'I need to change the address' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/address linked to Aadhaar/)).toHaveTextContent('Sahayi will not assume either')
+    const choices = screen.getAllByRole('button', { name: /Aadhaar address|Kerala Indira Gandhi/ })
+    expect(choices).toHaveLength(2)
+    fireEvent.click(choices.find(item => item.textContent?.includes('Aadhaar'))!)
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, continue' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(call => String(call[0]).includes(`/procedures/${summary.service_id}?locale=en`))).toBe(true))
+    expect(fetchMock.mock.calls.every(call => !String(call[0]).includes('pension-record-address'))).toBe(true)
   })
 
   it('supports both example services, ambiguous/no-match fallback, and local PII warning', async () => {
@@ -468,15 +565,15 @@ describe('Sahayi verified procedure flow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     fireEvent.click(await screen.findByRole('button', { name: 'old age pension Kerala' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
-    expect(await screen.findByText(pensionSummary.title)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(new RegExp(pensionSummary.title))).toBeInTheDocument()
     const query = screen.getByLabelText('Tell us what service you need')
     fireEvent.change(query, { target: { value: '1234 5678 9012' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(screen.getByRole('alert')).toHaveTextContent('remove personal identifiers')
     fireEvent.change(query, { target: { value: 'something unsupported' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
-    expect(await screen.findByText('We do not yet have a verified procedure for that request')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/We do not yet have a verified procedure for that request/)).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: 'Browse all services' }).at(-1)!)
     expect(await screen.findByRole('heading', { name: 'Supported services' })).toBeInTheDocument()
   })
@@ -490,7 +587,7 @@ describe('Sahayi verified procedure flow', () => {
     await screen.findByRole('button', { name: 'change Aadhaar address' })
     const beforeInference = fetchMock.mock.calls.length
     fireEvent.change(query, { target: { value: 'need aadhaar adress updation after moving' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/Matched on this device/)).toBeInTheDocument()
     expect(screen.getByText(/This request has not been sent online/)).toHaveTextContent('Sahayi needs you to confirm.')
     expect(fetchMock.mock.calls).toHaveLength(beforeInference)
@@ -505,8 +602,8 @@ describe('Sahayi verified procedure flow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'address update' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
-    expect(await screen.findByRole('heading', { name: 'Choose the service you mean' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText('Choose the service you mean')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: new RegExp(summary.title) })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: new RegExp(pensionSummary.title) })).toBeInTheDocument()
   })
