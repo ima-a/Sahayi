@@ -17,7 +17,7 @@ const en = {
   suggestedTitle: 'Is this the service you mean?', yesContinue: 'Yes, continue', chooseAnother: 'Choose another service', chooseServiceTitle: 'Choose the service you mean',
   noMatchTitle: 'We could not find a matching service', noMatchBody: 'Sahayi currently supports a limited number of services. You can browse the complete catalogue.',
   trustProvenance: 'Trust and provenance', verifiedOfficial: 'Verified official guidance', officialPublisher: 'Official publisher', packVersion: 'Pack version',
-  verified: 'Verified', freshness: 'Freshness', current: 'Current', stale: 'Stale — review overdue', officialSources: 'Official sources',
+  verified: 'Source last reviewed', freshness: 'Procedure status', current: 'Current', stale: 'Stale — review overdue', officialSources: 'Official sources',
   staleTitle: 'This guidance needs review.', staleBody: 'The review date has passed. Confirm every detail on the official service website before continuing.',
   guidanceOnly: 'Sahayi is guidance only.', governmentDisclaimer: 'It is not the official service or a government service. Sahayi cannot authenticate you, submit an application, or track it.',
   checkNeed: 'Check what you need', checkNeedBody: 'Answer simple choices to see which verified official path may fit your situation.',
@@ -49,6 +49,15 @@ const en = {
   verifiedOfficialForm: 'Verified against official form', preparationOnly: 'Preparation worksheet only', privacyNotice: 'Privacy notice', sampleCitizen: 'Try with sample citizen',
   agentNavigation: 'AI guide navigation', assistanceNavigation: 'Assistance navigation',
   canonicalNotice: 'English is the canonical verified guidance. Official source wording prevails.',
+  endSession: 'End session', sessionCleared: 'Session ended. Sahayi cleared all in-memory session data.', inactivityCleared: 'Session cleared after inactivity. The next citizen can start safely.',
+  inactivityTitle: 'Your session will end soon', inactivityBody: 'Continue to keep this in-memory session, or end it now.', continueSession: 'Continue session',
+  howSahayiWorks: 'How Sahayi protects trust and privacy',
+  trustExplanation: 'Verified Procedure Packs record reviewed official sources. A one-shot detector can flag source changes, but people must review them and active facts are never silently replaced. The optional AI guide uses verified tools. Demo submission and status use only synthetic data. End session clears Sahayi’s in-memory citizen state; it cannot control browser, network, or provider retention outside Sahayi.',
+  nextReview: 'Next review due', monitoringPrototype: 'Change-detection prototype', oneShotReview: 'One-shot only — not continuously monitored', notAvailable: 'Not available', humanReview: 'Human review', required: 'Required',
+  continueDemo: 'Continue with demo submission', syntheticSimulation: 'Synthetic, non-government simulation', demoSubmission: 'Demo submission and status', demoNavigation: 'Demo navigation', beforeDemo: 'Before starting the demo',
+  noApplicationSubmitted: 'No application will be submitted.', noGovernmentContact: 'No government system will be contacted.', onlySyntheticData: 'Only bundled synthetic data is used.', demoClears: 'The simulation disappears when this Sahayi session ends.',
+  normalScenario: 'Normal completion scenario', actionScenario: 'Action-required scenario', demoError: 'The deterministic demo could not continue.', syntheticReference: 'Synthetic demo reference', switchScenario: 'Switch demo scenario:', simulatedStatus: 'Simulated status timeline',
+  complete: 'Complete', currentStatus: 'Current', upcoming: 'Upcoming', relatedReferences: 'Related verified references', advanceDemo: 'Advance demo deliberately', demoComplete: 'Demo completed', askAiStatus: 'Ask AI to explain this demo status',
 }
 
 export type Messages = Record<keyof typeof en, string>
@@ -69,7 +78,7 @@ const hi: Messages = {
   suggestedTitle: 'क्या आपका मतलब यही सेवा है?', yesContinue: 'हाँ, आगे बढ़ें', chooseAnother: 'दूसरी सेवा चुनें', chooseServiceTitle: 'अपनी सेवा चुनें',
   noMatchTitle: 'मिलती-जुलती सेवा नहीं मिली', noMatchBody: 'Sahayi अभी सीमित सेवाएँ समर्थित करता है। आप पूरी सूची देख सकते हैं।',
   trustProvenance: 'विश्वास और स्रोत', verifiedOfficial: 'सत्यापित आधिकारिक मार्गदर्शन', officialPublisher: 'आधिकारिक प्रकाशक', packVersion: 'पैक संस्करण',
-  verified: 'सत्यापन', freshness: 'नवीनता', current: 'वर्तमान', stale: 'पुराना — समीक्षा लंबित', officialSources: 'आधिकारिक स्रोत',
+  verified: 'स्रोत की पिछली समीक्षा', freshness: 'प्रक्रिया स्थिति', current: 'वर्तमान', stale: 'पुराना — समीक्षा लंबित', officialSources: 'आधिकारिक स्रोत',
   staleTitle: 'इस मार्गदर्शन की समीक्षा आवश्यक है।', staleBody: 'समीक्षा तिथि बीत चुकी है। आगे बढ़ने से पहले आधिकारिक सेवा वेबसाइट पर हर विवरण की पुष्टि करें।',
   guidanceOnly: 'Sahayi केवल मार्गदर्शन है।', governmentDisclaimer: 'यह आधिकारिक या सरकारी सेवा नहीं है। Sahayi आपकी पहचान सत्यापित, आवेदन जमा या उसे ट्रैक नहीं कर सकता।',
   checkNeed: 'अपनी तैयारी जाँचें', checkNeedBody: 'सरल विकल्प चुनकर देखें कि कौन-सा सत्यापित आधिकारिक मार्ग आपकी स्थिति के अनुकूल हो सकता है।',
@@ -101,6 +110,15 @@ const hi: Messages = {
   verifiedOfficialForm: 'आधिकारिक फॉर्म से सत्यापित', preparationOnly: 'केवल तैयारी वर्कशीट', privacyNotice: 'गोपनीयता सूचना', sampleCitizen: 'नमूना नागरिक चुनें',
   agentNavigation: 'AI मार्गदर्शक नेविगेशन', assistanceNavigation: 'सहायता नेविगेशन',
   canonicalNotice: 'यह मशीन-सहायित प्रोटोटाइप अनुवाद केवल मार्गदर्शन के लिए है। आधिकारिक स्रोत का मूल शब्दांकन मान्य होगा।',
+  endSession: 'सत्र समाप्त करें', sessionCleared: 'सत्र समाप्त हुआ। Sahayi ने सभी इन-मेमोरी सत्र डेटा मिटा दिए।', inactivityCleared: 'निष्क्रियता के बाद सत्र मिटा दिया गया। अगला नागरिक सुरक्षित रूप से शुरू कर सकता है।',
+  inactivityTitle: 'आपका सत्र जल्द समाप्त होगा', inactivityBody: 'इस इन-मेमोरी सत्र को रखने के लिए जारी रखें या अभी समाप्त करें।', continueSession: 'सत्र जारी रखें',
+  howSahayiWorks: 'Sahayi विश्वास और गोपनीयता कैसे सुरक्षित रखता है',
+  trustExplanation: 'सत्यापित Procedure Packs समीक्षा किए गए आधिकारिक स्रोत दर्ज करते हैं। एक बार चलने वाला डिटेक्टर स्रोत बदलाव चिह्नित कर सकता है, लेकिन लोगों को उनकी समीक्षा करनी होती है और सक्रिय तथ्य कभी चुपचाप नहीं बदले जाते। वैकल्पिक AI गाइड सत्यापित टूल उपयोग करता है। डेमो जमा और स्थिति केवल कृत्रिम डेटा उपयोग करते हैं। सत्र समाप्त करने पर Sahayi की इन-मेमोरी नागरिक स्थिति मिटती है; Sahayi के बाहर ब्राउज़र, नेटवर्क या प्रदाता रिटेंशन पर इसका नियंत्रण नहीं है।',
+  nextReview: 'अगली समीक्षा की तारीख', monitoringPrototype: 'बदलाव-पहचान प्रोटोटाइप', oneShotReview: 'केवल एक बार — निरंतर निगरानी नहीं', notAvailable: 'उपलब्ध नहीं', humanReview: 'मानवीय समीक्षा', required: 'आवश्यक',
+  continueDemo: 'डेमो जमा करने के साथ आगे बढ़ें', syntheticSimulation: 'कृत्रिम, गैर-सरकारी सिमुलेशन', demoSubmission: 'डेमो जमा और स्थिति', demoNavigation: 'डेमो नेविगेशन', beforeDemo: 'डेमो शुरू करने से पहले',
+  noApplicationSubmitted: 'कोई आवेदन जमा नहीं होगा।', noGovernmentContact: 'किसी सरकारी प्रणाली से संपर्क नहीं होगा।', onlySyntheticData: 'केवल बंडल किया गया कृत्रिम डेटा उपयोग होगा।', demoClears: 'यह Sahayi सत्र समाप्त होने पर सिमुलेशन मिट जाता है।',
+  normalScenario: 'सामान्य पूर्णता परिदृश्य', actionScenario: 'कार्रवाई-आवश्यक परिदृश्य', demoError: 'नियत डेमो आगे नहीं बढ़ सका।', syntheticReference: 'कृत्रिम डेमो संदर्भ', switchScenario: 'डेमो परिदृश्य बदलें:', simulatedStatus: 'सिमुलेटेड स्थिति समयरेखा',
+  complete: 'पूर्ण', currentStatus: 'वर्तमान', upcoming: 'आगामी', relatedReferences: 'संबंधित सत्यापित संदर्भ', advanceDemo: 'डेमो जानबूझकर आगे बढ़ाएँ', demoComplete: 'डेमो पूरा हुआ', askAiStatus: 'AI से इस डेमो स्थिति की व्याख्या पूछें',
 }
 
 const ml: Messages = {
@@ -119,7 +137,7 @@ const ml: Messages = {
   suggestedTitle: 'നിങ്ങൾ ഉദ്ദേശിച്ച സേവനം ഇതാണോ?', yesContinue: 'അതെ, തുടരുക', chooseAnother: 'മറ്റൊരു സേവനം തിരഞ്ഞെടുക്കുക', chooseServiceTitle: 'നിങ്ങൾ ഉദ്ദേശിച്ച സേവനം തിരഞ്ഞെടുക്കുക',
   noMatchTitle: 'പൊരുത്തപ്പെടുന്ന സേവനം കണ്ടെത്തിയില്ല', noMatchBody: 'Sahayi ഇപ്പോൾ പരിമിത സേവനങ്ങൾ മാത്രമാണ് പിന്തുണയ്ക്കുന്നത്. പൂർണ്ണ പട്ടിക കാണാം.',
   trustProvenance: 'വിശ്വാസവും സ്രോതസ്സും', verifiedOfficial: 'പരിശോധിച്ച ഔദ്യോഗിക മാർഗനിർദേശം', officialPublisher: 'ഔദ്യോഗിക പ്രസാധകൻ', packVersion: 'പാക്ക് പതിപ്പ്',
-  verified: 'പരിശോധിച്ചത്', freshness: 'പുതുമ', current: 'നിലവിലുള്ളത്', stale: 'പഴയത് — പുനഃപരിശോധന വൈകി', officialSources: 'ഔദ്യോഗിക സ്രോതസ്സുകൾ',
+  verified: 'സ്രോതസ് അവസാനമായി പരിശോധിച്ചത്', freshness: 'നടപടിയുടെ നില', current: 'നിലവിലുള്ളത്', stale: 'പഴയത് — പുനഃപരിശോധന വൈകി', officialSources: 'ഔദ്യോഗിക സ്രോതസ്സുകൾ',
   staleTitle: 'ഈ മാർഗനിർദേശം പുനഃപരിശോധിക്കണം.', staleBody: 'പുനഃപരിശോധന തീയതി കഴിഞ്ഞു. തുടരുന്നതിന് മുമ്പ് ഔദ്യോഗിക സേവന വെബ്സൈറ്റിൽ എല്ലാ വിവരങ്ങളും സ്ഥിരീകരിക്കുക.',
   guidanceOnly: 'Sahayi മാർഗനിർദേശം മാത്രമാണ്.', governmentDisclaimer: 'ഇത് ഔദ്യോഗിക സേവനമോ സർക്കാർ സേവനമോ അല്ല. Sahayiക്ക് നിങ്ങളെ പ്രാമാണീകരിക്കാനോ അപേക്ഷ സമർപ്പിക്കാനോ പിന്തുടരാനോ കഴിയില്ല.',
   checkNeed: 'ആവശ്യമായത് പരിശോധിക്കുക', checkNeedBody: 'നിങ്ങളുടെ സാഹചര്യത്തിന് ഏത് പരിശോധിച്ച ഔദ്യോഗിക മാർഗം അനുയോജ്യമാകാമെന്ന് കാണാൻ ലളിത തിരഞ്ഞെടുപ്പുകൾക്ക് ഉത്തരം നൽകുക.',
@@ -151,6 +169,15 @@ const ml: Messages = {
   verifiedOfficialForm: 'ഔദ്യോഗിക ഫോമുമായി പരിശോധിച്ചത്', preparationOnly: 'തയ്യാറെടുപ്പ് വർക്ക്‌ഷീറ്റ് മാത്രം', privacyNotice: 'സ്വകാര്യതാ അറിയിപ്പ്', sampleCitizen: 'സാമ്പിൾ പൗരനെ തിരഞ്ഞെടുക്കുക',
   agentNavigation: 'AI മാർഗദർശി നാവിഗേഷൻ', assistanceNavigation: 'സഹായ നാവിഗേഷൻ',
   canonicalNotice: 'ഇത് മാർഗനിർദേശത്തിനായുള്ള മെഷീൻ സഹായിത മാതൃകാ വിവർത്തനമാണ്. ഔദ്യോഗിക സ്രോതസ്സിലെ മൂലവാചകമാണ് പ്രാബല്യത്തിലുള്ളത്.',
+  endSession: 'സെഷൻ അവസാനിപ്പിക്കുക', sessionCleared: 'സെഷൻ അവസാനിച്ചു. Sahayi എല്ലാ ഇൻ-മെമ്മറി സെഷൻ ഡാറ്റയും മായ്ച്ചു.', inactivityCleared: 'നിഷ്ക്രിയതയ്ക്ക് ശേഷം സെഷൻ മായ്ച്ചു. അടുത്ത പൗരന് സുരക്ഷിതമായി തുടങ്ങാം.',
+  inactivityTitle: 'നിങ്ങളുടെ സെഷൻ ഉടൻ അവസാനിക്കും', inactivityBody: 'ഈ ഇൻ-മെമ്മറി സെഷൻ നിലനിർത്താൻ തുടരുക, അല്ലെങ്കിൽ ഇപ്പോൾ അവസാനിപ്പിക്കുക.', continueSession: 'സെഷൻ തുടരുക',
+  howSahayiWorks: 'Sahayi വിശ്വാസവും സ്വകാര്യതയും എങ്ങനെ സംരക്ഷിക്കുന്നു',
+  trustExplanation: 'സ്ഥിരീകരിച്ച Procedure Packs അവലോകനം ചെയ്ത ഔദ്യോഗിക സ്രോതസ്സുകൾ രേഖപ്പെടുത്തുന്നു. ഒറ്റത്തവണ ഡിറ്റക്ടർ സ്രോതസ് മാറ്റങ്ങൾ അടയാളപ്പെടുത്താം, എന്നാൽ ആളുകൾ അവ പരിശോധിക്കണം; സജീവ വസ്തുതകൾ നിശ്ശബ്ദമായി മാറ്റില്ല. ഐച്ഛിക AI ഗൈഡ് സ്ഥിരീകരിച്ച ടൂളുകൾ ഉപയോഗിക്കുന്നു. ഡെമോ സമർപ്പണവും നിലയും കൃത്രിമ ഡാറ്റ മാത്രം ഉപയോഗിക്കുന്നു. സെഷൻ അവസാനിപ്പിക്കുമ്പോൾ Sahayiയുടെ ഇൻ-മെമ്മറി പൗര നില മായും; Sahayiയ്ക്ക് പുറത്തുള്ള ബ്രൗസർ, നെറ്റ്‌വർക്ക്, പ്രൊവൈഡർ നിലനിർത്തൽ നിയന്ത്രിക്കാനാവില്ല.',
+  nextReview: 'അടുത്ത അവലോകന തീയതി', monitoringPrototype: 'മാറ്റം-കണ്ടെത്തൽ മാതൃക', oneShotReview: 'ഒറ്റത്തവണ മാത്രം — തുടർച്ചയായ നിരീക്ഷണമില്ല', notAvailable: 'ലഭ്യമല്ല', humanReview: 'മനുഷ്യ അവലോകനം', required: 'ആവശ്യമാണ്',
+  continueDemo: 'ഡെമോ സമർപ്പണവുമായി തുടരുക', syntheticSimulation: 'കൃത്രിമ, സർക്കാർേതര സിമുലേഷൻ', demoSubmission: 'ഡെമോ സമർപ്പണവും നിലയും', demoNavigation: 'ഡെമോ നാവിഗേഷൻ', beforeDemo: 'ഡെമോ തുടങ്ങുന്നതിന് മുമ്പ്',
+  noApplicationSubmitted: 'അപേക്ഷ സമർപ്പിക്കില്ല.', noGovernmentContact: 'സർക്കാർ സംവിധാനവുമായി ബന്ധപ്പെടില്ല.', onlySyntheticData: 'ബണ്ടിൽ ചെയ്ത കൃത്രിമ ഡാറ്റ മാത്രം ഉപയോഗിക്കും.', demoClears: 'ഈ Sahayi സെഷൻ അവസാനിക്കുമ്പോൾ സിമുലേഷൻ മായും.',
+  normalScenario: 'സാധാരണ പൂർത്തീകരണ സാഹചര്യം', actionScenario: 'നടപടി-ആവശ്യമായ സാഹചര്യം', demoError: 'നിശ്ചിത ഡെമോ തുടരാനായില്ല.', syntheticReference: 'കൃത്രിമ ഡെമോ റഫറൻസ്', switchScenario: 'ഡെമോ സാഹചര്യം മാറ്റുക:', simulatedStatus: 'സിമുലേറ്റഡ് നില സമയരേഖ',
+  complete: 'പൂർത്തിയായി', currentStatus: 'നിലവിൽ', upcoming: 'വരാനിരിക്കുന്നത്', relatedReferences: 'ബന്ധപ്പെട്ട പരിശോധിച്ച റഫറൻസുകൾ', advanceDemo: 'ഡെമോ മനപ്പൂർവം മുന്നോട്ട് നീക്കുക', demoComplete: 'ഡെമോ പൂർത്തിയായി', askAiStatus: 'ഈ ഡെമോ നില വിശദീകരിക്കാൻ AIയോട് ചോദിക്കുക',
 }
 
 export const UI_MESSAGES: Record<Locale, Messages> = { en, hi, ml }

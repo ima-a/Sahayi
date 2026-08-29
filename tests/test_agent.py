@@ -105,7 +105,7 @@ async def test_strict_tool_loop_uses_bounded_responses_settings_and_deterministi
         assert call["reasoning"] == {"effort": "low"}
         assert call["text"]["verbosity"] == "low"
         assert call["text"]["format"]["strict"] is True
-        assert len(call["tools"]) == 6
+        assert len(call["tools"]) == 7
         assert all(tool["strict"] is True for tool in call["tools"])
         readiness_tool = next(tool for tool in call["tools"] if tool["name"] == "evaluate_readiness")
         answers_schema = readiness_tool["parameters"]["properties"]["answers"]
@@ -132,13 +132,45 @@ def test_strict_readiness_tool_records_are_converted_and_duplicates_fail_closed(
         "locale": "en",
         "answers": [{"question_id": "mobile-auth-access", "value": False}],
     }
-    output, service_id = _execute_tool("evaluate_readiness", json.dumps(arguments), registry)
+    output, service_id, status_id = _execute_tool("evaluate_readiness", json.dumps(arguments), registry)
     assert service_id == "uidai-aadhaar-address-update"
+    assert status_id is None
     assert json.loads(output)["outcome"]["outcome_id"] == "use-alternative-channel"
 
     arguments["answers"].append({"question_id": "mobile-auth-access", "value": True})
-    output, service_id = _execute_tool("evaluate_readiness", json.dumps(arguments), registry)
+    output, service_id, status_id = _execute_tool("evaluate_readiness", json.dumps(arguments), registry)
     assert service_id is None
+    assert status_id is None
+    assert json.loads(output) == {"error": "Invalid tool request"}
+
+
+def test_simulated_status_tool_is_strict_and_returns_only_demo_status() -> None:
+    registry = load_procedure_registry(default_pack_root())
+    output, service_id, status_id = _execute_tool(
+        "explain_simulated_status",
+        json.dumps({
+            "service_id": "uidai-aadhaar-address-update",
+            "locale": "hi",
+            "status_id": "action-required",
+        }),
+        registry,
+    )
+    payload = json.loads(output)
+    assert service_id == "uidai-aadhaar-address-update"
+    assert status_id == "action-required"
+    assert "सिमुलेटेड" in payload["simulated_time_label"]
+    assert "reference" not in payload
+
+    output, service_id, status_id = _execute_tool(
+        "explain_simulated_status",
+        json.dumps({
+            "service_id": "uidai-aadhaar-address-update",
+            "locale": "en",
+            "status_id": "real-government-status",
+        }),
+        registry,
+    )
+    assert (service_id, status_id) == (None, None)
     assert json.loads(output) == {"error": "Invalid tool request"}
 
 
@@ -154,6 +186,31 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
     malformed = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.2")
     assert malformed.status == "fallback"
     assert "not-json" not in malformed.message
+
+
+@pytest.mark.anyio
+async def test_agent_may_explain_only_the_current_validated_demo_status() -> None:
+    call = SimpleNamespace(
+        type="function_call",
+        name="explain_simulated_status",
+        arguments=json.dumps({
+            "service_id": "uidai-aadhaar-address-update",
+            "locale": "en",
+            "status_id": "action-required",
+        }),
+        call_id="demo-status-call",
+    )
+    runtime, _ = fake_runtime([SimpleNamespace(output=[call], output_text="")])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="Explain the current demo status",
+        service_id="uidai-aadhaar-address-update",
+        demo_status_id="preparation-completed",
+        consent=True,
+    )
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "127.0.0.4")
+    assert result.status == "fallback"
+    assert result.tool_trace == []
 
 
 @pytest.mark.anyio

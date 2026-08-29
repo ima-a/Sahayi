@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "service_id": "uidai-aadhaar-address-update",
-  "pack_version": "1.4.0",
-  "status": "superseded",
+  "pack_version": "1.5.0",
+  "status": "active",
   "jurisdiction": {
     "level": "national",
     "name": "India"
@@ -33,7 +33,19 @@
       "retrieved_at": "2026-08-28T10:10:25+05:30",
       "official_updated_date": "2026-07-03",
       "sha256": null,
-      "source_type": "webpage"
+      "source_type": "webpage",
+      "monitoring": {
+        "expected_format": "html",
+        "normalization_version": "html-text-v1",
+        "reviewed_content_type": null,
+        "reviewed_fingerprint": null,
+        "reviewed_at": null,
+        "reviewed_size": null,
+        "reviewed_etag": null,
+        "reviewed_last_modified": null,
+        "allowed_redirect_hosts": [],
+        "max_bytes": 1000000
+      }
     },
     {
       "source_id": "uidai-enrolment-update-faq",
@@ -43,7 +55,19 @@
       "retrieved_at": "2026-08-28T10:10:25+05:30",
       "official_updated_date": "2026-07-02",
       "sha256": null,
-      "source_type": "webpage"
+      "source_type": "webpage",
+      "monitoring": {
+        "expected_format": "html",
+        "normalization_version": "html-text-v1",
+        "reviewed_content_type": null,
+        "reviewed_fingerprint": null,
+        "reviewed_at": null,
+        "reviewed_size": null,
+        "reviewed_etag": null,
+        "reviewed_last_modified": null,
+        "allowed_redirect_hosts": [],
+        "max_bytes": 1000000
+      }
     },
     {
       "source_id": "uidai-my-aadhaar-services",
@@ -53,7 +77,19 @@
       "retrieved_at": "2026-08-28T10:10:25+05:30",
       "official_updated_date": "2026-06-26",
       "sha256": null,
-      "source_type": "webpage"
+      "source_type": "webpage",
+      "monitoring": {
+        "expected_format": "html",
+        "normalization_version": "html-text-v1",
+        "reviewed_content_type": null,
+        "reviewed_fingerprint": null,
+        "reviewed_at": null,
+        "reviewed_size": null,
+        "reviewed_etag": null,
+        "reviewed_last_modified": null,
+        "allowed_redirect_hosts": [],
+        "max_bytes": 1000000
+      }
     },
     {
       "source_id": "uidai-aadhaar-app-faq",
@@ -63,7 +99,19 @@
       "retrieved_at": "2026-08-28T10:34:55+05:30",
       "official_updated_date": "2026-07-02",
       "sha256": null,
-      "source_type": "webpage"
+      "source_type": "webpage",
+      "monitoring": {
+        "expected_format": "html",
+        "normalization_version": "html-text-v1",
+        "reviewed_content_type": null,
+        "reviewed_fingerprint": null,
+        "reviewed_at": null,
+        "reviewed_size": null,
+        "reviewed_etag": null,
+        "reviewed_last_modified": null,
+        "allowed_redirect_hosts": [],
+        "max_bytes": 1000000
+      }
     }
   ],
   "last_verified_at": "2026-08-28T10:10:25+05:30",
@@ -336,98 +384,185 @@
       {
         "outcome_id": "own-document-ready",
         "status": "ready",
-        "title": { "en": "You appear ready for the own-document route" },
-        "explanation": { "en": "Your choices indicate access to mobile authentication and an accepted proof-of-address route. UIDAI will still validate the request and document." },
+        "title": {
+          "en": "You appear ready for the own-document route"
+        },
+        "explanation": {
+          "en": "Your choices indicate access to mobile authentication and an accepted proof-of-address route. UIDAI will still validate the request and document."
+        },
         "recommended_next_steps": [
-          { "en": "Review UIDAI's accepted-document guidance before continuing." },
-          { "en": "Continue on the official MyAadhaar service and confirm the fee shown there before payment." }
+          {
+            "en": "Review UIDAI's accepted-document guidance before continuing."
+          },
+          {
+            "en": "Continue on the official MyAadhaar service and confirm the fee shown there before payment."
+          }
         ],
         "official_handoff_url": "https://myaadhaar.uidai.gov.in/",
-        "source_ids": ["uidai-update-overview", "uidai-enrolment-update-faq", "uidai-my-aadhaar-services"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-enrolment-update-faq",
+          "uidai-my-aadhaar-services"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": false
       },
       {
         "outcome_id": "hof-ready",
         "status": "ready",
-        "title": { "en": "You appear ready to review the Head-of-Family route" },
-        "explanation": { "en": "Your choices indicate access to mobile authentication and a Head of Family who can take part in the official approval step." },
+        "title": {
+          "en": "You appear ready to review the Head-of-Family route"
+        },
+        "explanation": {
+          "en": "Your choices indicate access to mobile authentication and a Head of Family who can take part in the official approval step."
+        },
         "recommended_next_steps": [
-          { "en": "Review UIDAI's current Head-of-Family instructions with the participating family member." },
-          { "en": "Continue only through the official channel described by UIDAI." }
+          {
+            "en": "Review UIDAI's current Head-of-Family instructions with the participating family member."
+          },
+          {
+            "en": "Continue only through the official channel described by UIDAI."
+          }
         ],
         "official_handoff_url": "https://uidai.gov.in/en/aadhaar-app-faq",
-        "source_ids": ["uidai-aadhaar-app-faq"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-aadhaar-app-faq"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": false
       },
       {
         "outcome_id": "use-alternative-channel",
         "status": "alternative_path",
-        "title": { "en": "Use an alternative official channel" },
-        "explanation": { "en": "The online route requires mobile authentication. UIDAI directs people without access to the registered mobile authentication to an Aadhaar Seva Kendra or authorised enrolment and update centre." },
+        "title": {
+          "en": "Use an alternative official channel"
+        },
+        "explanation": {
+          "en": "The online route requires mobile authentication. UIDAI directs people without access to the registered mobile authentication to an Aadhaar Seva Kendra or authorised enrolment and update centre."
+        },
         "recommended_next_steps": [
-          { "en": "Review UIDAI's official enrolment and update guidance." },
-          { "en": "Locate an official Aadhaar Seva Kendra or authorised enrolment and update centre." }
+          {
+            "en": "Review UIDAI's official enrolment and update guidance."
+          },
+          {
+            "en": "Locate an official Aadhaar Seva Kendra or authorised enrolment and update centre."
+          }
         ],
         "official_handoff_url": "https://uidai.gov.in/en/enrolment-and-update",
-        "source_ids": ["uidai-aadhaar-app-faq", "uidai-enrolment-update-faq"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-aadhaar-app-faq",
+          "uidai-enrolment-update-faq"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": false
       },
       {
         "outcome_id": "review-document-guidance",
         "status": "needs_information",
-        "title": { "en": "Review official document guidance" },
-        "explanation": { "en": "You have not confirmed that your proof of address appears to meet UIDAI's accepted-document guidance." },
+        "title": {
+          "en": "Review official document guidance"
+        },
+        "explanation": {
+          "en": "You have not confirmed that your proof of address appears to meet UIDAI's accepted-document guidance."
+        },
         "recommended_next_steps": [
-          { "en": "Review UIDAI's accepted proof-of-address requirements." },
-          { "en": "Return to the readiness check after you can confirm the document route." }
+          {
+            "en": "Review UIDAI's accepted proof-of-address requirements."
+          },
+          {
+            "en": "Return to the readiness check after you can confirm the document route."
+          }
         ],
         "official_handoff_url": "https://uidai.gov.in/en/updating-data-on-aadhaar",
-        "source_ids": ["uidai-update-overview", "uidai-enrolment-update-faq"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-enrolment-update-faq"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": false
       },
       {
         "outcome_id": "confirm-hof-participation",
         "status": "needs_information",
-        "title": { "en": "Confirm Head-of-Family participation" },
-        "explanation": { "en": "UIDAI's Head-of-Family route requires the participating family member to approve the official request." },
+        "title": {
+          "en": "Confirm Head-of-Family participation"
+        },
+        "explanation": {
+          "en": "UIDAI's Head-of-Family route requires the participating family member to approve the official request."
+        },
         "recommended_next_steps": [
-          { "en": "Review UIDAI's current Head-of-Family instructions." },
-          { "en": "Confirm that the Head of Family can complete the official approval step." }
+          {
+            "en": "Review UIDAI's current Head-of-Family instructions."
+          },
+          {
+            "en": "Confirm that the Head of Family can complete the official approval step."
+          }
         ],
         "official_handoff_url": "https://uidai.gov.in/en/aadhaar-app-faq",
-        "source_ids": ["uidai-aadhaar-app-faq"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-aadhaar-app-faq"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": false
       },
       {
         "outcome_id": "route-cannot-confirm",
         "status": "cannot_confirm",
-        "title": { "en": "Choose an official route before continuing" },
-        "explanation": { "en": "The readiness check cannot confirm a path until you decide whether to use your own accepted proof of address or review the supported Head-of-Family route." },
+        "title": {
+          "en": "Choose an official route before continuing"
+        },
+        "explanation": {
+          "en": "The readiness check cannot confirm a path until you decide whether to use your own accepted proof of address or review the supported Head-of-Family route."
+        },
         "recommended_next_steps": [
-          { "en": "Compare UIDAI's own-document and Head-of-Family guidance." },
-          { "en": "Return when you know which official route you intend to use." }
+          {
+            "en": "Compare UIDAI's own-document and Head-of-Family guidance."
+          },
+          {
+            "en": "Return when you know which official route you intend to use."
+          }
         ],
         "official_handoff_url": "https://uidai.gov.in/en/updating-data-on-aadhaar",
-        "source_ids": ["uidai-update-overview", "uidai-aadhaar-app-faq"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-aadhaar-app-faq"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": false
       },
       {
         "outcome_id": "safe-default",
         "status": "needs_information",
-        "title": { "en": "More information is needed" },
-        "explanation": { "en": "The submitted choices do not establish one of the supported readiness paths." },
+        "title": {
+          "en": "More information is needed"
+        },
+        "explanation": {
+          "en": "The submitted choices do not establish one of the supported readiness paths."
+        },
         "recommended_next_steps": [
-          { "en": "Review the official UIDAI guidance before continuing." }
+          {
+            "en": "Review the official UIDAI guidance before continuing."
+          }
         ],
         "official_handoff_url": "https://uidai.gov.in/en/updating-data-on-aadhaar",
-        "source_ids": ["uidai-update-overview"],
-        "disclaimer": { "en": "This readiness result is personalised guidance, not an eligibility decision or official approval." },
+        "source_ids": [
+          "uidai-update-overview"
+        ],
+        "disclaimer": {
+          "en": "This readiness result is personalised guidance, not an eligibility decision or official approval."
+        },
         "is_default": true
       }
     ],
@@ -435,9 +570,16 @@
       {
         "rule_id": "no-mobile-auth",
         "priority": 10,
-        "expression": { "op": "equals", "question_id": "mobile-auth-access", "value": false },
+        "expression": {
+          "op": "equals",
+          "question_id": "mobile-auth-access",
+          "value": false
+        },
         "outcome_id": "use-alternative-channel",
-        "source_ids": ["uidai-aadhaar-app-faq", "uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-aadhaar-app-faq",
+          "uidai-enrolment-update-faq"
+        ]
       },
       {
         "rule_id": "own-document-ready",
@@ -445,13 +587,28 @@
         "expression": {
           "op": "all",
           "expressions": [
-            { "op": "equals", "question_id": "mobile-auth-access", "value": true },
-            { "op": "equals", "question_id": "address-update-route", "value": "own-document" },
-            { "op": "equals", "question_id": "accepted-poa-ready", "value": true }
+            {
+              "op": "equals",
+              "question_id": "mobile-auth-access",
+              "value": true
+            },
+            {
+              "op": "equals",
+              "question_id": "address-update-route",
+              "value": "own-document"
+            },
+            {
+              "op": "equals",
+              "question_id": "accepted-poa-ready",
+              "value": true
+            }
           ]
         },
         "outcome_id": "own-document-ready",
-        "source_ids": ["uidai-update-overview", "uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-enrolment-update-faq"
+        ]
       },
       {
         "rule_id": "own-document-not-ready",
@@ -459,13 +616,28 @@
         "expression": {
           "op": "all",
           "expressions": [
-            { "op": "equals", "question_id": "mobile-auth-access", "value": true },
-            { "op": "equals", "question_id": "address-update-route", "value": "own-document" },
-            { "op": "equals", "question_id": "accepted-poa-ready", "value": false }
+            {
+              "op": "equals",
+              "question_id": "mobile-auth-access",
+              "value": true
+            },
+            {
+              "op": "equals",
+              "question_id": "address-update-route",
+              "value": "own-document"
+            },
+            {
+              "op": "equals",
+              "question_id": "accepted-poa-ready",
+              "value": false
+            }
           ]
         },
         "outcome_id": "review-document-guidance",
-        "source_ids": ["uidai-update-overview", "uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-enrolment-update-faq"
+        ]
       },
       {
         "rule_id": "hof-ready",
@@ -473,13 +645,27 @@
         "expression": {
           "op": "all",
           "expressions": [
-            { "op": "equals", "question_id": "mobile-auth-access", "value": true },
-            { "op": "equals", "question_id": "address-update-route", "value": "head-of-family" },
-            { "op": "equals", "question_id": "hof-participation-ready", "value": true }
+            {
+              "op": "equals",
+              "question_id": "mobile-auth-access",
+              "value": true
+            },
+            {
+              "op": "equals",
+              "question_id": "address-update-route",
+              "value": "head-of-family"
+            },
+            {
+              "op": "equals",
+              "question_id": "hof-participation-ready",
+              "value": true
+            }
           ]
         },
         "outcome_id": "hof-ready",
-        "source_ids": ["uidai-aadhaar-app-faq"]
+        "source_ids": [
+          "uidai-aadhaar-app-faq"
+        ]
       },
       {
         "rule_id": "hof-not-ready",
@@ -487,13 +673,27 @@
         "expression": {
           "op": "all",
           "expressions": [
-            { "op": "equals", "question_id": "mobile-auth-access", "value": true },
-            { "op": "equals", "question_id": "address-update-route", "value": "head-of-family" },
-            { "op": "equals", "question_id": "hof-participation-ready", "value": false }
+            {
+              "op": "equals",
+              "question_id": "mobile-auth-access",
+              "value": true
+            },
+            {
+              "op": "equals",
+              "question_id": "address-update-route",
+              "value": "head-of-family"
+            },
+            {
+              "op": "equals",
+              "question_id": "hof-participation-ready",
+              "value": false
+            }
           ]
         },
         "outcome_id": "confirm-hof-participation",
-        "source_ids": ["uidai-aadhaar-app-faq"]
+        "source_ids": [
+          "uidai-aadhaar-app-faq"
+        ]
       },
       {
         "rule_id": "route-unsure",
@@ -501,12 +701,23 @@
         "expression": {
           "op": "all",
           "expressions": [
-            { "op": "equals", "question_id": "mobile-auth-access", "value": true },
-            { "op": "equals", "question_id": "address-update-route", "value": "unsure" }
+            {
+              "op": "equals",
+              "question_id": "mobile-auth-access",
+              "value": true
+            },
+            {
+              "op": "equals",
+              "question_id": "address-update-route",
+              "value": "unsure"
+            }
           ]
         },
         "outcome_id": "route-cannot-confirm",
-        "source_ids": ["uidai-update-overview", "uidai-aadhaar-app-faq"]
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-aadhaar-app-faq"
+        ]
       }
     ]
   },
@@ -521,66 +732,152 @@
     "fields": [
       {
         "field_id": "update-route",
-        "label": { "en": "Planned update route", "hi": "नियोजित अपडेट मार्ग", "ml": "ആസൂത്രണം ചെയ്ത പുതുക്കൽ മാർഗം" },
-        "explanation": { "en": "A fictional closed choice used only to demonstrate preparation.", "hi": "केवल तैयारी दिखाने के लिए एक काल्पनिक बंद विकल्प।", "ml": "തയ്യാറെടുപ്പ് കാണിക്കാൻ മാത്രം ഉപയോഗിക്കുന്ന സാങ്കൽപ്പിക അടച്ച തിരഞ്ഞെടുപ്പ്." },
-        "demo_value": { "en": "Own accepted proof-of-address route", "hi": "स्वयं के स्वीकृत पता-प्रमाण का मार्ग", "ml": "സ്വന്തം അംഗീകരിച്ച വിലാസ തെളിവ് മാർഗം" },
+        "label": {
+          "en": "Planned update route",
+          "hi": "नियोजित अपडेट मार्ग",
+          "ml": "ആസൂത്രണം ചെയ്ത പുതുക്കൽ മാർഗം"
+        },
+        "explanation": {
+          "en": "A fictional closed choice used only to demonstrate preparation.",
+          "hi": "केवल तैयारी दिखाने के लिए एक काल्पनिक बंद विकल्प।",
+          "ml": "തയ്യാറെടുപ്പ് കാണിക്കാൻ മാത്രം ഉപയോഗിക്കുന്ന സാങ്കൽപ്പിക അടച്ച തിരഞ്ഞെടുപ്പ്."
+        },
+        "demo_value": {
+          "en": "Own accepted proof-of-address route",
+          "hi": "स्वयं के स्वीकृत पता-प्रमाण का मार्ग",
+          "ml": "സ്വന്തം അംഗീകരിച്ച വിലാസ തെളിവ് മാർഗം"
+        },
         "handling": "fictional_demo",
         "status": "preparation_only",
-        "source_ids": ["uidai-update-overview", "uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-enrolment-update-faq"
+        ]
       },
       {
         "field_id": "mobile-auth-ready",
-        "label": { "en": "Registered-mobile authentication available", "hi": "पंजीकृत मोबाइल प्रमाणीकरण उपलब्ध", "ml": "രജിസ്റ്റർ ചെയ്ത മൊബൈൽ പ്രാമാണീകരണം ലഭ്യം" },
-        "explanation": { "en": "A fictional Yes/No readiness answer; no number or OTP is used.", "hi": "एक काल्पनिक हाँ/नहीं तैयारी उत्तर; कोई नंबर या OTP उपयोग नहीं होता।", "ml": "സാങ്കൽപ്പിക അതെ/അല്ല തയ്യാറെടുപ്പ് ഉത്തരം; നമ്പറോ OTPയോ ഉപയോഗിക്കുന്നില്ല." },
-        "demo_value": { "en": "Yes (fictional)", "hi": "हाँ (काल्पनिक)", "ml": "അതെ (സാങ്കൽപ്പികം)" },
+        "label": {
+          "en": "Registered-mobile authentication available",
+          "hi": "पंजीकृत मोबाइल प्रमाणीकरण उपलब्ध",
+          "ml": "രജിസ്റ്റർ ചെയ്ത മൊബൈൽ പ്രാമാണീകരണം ലഭ്യം"
+        },
+        "explanation": {
+          "en": "A fictional Yes/No readiness answer; no number or OTP is used.",
+          "hi": "एक काल्पनिक हाँ/नहीं तैयारी उत्तर; कोई नंबर या OTP उपयोग नहीं होता।",
+          "ml": "സാങ്കൽപ്പിക അതെ/അല്ല തയ്യാറെടുപ്പ് ഉത്തരം; നമ്പറോ OTPയോ ഉപയോഗിക്കുന്നില്ല."
+        },
+        "demo_value": {
+          "en": "Yes (fictional)",
+          "hi": "हाँ (काल्पनिक)",
+          "ml": "അതെ (സാങ്കൽപ്പികം)"
+        },
         "handling": "fictional_demo",
         "status": "preparation_only",
-        "source_ids": ["uidai-update-overview"]
+        "source_ids": [
+          "uidai-update-overview"
+        ]
       },
       {
         "field_id": "poa-ready",
-        "label": { "en": "Accepted proof of address ready", "hi": "स्वीकृत पता प्रमाण तैयार", "ml": "അംഗീകരിച്ച വിലാസ തെളിവ് തയ്യാറാണ്" },
-        "explanation": { "en": "A fictional readiness answer, not a document upload.", "hi": "एक काल्पनिक तैयारी उत्तर, दस्तावेज़ अपलोड नहीं।", "ml": "സാങ്കൽപ്പിക തയ്യാറെടുപ്പ് ഉത്തരം; രേഖ അപ്‌ലോഡ് അല്ല." },
-        "demo_value": { "en": "Yes (fictional)", "hi": "हाँ (काल्पनिक)", "ml": "അതെ (സാങ്കൽപ്പികം)" },
+        "label": {
+          "en": "Accepted proof of address ready",
+          "hi": "स्वीकृत पता प्रमाण तैयार",
+          "ml": "അംഗീകരിച്ച വിലാസ തെളിവ് തയ്യാറാണ്"
+        },
+        "explanation": {
+          "en": "A fictional readiness answer, not a document upload.",
+          "hi": "एक काल्पनिक तैयारी उत्तर, दस्तावेज़ अपलोड नहीं।",
+          "ml": "സാങ്കൽപ്പിക തയ്യാറെടുപ്പ് ഉത്തരം; രേഖ അപ്‌ലോഡ് അല്ല."
+        },
+        "demo_value": {
+          "en": "Yes (fictional)",
+          "hi": "हाँ (काल्पनिक)",
+          "ml": "അതെ (സാങ്കൽപ്പികം)"
+        },
         "handling": "fictional_demo",
         "status": "preparation_only",
-        "source_ids": ["uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-enrolment-update-faq"
+        ]
       },
       {
         "field_id": "aadhaar-number",
-        "label": { "en": "Aadhaar number", "hi": "आधार नंबर", "ml": "ആധാർ നമ്പർ" },
-        "explanation": { "en": "Citizen must provide privately to the official UIDAI service; not collected by Sahayi.", "hi": "नागरिक इसे आधिकारिक UIDAI सेवा को निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।", "ml": "പൗരൻ ഔദ്യോഗിക UIDAI സേവനത്തിന് സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല." },
+        "label": {
+          "en": "Aadhaar number",
+          "hi": "आधार नंबर",
+          "ml": "ആധാർ നമ്പർ"
+        },
+        "explanation": {
+          "en": "Citizen must provide privately to the official UIDAI service; not collected by Sahayi.",
+          "hi": "नागरिक इसे आधिकारिक UIDAI सेवा को निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।",
+          "ml": "പൗരൻ ഔദ്യോഗിക UIDAI സേവനത്തിന് സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല."
+        },
         "demo_value": null,
         "handling": "not_collected",
         "status": "preparation_only",
-        "source_ids": ["uidai-update-overview"]
+        "source_ids": [
+          "uidai-update-overview"
+        ]
       },
       {
         "field_id": "new-address",
-        "label": { "en": "New address", "hi": "नया पता", "ml": "പുതിയ വിലാസം" },
-        "explanation": { "en": "Citizen must provide privately on the official service; not collected by Sahayi.", "hi": "नागरिक इसे आधिकारिक सेवा पर निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।", "ml": "പൗരൻ ഔദ്യോഗിക സേവനത്തിൽ സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല." },
+        "label": {
+          "en": "New address",
+          "hi": "नया पता",
+          "ml": "പുതിയ വിലാസം"
+        },
+        "explanation": {
+          "en": "Citizen must provide privately on the official service; not collected by Sahayi.",
+          "hi": "नागरिक इसे आधिकारिक सेवा पर निजी रूप से दें; Sahayi इसे एकत्र नहीं करता।",
+          "ml": "പൗരൻ ഔദ്യോഗിക സേവനത്തിൽ സ്വകാര്യമായി നൽകണം; Sahayi ഇത് ശേഖരിക്കുന്നില്ല."
+        },
         "demo_value": null,
         "handling": "citizen_private",
         "status": "preparation_only",
-        "source_ids": ["uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-enrolment-update-faq"
+        ]
       },
       {
         "field_id": "proof-of-address-document",
-        "label": { "en": "Proof-of-address document", "hi": "पता प्रमाण दस्तावेज़", "ml": "വിലാസ തെളിവ് രേഖ" },
-        "explanation": { "en": "Citizen must upload privately to the official service; files are not collected by Sahayi.", "hi": "नागरिक आधिकारिक सेवा पर निजी रूप से अपलोड करें; Sahayi फाइलें एकत्र नहीं करता।", "ml": "പൗരൻ ഔദ്യോഗിക സേവനത്തിലേക്ക് സ്വകാര്യമായി അപ്‌ലോഡ് ചെയ്യണം; Sahayi ഫയലുകൾ ശേഖരിക്കുന്നില്ല." },
+        "label": {
+          "en": "Proof-of-address document",
+          "hi": "पता प्रमाण दस्तावेज़",
+          "ml": "വിലാസ തെളിവ് രേഖ"
+        },
+        "explanation": {
+          "en": "Citizen must upload privately to the official service; files are not collected by Sahayi.",
+          "hi": "नागरिक आधिकारिक सेवा पर निजी रूप से अपलोड करें; Sahayi फाइलें एकत्र नहीं करता।",
+          "ml": "പൗരൻ ഔദ്യോഗിക സേവനത്തിലേക്ക് സ്വകാര്യമായി അപ്‌ലോഡ് ചെയ്യണം; Sahayi ഫയലുകൾ ശേഖരിക്കുന്നില്ല."
+        },
         "demo_value": null,
         "handling": "not_collected",
         "status": "preparation_only",
-        "source_ids": ["uidai-update-overview", "uidai-enrolment-update-faq"]
+        "source_ids": [
+          "uidai-update-overview",
+          "uidai-enrolment-update-faq"
+        ]
       }
     ],
     "personas": [
       {
         "persona_id": "fictional-own-document-demo",
-        "display_name": { "en": "DEMO — fictional own-document citizen", "hi": "DEMO — काल्पनिक स्वयं-दस्तावेज़ नागरिक", "ml": "DEMO — സാങ്കൽപ്പിക സ്വന്തം-രേഖ പൗരൻ" },
+        "display_name": {
+          "en": "DEMO — fictional own-document citizen",
+          "hi": "DEMO — काल्पनिक स्वयं-दस्तावेज़ नागरिक",
+          "ml": "DEMO — സാങ്കൽപ്പിക സ്വന്തം-രേഖ പൗരൻ"
+        },
         "synthetic": true,
-        "field_ids": ["update-route", "mobile-auth-ready", "poa-ready"],
-        "readiness_answers": { "mobile-auth-access": true, "address-update-route": "own-document", "accepted-poa-ready": true }
+        "field_ids": [
+          "update-route",
+          "mobile-auth-ready",
+          "poa-ready"
+        ],
+        "readiness_answers": {
+          "mobile-auth-access": true,
+          "address-update-route": "own-document",
+          "accepted-poa-ready": true
+        }
       }
     ]
   },
@@ -605,7 +902,12 @@
     },
     "translations": {
       "hi": {
-        "intent_phrases": ["आधार में पता बदलना", "आधार पता अपडेट", "नए पते पर गया हूँ", "Aadhaar address update"],
+        "intent_phrases": [
+          "आधार में पता बदलना",
+          "आधार पता अपडेट",
+          "नए पते पर गया हूँ",
+          "Aadhaar address update"
+        ],
         "text": {
           "title": "अपने आधार का पता ऑनलाइन अपडेट करें",
           "short-description": "MyAadhaar पोर्टल से पता अपडेट का अनुरोध करने के लिए सत्यापित UIDAI मार्गदर्शन।",
@@ -688,7 +990,12 @@
         }
       },
       "ml": {
-        "intent_phrases": ["ആധാറിലെ വിലാസം മാറ്റുക", "ആധാർ വിലാസം പുതുക്കുക", "പുതിയ വിലാസത്തിലേക്ക് മാറി", "Aadhaar address update"],
+        "intent_phrases": [
+          "ആധാറിലെ വിലാസം മാറ്റുക",
+          "ആധാർ വിലാസം പുതുക്കുക",
+          "പുതിയ വിലാസത്തിലേക്ക് മാറി",
+          "Aadhaar address update"
+        ],
         "text": {
           "title": "നിങ്ങളുടെ ആധാർ വിലാസം ഓൺലൈനായി പുതുക്കുക",
           "short-description": "MyAadhaar പോർട്ടൽ വഴി വിലാസ പുതുക്കൽ അഭ്യർത്ഥിക്കാൻ പരിശോധിച്ച UIDAI മാർഗനിർദേശം.",

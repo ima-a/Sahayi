@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import type { AssistantTurnResponse, PersonalizedChecklist, ProcedureDetail, ProcedureSummary, ReadinessResponse, SyntheticFormAssistance } from './api'
+import { UI_MESSAGES } from './i18n'
+import type { AssistantTurnResponse, DemoJourneyResponse, DemoScenarioId, DemoStatusId, PersonalizedChecklist, ProcedureDetail, ProcedureSummary, ReadinessResponse, SyntheticFormAssistance } from './api'
 
 const englishTranslation = {
   locale: 'en' as const,
@@ -55,6 +56,7 @@ const detail: ProcedureDetail = {
   provenance: { fee: ['uidai-enrolment-update-faq', 'uidai-my-aadhaar-services'] }, pack_digest: 'a'.repeat(64),
   limitations: [{ fact_id: 'guidance-only', text: 'Sahayi is guidance only.', source_ids: ['uidai-update-overview'] }],
   additional_review_items: [],
+  monitoring: { prototype_available: true, continuously_monitored: false, human_review_required: true, baseline_status: 'review_required', monitored_source_count: 3 },
 }
 
 const pensionDetail: ProcedureDetail = {
@@ -121,13 +123,38 @@ const formFixture: SyntheticFormAssistance = {
   official_handoff_url: detail.official_handoff_url, pack_version: '1.4.0', pack_digest: 'd'.repeat(64),
 }
 
-function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: ProcedureDetail; readinessInitial?: ReadinessResponse; failCatalogue?: boolean; failDetail?: boolean; failReadiness?: boolean; agentAvailable?: boolean; agentReply?: AssistantTurnResponse } = {}) {
+const demoSequences: Record<DemoScenarioId, DemoStatusId[]> = {
+  'normal-completion': ['preparation-completed', 'demo-submitted', 'simulated-review', 'demo-completed'],
+  'action-required': ['preparation-completed', 'demo-submitted', 'simulated-review', 'action-required', 'demo-completed'],
+}
+const demoJourney = (scenario: DemoScenarioId, current: DemoStatusId = 'preparation-completed', locale = 'en'): DemoJourneyResponse => ({
+  locale: locale as DemoJourneyResponse['locale'], service_id: summary.service_id, persona_id: 'fictional-demo', scenario_id: scenario,
+  scenario_title: scenario === 'normal-completion' ? 'Normal demo completion' : 'Demo with action required',
+  demo_reference: scenario === 'normal-completion' ? 'DEMO-UIDAI-NORMAL' : 'DEMO-UIDAI-ACTION', current_status_id: current,
+  statuses: demoSequences[scenario].map((status, index, all) => ({
+    status_id: status, title: status === 'action-required' ? 'Action required' : status.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' '),
+    explanation: `Synthetic explanation for ${status}.`, state: index < all.indexOf(current) ? 'complete' : index === all.indexOf(current) ? 'current' : 'upcoming',
+    simulated_time_label: `SIMULATED — step ${index + 1} of ${all.length}`, next_action: 'Advance deliberately.', source_ids: status === 'preparation-completed' ? ['uidai-update-overview'] : [],
+  })), can_advance: current !== 'demo-completed', synthetic: true,
+  disclosure: 'Simulation only: no application is submitted, no government system is contacted, and only bundled synthetic data is used.',
+  disclaimer: 'Synthetic status demonstration only. This is not a government acknowledgement, approval, submission, or tracking service.',
+})
+
+function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: ProcedureDetail; readinessInitial?: ReadinessResponse; failCatalogue?: boolean; failDetail?: boolean; failReadiness?: boolean; pendingDetail?: boolean; agentAvailable?: boolean; agentReply?: AssistantTurnResponse; inactivityTimeout?: number; inactivityWarning?: number } = {}) {
   const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
     const parsed = new URL(url, 'http://test')
     if (parsed.pathname.endsWith('/health')) return response({ status: 'ok' })
-    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false })
+    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false, inactivity_timeout_seconds: options.inactivityTimeout ?? 300, inactivity_warning_seconds: options.inactivityWarning ?? 30 })
     if (parsed.pathname.endsWith('/assistant/turn')) return response(options.agentReply ?? agentReply)
+    if (parsed.pathname.endsWith('/demo-submission')) {
+      const body = JSON.parse(String(init?.body)) as { scenario_id: DemoScenarioId }
+      return response(demoJourney(body.scenario_id, 'preparation-completed', parsed.searchParams.get('locale') ?? 'en'))
+    }
+    if (parsed.pathname.endsWith('/demo-status')) {
+      const body = JSON.parse(String(init?.body)) as { scenario_id: DemoScenarioId; status_id: DemoStatusId }
+      return response(demoJourney(body.scenario_id, body.status_id, parsed.searchParams.get('locale') ?? 'en'))
+    }
     if (parsed.pathname.endsWith('/checklist')) return response(checklistFixture)
     if (parsed.pathname.endsWith('/synthetic-form-assistance')) return response(formFixture)
     if (parsed.pathname.endsWith('/procedures')) return options.failCatalogue ? Promise.reject(new Error('offline')) : response({ locale: parsed.searchParams.get('locale') ?? 'en', translation: englishTranslation, procedures: options.procedures ?? [summary] })
@@ -140,7 +167,10 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
       if (answers['accepted-poa-ready'] === true) return response(completeReadiness)
       return response({ ...completeReadiness, evaluation_status: 'alternative_path', outcome: { ...completeReadiness.outcome, outcome_id: 'use-alternative-channel', status: 'alternative_path', title: 'Use an alternative official channel' } })
     }
-    if (parsed.pathname.includes('/procedures/')) return options.failDetail ? Promise.reject(new Error('offline')) : response(options.procedure ?? detail)
+    if (parsed.pathname.includes('/procedures/')) {
+      if (options.pendingDetail) return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))
+      return options.failDetail ? Promise.reject(new Error('offline')) : response(options.procedure ?? detail)
+    }
     return Promise.reject(new Error(`Unexpected request: ${url}`))
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -163,6 +193,7 @@ async function openProcedure() {
 
 describe('Sahayi verified procedure flow', () => {
   beforeEach(() => vi.restoreAllMocks())
+  afterEach(() => vi.useRealTimers())
 
   it('renders the welcome content and loading state', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
@@ -230,6 +261,9 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getAllByText('Unique Identification Authority of India').length).toBeGreaterThan(0)
     expect(screen.getByText('1.2.0')).toBeInTheDocument()
     expect(screen.getByText('28 Aug 2026')).toBeInTheDocument()
+    expect(screen.getByText('One-shot only — not continuously monitored')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('How Sahayi protects trust and privacy'))
+    expect(screen.getByText(/active facts are never silently replaced/)).toBeInTheDocument()
     const source = screen.getByRole('link', { name: /Updating Data on Aadhaar/ })
     expect(source).toHaveAttribute('target', '_blank')
     expect(source).toHaveAttribute('rel', 'noopener noreferrer')
@@ -466,7 +500,7 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getByText(/Checked verified procedures/)).toBeInTheDocument()
     const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
     const body = JSON.parse(String(call[1]?.body))
-    expect(Object.keys(body).sort()).toEqual(['consent', 'history', 'locale', 'message', 'readiness_answers', 'service_id'])
+    expect(Object.keys(body).sort()).toEqual(['consent', 'demo_status_id', 'history', 'locale', 'message', 'readiness_answers', 'service_id'])
     expect(body.message).toBe('How do I update my Aadhaar address?')
     fireEvent.click(screen.getByRole('button', { name: 'Start deterministic readiness check' }))
     expect(await screen.findByRole('heading', { name: 'Check what you need' })).toBeInTheDocument()
@@ -522,5 +556,123 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getByLabelText('Try with sample citizen')).toHaveValue('fictional-demo')
     expect(screen.getByText(/Citizen must provide privately — not collected/)).toBeInTheDocument()
     expect(screen.queryByText(/1234 5678 9012/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['en', 'Continue with demo submission', 'No application will be submitted.'],
+    ['hi', 'डेमो जमा करने के साथ आगे बढ़ें', 'कोई आवेदन जमा नहीं होगा।'],
+    ['ml', 'ഡെമോ സമർപ്പണവുമായി തുടരുക', 'അപേക്ഷ സമർപ്പിക്കില്ല.'],
+  ] as const)('shows the localized demo disclosure in %s', async (locale, continueLabel, disclosure) => {
+    mockApi()
+    render(<App />)
+    if (locale !== 'en') fireEvent.change(screen.getByLabelText('Language'), { target: { value: locale } })
+    await waitFor(() => expect(screen.getByRole('button', { name: UI_MESSAGES[locale].start })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: UI_MESSAGES[locale].start }))
+    fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].browseServices }))
+    fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
+    fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].syntheticForm }))
+    fireEvent.click(await screen.findByRole('button', { name: continueLabel }))
+    expect(await screen.findByText(disclosure)).toBeInTheDocument()
+    expect(screen.getByText(UI_MESSAGES[locale].noGovernmentContact)).toBeInTheDocument()
+    expect(screen.getByText(UI_MESSAGES[locale].onlySyntheticData)).toBeInTheDocument()
+    expect(screen.getByText(UI_MESSAGES[locale].demoClears)).toBeInTheDocument()
+  })
+
+  it('supports deliberate normal and action-required status paths with accessible current status', async () => {
+    mockApi()
+    render(<App />)
+    await openProcedure()
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with demo submission' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Action-required scenario' }))
+    expect(await screen.findByText('DEMO-UIDAI-ACTION')).toBeInTheDocument()
+    const timeline = screen.getByRole('list', { name: 'Simulated status timeline' })
+    expect(within(timeline).getByRole('heading', { name: 'Preparation Completed' })).toHaveFocus()
+    for (let step = 0; step < 3; step += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Advance demo deliberately' }))
+      await waitFor(() => expect(within(timeline).getByRole('listitem', { current: 'step' })).toHaveTextContent(`SIMULATED — step ${step + 2} of 5`))
+    }
+    await waitFor(() => expect(within(timeline).getByRole('heading', { name: 'Action required' })).toHaveFocus())
+    expect(within(timeline).getByRole('listitem', { current: 'step' })).toHaveTextContent('Action required')
+    fireEvent.click(screen.getByRole('button', { name: 'Normal completion scenario' }))
+    expect(await screen.findByText('DEMO-UIDAI-NORMAL')).toBeInTheDocument()
+    expect(screen.queryByText('DEMO-UIDAI-ACTION')).not.toBeInTheDocument()
+    for (let step = 0; step < 3; step += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Advance demo deliberately' }))
+      await waitFor(() => expect(within(timeline).getByRole('listitem', { current: 'step' })).toHaveTextContent(`SIMULATED — step ${step + 2} of 4`))
+    }
+    expect(screen.getByRole('button', { name: 'Demo completed' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'End session' }))
+    expect(screen.getByText(/cleared all in-memory session data/)).toBeInTheDocument()
+    expect(screen.queryByText(/DEMO-UIDAI/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
+    expect(screen.getByRole('checkbox')).not.toBeChecked()
+  })
+
+  it('passes only the validated current demo status ID to the optional agent tool boundary', async () => {
+    const fetchMock = mockApi({ agentAvailable: true })
+    render(<App />)
+    await openProcedure()
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with demo submission' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Normal completion scenario' }))
+    await screen.findByText('DEMO-UIDAI-NORMAL')
+    fireEvent.click(screen.getByRole('button', { name: 'Ask AI to explain this demo status' }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'Explain this demo status' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    await screen.findAllByText('Choose the verified Aadhaar path.')
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
+    expect(JSON.parse(String(call[1]?.body)).demo_status_id).toBe('preparation-completed')
+  })
+
+  it('End session aborts requests, clears citizen state, and returns a clean welcome', async () => {
+    const fetchMock = mockApi({ pendingDetail: true })
+    render(<App />)
+    await openCatalogue()
+    fireEvent.click(screen.getByRole('button', { name: /Update your Aadhaar address online/ }))
+    await screen.findByText('Loading procedure guidance…')
+    const detailCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/procedures/uidai-'))!
+    expect(detailCall[1]?.signal?.aborted).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'End session' }))
+    expect(detailCall[1]?.signal?.aborted).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Sahayi' })).toBeInTheDocument()
+    expect(screen.getByText(/cleared all in-memory session data/)).toBeInTheDocument()
+    expect(screen.queryByText('Loading procedure guidance…')).not.toBeInTheDocument()
+  })
+
+  it('warns, continues, and clears on kiosk inactivity using elapsed time', async () => {
+    mockApi({ inactivityTimeout: 60, inactivityWarning: 10 })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    await act(async () => { vi.advanceTimersByTime(50_000) })
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Your session will end soon')
+    fireEvent.click(screen.getByRole('button', { name: 'Continue session' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(async () => { vi.advanceTimersByTime(49_000) })
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await act(async () => { vi.advanceTimersByTime(1_000) })
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    await act(async () => { vi.advanceTimersByTime(10_000) })
+    expect(screen.getByRole('heading', { name: 'Sahayi' })).toBeInTheDocument()
+    expect(screen.getByText(/Session cleared after inactivity/)).toBeInTheDocument()
+  })
+
+  it('clears by elapsed time when a throttled hidden tab becomes visible', async () => {
+    mockApi({ inactivityTimeout: 60, inactivityWarning: 10 })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    const later = Date.now() + 61_000
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+    await act(async () => {
+      vi.setSystemTime(later)
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(screen.getByText(/Session cleared after inactivity/)).toBeInTheDocument()
+    delete (document as unknown as Record<string, unknown>).visibilityState
   })
 })

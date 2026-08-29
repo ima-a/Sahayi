@@ -24,8 +24,8 @@ from sahayi_api.readiness import (
     evaluate_readiness,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.4.0" / "pack.json"
-KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.2.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.5.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.3.0" / "pack.json"
 
 
 def pack_data() -> dict:

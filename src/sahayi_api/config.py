@@ -33,6 +33,8 @@ def _float(name: str, default: float, minimum: float, maximum: float) -> float:
 @dataclass(frozen=True)
 class Settings:
     dev_frontend_origin: str
+    kiosk_inactivity_seconds: int
+    kiosk_warning_seconds: int
     agent_enabled: bool
     agent_model: str
     openai_api_key: str | None
@@ -51,6 +53,8 @@ def get_settings() -> Settings:
     configured_model = os.getenv("SAHAYI_AGENT_MODEL", AGENT_MODEL).strip()
     return Settings(
         dev_frontend_origin=origin.rstrip("/"),
+        kiosk_inactivity_seconds=_integer("SAHAYI_KIOSK_INACTIVITY_SECONDS", 300, 60, 1800),
+        kiosk_warning_seconds=_integer("SAHAYI_KIOSK_WARNING_SECONDS", 30, 10, 120),
         agent_enabled=_boolean("SAHAYI_AGENT_ENABLED", False),
         agent_model=configured_model if configured_model == AGENT_MODEL else AGENT_MODEL,
         openai_api_key=os.getenv("OPENAI_API_KEY") or None,

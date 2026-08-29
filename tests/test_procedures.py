@@ -24,8 +24,8 @@ from sahayi_api.procedures import (
     summarize_procedure,
 )
 
-PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.4.0" / "pack.json"
-KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.2.0" / "pack.json"
+PACK_PATH = default_pack_root() / "uidai-aadhaar-address-update" / "1.5.0" / "pack.json"
+KERALA_PACK_PATH = default_pack_root() / "kerala-ign-oap" / "1.3.0" / "pack.json"
 SCHEMA_PATH = PACK_PATH.parents[3] / "schemas" / "procedure-pack-v1.schema.json"
 
 
@@ -80,7 +80,7 @@ def test_two_active_packs_are_independently_versioned_and_verified() -> None:
     registry = load_procedure_registry(default_pack_root())
     kerala = registry["kerala-ign-oap"]
     aadhaar = registry["uidai-aadhaar-address-update"]
-    assert kerala.pack.pack_version == "1.2.0"
+    assert kerala.pack.pack_version == "1.3.0"
     assert kerala.digest != aadhaar.digest
     assert kerala.pack.jurisdiction.name == "Kerala"
     assert {source.source_id for source in kerala.pack.sources} == {
@@ -91,6 +91,25 @@ def test_two_active_packs_are_independently_versioned_and_verified() -> None:
     assert "pension amount" not in " ".join(item.text.lower() for item in kerala.pack.requirements)
     assert all(question.sensitivity.value == "sensitive" for question in kerala.pack.readiness.questions[2:])
     assert len(kerala.pack.readiness.additional_review_items) == 3
+
+
+@pytest.mark.parametrize(
+    ("previous", "current"),
+    [
+        (default_pack_root() / "uidai-aadhaar-address-update" / "1.4.0" / "pack.json", PACK_PATH),
+        (default_pack_root() / "kerala-ign-oap" / "1.2.0" / "pack.json", KERALA_PACK_PATH),
+    ],
+)
+def test_monitoring_version_bumps_preserve_all_canonical_facts(previous: Path, current: Path) -> None:
+    def canonical(path: Path) -> dict[str, object]:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.pop("pack_version")
+        data.pop("status")
+        for source in data["sources"]:
+            source.pop("monitoring", None)
+        return data
+
+    assert canonical(previous) == canonical(current)
 
 
 def test_checked_in_json_schema_matches_model() -> None:
@@ -133,6 +152,35 @@ def test_invalid_dates_and_non_https_urls_are_rejected(mutation, message: str) -
     mutation(data)
     with pytest.raises(ValidationError, match=message):
         ProcedurePack.model_validate(data)
+
+
+def test_monitoring_metadata_is_strict_complete_and_only_for_referenced_sources() -> None:
+    incomplete = pack_data()
+    incomplete["sources"][0]["monitoring"]["reviewed_fingerprint"] = "a" * 64
+    with pytest.raises(ValidationError, match="fingerprint, timestamp, size, and content type"):
+        ProcedurePack.model_validate(incomplete)
+
+    wrong_normalization = pack_data()
+    wrong_normalization["sources"][0]["monitoring"]["normalization_version"] = "pdf-bytes-v1"
+    with pytest.raises(ValidationError, match="HTML sources require html-text-v1"):
+        ProcedurePack.model_validate(wrong_normalization)
+
+    credentials = pack_data()
+    credentials["sources"][0]["url"] = "https://user:password@uidai.gov.in/example"
+    with pytest.raises(ValidationError, match="must not include credentials"):
+        ProcedurePack.model_validate(credentials)
+
+    ip_host = pack_data()
+    ip_host["sources"][0]["url"] = "https://127.0.0.1/example"
+    with pytest.raises(ValidationError, match="public DNS names"):
+        ProcedurePack.model_validate(ip_host)
+
+    unreferenced = pack_data()
+    extra = copy.deepcopy(unreferenced["sources"][0])
+    extra.update(source_id="unreferenced-monitor-source", url="https://uidai.gov.in/unreferenced-monitor-source")
+    unreferenced["sources"].append(extra)
+    with pytest.raises(ValidationError, match="monitoring configured for unreferenced sources"):
+        ProcedurePack.model_validate(unreferenced)
 
 
 def test_missing_and_nonexistent_source_references_are_rejected() -> None:
@@ -248,7 +296,7 @@ def test_duplicate_service_version_is_rejected(tmp_path: Path) -> None:
 def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
     first = pack_data()
     second = copy.deepcopy(first)
-    second["pack_version"] = "1.5.0"
+    second["pack_version"] = "1.6.0"
     write_pack(tmp_path, "one", first)
     write_pack(tmp_path, "two", second)
     with pytest.raises(PackLoadError, match="exactly one active"):
@@ -258,12 +306,12 @@ def test_duplicate_active_versions_are_rejected(tmp_path: Path) -> None:
 def test_draft_pack_is_not_selected(tmp_path: Path) -> None:
     active = pack_data()
     draft = copy.deepcopy(active)
-    draft["pack_version"] = "1.5.0"
+    draft["pack_version"] = "1.6.0"
     draft["status"] = "draft"
     write_pack(tmp_path, "active", active)
     write_pack(tmp_path, "draft", draft)
     registry = load_procedure_registry(tmp_path)
-    assert registry[active["service_id"]].pack.pack_version == "1.4.0"
+    assert registry[active["service_id"]].pack.pack_version == "1.5.0"
 
 
 def test_no_active_pack_fails_closed(tmp_path: Path) -> None:
@@ -287,7 +335,7 @@ def test_pack_digest_is_deterministic() -> None:
     reordered_json = json.dumps(pack_data(), sort_keys=True)
     reordered = ProcedurePack.model_validate_json(reordered_json)
     assert pack_digest(original) == pack_digest(reordered)
-    assert pack_digest(original) == "f9c4847b1dda19c25409e17db75c3b05dfd72541066bf2d3fdfa2ed5bbb83dcb"
+    assert pack_digest(original) == "595a62902a6145c82f02b9fbe361e7d8db5e34dea8d48e7e030aac7e43222bad"
     assert pack_digest(original) != "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
 
 
@@ -355,7 +403,7 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert payload["fee"]["resolution_guidance"].endswith("Confirm the fee on the official portal before payment.")
     assert payload["attention_required"] is True
     assert payload["official_handoff_url"] == "https://myaadhaar.uidai.gov.in/"
-    assert payload["pack_digest"] == "f9c4847b1dda19c25409e17db75c3b05dfd72541066bf2d3fdfa2ed5bbb83dcb"
+    assert payload["pack_digest"] == "595a62902a6145c82f02b9fbe361e7d8db5e34dea8d48e7e030aac7e43222bad"
     assert payload["provenance"]["fee"] == ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
     assert all(source["url"].startswith("https://") for source in payload["sources"])
 

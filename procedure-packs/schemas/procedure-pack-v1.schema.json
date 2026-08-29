@@ -132,6 +132,14 @@
       "title": "DocumentGuidance",
       "type": "object"
     },
+    "ExpectedSourceFormat": {
+      "enum": [
+        "html",
+        "pdf"
+      ],
+      "title": "ExpectedSourceFormat",
+      "type": "string"
+    },
     "FeeClaim": {
       "additionalProperties": false,
       "properties": {
@@ -1074,9 +1082,142 @@
       "title": "RuleOperator",
       "type": "string"
     },
+    "SourceMonitoringPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_redirect_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Allowed Redirect Hosts",
+          "type": "array"
+        },
+        "expected_format": {
+          "$ref": "#/$defs/ExpectedSourceFormat"
+        },
+        "max_bytes": {
+          "default": 1000000,
+          "maximum": 5000000,
+          "minimum": 1024,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "normalization_version": {
+          "$ref": "#/$defs/SourceNormalizationVersion"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "reviewed_content_type": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed Content Type"
+        },
+        "reviewed_etag": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed Etag"
+        },
+        "reviewed_fingerprint": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed Fingerprint"
+        },
+        "reviewed_last_modified": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed Last Modified"
+        },
+        "reviewed_size": {
+          "anyOf": [
+            {
+              "maximum": 5000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed Size"
+        }
+      },
+      "required": [
+        "expected_format",
+        "normalization_version"
+      ],
+      "title": "SourceMonitoringPolicy",
+      "type": "object"
+    },
+    "SourceNormalizationVersion": {
+      "enum": [
+        "html-text-v1",
+        "pdf-bytes-v1"
+      ],
+      "title": "SourceNormalizationVersion",
+      "type": "string"
+    },
     "SourceRecord": {
       "additionalProperties": false,
       "properties": {
+        "monitoring": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceMonitoringPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "official_updated_date": {
           "anyOf": [
             {

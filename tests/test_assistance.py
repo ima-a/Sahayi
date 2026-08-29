@@ -23,8 +23,8 @@ def test_active_assistance_metadata_is_strict_sourced_and_versioned() -> None:
     registry = load_procedure_registry(default_pack_root())
     aadhaar = registry["uidai-aadhaar-address-update"]
     kerala = registry["kerala-ign-oap"]
-    assert aadhaar.pack.pack_version == "1.4.0"
-    assert kerala.pack.pack_version == "1.2.0"
+    assert aadhaar.pack.pack_version == "1.5.0"
+    assert kerala.pack.pack_version == "1.3.0"
     assert aadhaar.pack.assistance.form_mode == "preparation_worksheet"
     assert aadhaar.pack.assistance.form_source_ids == []
     assert kerala.pack.assistance.form_mode == "official_form_worksheet"

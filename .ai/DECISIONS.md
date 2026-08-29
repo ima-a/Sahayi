@@ -40,6 +40,21 @@
 | 2026-08-28 | Reconstruct every factual card and action server-side | Model prose guides; validated pack IDs and local tool results remain the sole source for facts, sources, fees, outcomes, URLs, and actions. |
 | 2026-08-28 | Use process-local abuse controls only as prototype safeguards | An ephemeral salted client hash, stale cleanup, semaphore, rate window, and request budget limit cost without claiming distributed production protection. |
 | 2026-08-28 | Permit synthetic form preparation only | Bundled DEMO personas and blank private fields demonstrate preparation without citizen free text, official form filling, files, submission, or retention. |
+| 2026-08-29 | Keep source monitoring a one-shot offline-first administrative CLI | Hosted code must not continuously scrape; exact allowlists, bounded retrieval and human review support safe change detection without autonomous fact mutation. |
+| 2026-08-29 | Leave reviewed monitoring baselines empty when no authorized live retrieval occurred | Do not fabricate fingerprints; report `review_required` until an authorized human establishes each baseline. |
+| 2026-08-29 | Model demo submission/status as a strict stateless synthetic contract | Demonstrate a journey without government contact, arbitrary input, real references, implied acceptance, submission, approval or tracking. |
+| 2026-08-29 | Use one shared session-clear operation for explicit end and inactivity | Abort requests and clear every in-memory citizen state consistently, while making no claim beyond Sahayi's retention boundary. |
+
+## Official HTTPX documentation basis
+
+Retrieved 2026-08-29 from the official HTTPX site:
+
+- [Timeouts](https://www.python-httpx.org/advanced/timeouts/)
+- [QuickStart: streaming responses](https://www.python-httpx.org/quickstart/)
+- [Clients and redirect configuration](https://www.python-httpx.org/advanced/clients/)
+- [Transports, retries, and MockTransport](https://www.python-httpx.org/advanced/transports/)
+
+These references support explicit timeout configuration, streamed bounded reads, disabled automatic redirects/manual validation, an explicit zero-retry transport, and offline transport mocks.
 
 ## Official OpenAI documentation basis
 

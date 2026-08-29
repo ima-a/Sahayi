@@ -35,6 +35,13 @@ from sahayi_api.readiness import (
     ReadinessInputError,
     evaluate_readiness,
 )
+from sahayi_api.simulation import (
+    DemoJourneyResponse,
+    DemoStatusRequest,
+    DemoSubmissionRequest,
+    get_demo_status,
+    start_demo_submission,
+)
 
 settings = get_settings()
 agent_runtime = AgentRuntime(settings)
@@ -88,8 +95,15 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/api/v1/public-config")
-async def public_config() -> dict[str, str | bool]:
-    return {"application_name": "Sahayi", "kiosk_mode": True, "agent_available": agent_runtime.available}
+async def public_config() -> dict[str, str | bool | int]:
+    warning = min(settings.kiosk_warning_seconds, settings.kiosk_inactivity_seconds - 10)
+    return {
+        "application_name": "Sahayi",
+        "kiosk_mode": True,
+        "agent_available": agent_runtime.available,
+        "inactivity_timeout_seconds": settings.kiosk_inactivity_seconds,
+        "inactivity_warning_seconds": warning,
+    }
 
 
 @app.get("/api/v1/procedures", response_model=ProcedureListResponse)
@@ -160,6 +174,40 @@ async def synthetic_form_assistance(
         return prepare_synthetic_form_assistance(loaded, request.persona_id, locale=locale)
     except ValueError:
         return JSONResponse({"error": "Invalid synthetic form request"}, status_code=422)
+
+
+@app.post("/api/v1/procedures/{service_id}/demo-submission", response_model=DemoJourneyResponse)
+async def demo_submission(
+    service_id: str,
+    request: DemoSubmissionRequest,
+    locale: SupportedLocale = "en",
+) -> DemoJourneyResponse | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    loaded = procedure_registry.get(service_id)
+    if loaded is None:
+        return JSONResponse({"error": "Procedure not found"}, status_code=404)
+    try:
+        return start_demo_submission(loaded, request, locale=locale)
+    except ValueError:
+        return JSONResponse({"error": "Invalid demo submission request"}, status_code=422)
+
+
+@app.post("/api/v1/procedures/{service_id}/demo-status", response_model=DemoJourneyResponse)
+async def demo_status(
+    service_id: str,
+    request: DemoStatusRequest,
+    locale: SupportedLocale = "en",
+) -> DemoJourneyResponse | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    loaded = procedure_registry.get(service_id)
+    if loaded is None:
+        return JSONResponse({"error": "Procedure not found"}, status_code=404)
+    try:
+        return get_demo_status(loaded, request, locale=locale)
+    except ValueError:
+        return JSONResponse({"error": "Invalid demo status request"}, status_code=422)
 
 
 @app.post("/api/v1/assistant/turn", response_model=AssistantTurnResponse)

@@ -27,6 +27,7 @@ from sahayi_api.procedures import (
     summarize_procedure,
 )
 from sahayi_api.readiness import AnswerValue, ReadinessInputError, evaluate_readiness
+from sahayi_api.simulation import DemoStatusId, explain_simulated_status
 
 
 CurrentMessage = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
@@ -39,6 +40,7 @@ TOOL_NAMES = (
     "evaluate_readiness",
     "build_personalized_checklist",
     "prepare_synthetic_form_assistance",
+    "explain_simulated_status",
 )
 ACTION_IDS = {
     "view-procedure",
@@ -66,6 +68,7 @@ class AssistantTurnRequest(StrictModel):
     history: Annotated[list[PriorMessage], Field(default_factory=list, max_length=4)]
     service_id: Identifier | None = None
     readiness_answers: Annotated[dict[Identifier, AnswerValue], Field(default_factory=dict, max_length=30)]
+    demo_status_id: DemoStatusId | None = None
     consent: Literal[True]
 
 
@@ -84,7 +87,7 @@ class FactCard(StrictModel):
     card_id: Identifier
     title: ShortText
     text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2400)]
-    source_ids: Annotated[list[str], Field(min_length=1, max_length=12)]
+    source_ids: Annotated[list[str], Field(max_length=12)]
 
 
 class AgentAction(StrictModel):
@@ -108,6 +111,7 @@ class AssistantTurnResponse(StrictModel):
         "evaluate_readiness",
         "build_personalized_checklist",
         "prepare_synthetic_form_assistance",
+        "explain_simulated_status",
     ]], Field(max_length=8)]
     disclaimer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=800)]
     fallback: bool
@@ -301,13 +305,14 @@ async def _provider_turn(
     trace: list[str] = []
     tool_calls = 0
     selected_id = request.service_id
+    explained_status_id: DemoStatusId | None = None
 
     for _ in range(runtime.settings.agent_max_rounds):
         if not await runtime.request_budget.take():
             return safe_response(request.locale, "fallback")
         response = await client.responses.create(
             model=AGENT_MODEL,
-            instructions=_instructions(request.locale, selected_id),
+            instructions=_instructions(request.locale, selected_id, request.demo_status_id),
             input=input_items,
             tools=_tool_definitions(registry),
             tool_choice="auto",
@@ -331,29 +336,34 @@ async def _provider_turn(
             parsed = AgentModelOutput.model_validate_json(response.output_text)
             if parsed.service_id in registry:
                 selected_id = parsed.service_id
-            return _assemble_response(request.locale, registry, parsed, selected_id, trace)
+            return _assemble_response(request.locale, registry, parsed, selected_id, trace, explained_status_id)
 
         input_items.extend(response.output)
         for call in calls:
             tool_calls += 1
             if tool_calls > runtime.settings.agent_max_tool_calls or call.name not in TOOL_NAMES:
                 return safe_response(request.locale, "fallback")
-            output, used_service = _execute_tool(call.name, call.arguments, registry)
+            output, used_service, used_status = _execute_tool(call.name, call.arguments, registry)
+            if call.name == "explain_simulated_status" and used_status != request.demo_status_id:
+                return safe_response(request.locale, "fallback")
             if used_service is not None:
                 selected_id = used_service
+            if used_status is not None:
+                explained_status_id = used_status
             trace.append(call.name)
             input_items.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
     return safe_response(request.locale, "fallback")
 
 
-def _instructions(locale: SupportedLocale, service_id: str | None) -> str:
+def _instructions(locale: SupportedLocale, service_id: str | None, demo_status_id: DemoStatusId | None) -> str:
     return (
         "You are Sahayi's concise prototype guide. Respond in the requested locale. "
-        "Never invent procedure facts, fees, eligibility, URLs, approval, submission, form filling, tracking, or monitoring. "
+        "Never invent procedure facts, fees, eligibility, URLs, approval, submission, form filling, real tracking, or monitoring. "
+        "A simulated status is fictional and may be explained only through explain_simulated_status; never request or accept a real reference number. "
         "Use only the supplied strict functions for facts and use their exact service IDs. Ask for service clarification when needed. "
         "Do not request or repeat identifiers, contact details, addresses, OTPs, document contents, or files. "
         "Return only the required structured output; action_ids may use only the documented action IDs. "
-        f"Locale: {locale}. Current validated service: {service_id or 'none'}."
+        f"Locale: {locale}. Current validated service: {service_id or 'none'}. Current validated demo status: {demo_status_id or 'none'}."
     )
 
 
@@ -393,6 +403,7 @@ def _tool_definitions(registry: dict[str, LoadedProcedure] | None = None) -> lis
         for loaded in (registry or {}).values()
         for persona in (loaded.pack.assistance.personas if loaded.pack.assistance is not None else [])
     })
+    status_ids = [status.value for status in DemoStatusId]
     return [
         _strict_tool("list_supported_services", "List only supported verified services.", {"locale": locale}, ["locale"]),
         _strict_tool("get_verified_procedure", "Get the verified procedure pack.", {"service_id": service, "locale": locale}, ["service_id", "locale"]),
@@ -400,10 +411,11 @@ def _tool_definitions(registry: dict[str, LoadedProcedure] | None = None) -> lis
         _strict_tool("evaluate_readiness", "Evaluate closed readiness answers deterministically.", {"service_id": service, "locale": locale, "answers": answers}, ["service_id", "locale", "answers"]),
         _strict_tool("build_personalized_checklist", "Build a cited deterministic checklist.", {"service_id": service, "locale": locale, "answers": answers}, ["service_id", "locale", "answers"]),
         _strict_tool("prepare_synthetic_form_assistance", "Prepare a synthetic, non-submittable worksheet.", {"service_id": service, "locale": locale, "persona_id": {"type": ["string", "null"], "enum": [*persona_ids, None]}}, ["service_id", "locale", "persona_id"]),
+        _strict_tool("explain_simulated_status", "Explain only a validated fictional demo status; never look up a real application.", {"service_id": service, "locale": locale, "status_id": {"type": "string", "enum": status_ids}}, ["service_id", "locale", "status_id"]),
     ]
 
 
-def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure]) -> tuple[str, str | None]:
+def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure]) -> tuple[str, str | None, DemoStatusId | None]:
     def readiness_answers(value: object) -> dict[str, AnswerValue]:
         if not isinstance(value, list) or len(value) > 30:
             raise ValueError
@@ -427,7 +439,7 @@ def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure
             raise ValueError
         if name == "list_supported_services":
             result = [summarize_procedure(loaded, locale=locale).model_dump(mode="json") for loaded in registry.values()]
-            return json.dumps(result, ensure_ascii=False), None
+            return json.dumps(result, ensure_ascii=False), None, None
         service_id = values.get("service_id")
         if service_id not in registry:
             raise ValueError
@@ -442,11 +454,15 @@ def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure
             result = build_personalized_checklist(loaded, answers, locale=locale)
         elif name == "prepare_synthetic_form_assistance":
             result = prepare_synthetic_form_assistance(loaded, values.get("persona_id"), locale=locale)
+        elif name == "explain_simulated_status":
+            status_id = DemoStatusId(values.get("status_id"))
+            result = explain_simulated_status(loaded, status_id, locale=locale)
+            return json.dumps(result.model_dump(mode="json"), ensure_ascii=False), service_id, status_id
         else:
             raise ValueError
-        return json.dumps(result.model_dump(mode="json"), ensure_ascii=False), service_id
+        return json.dumps(result.model_dump(mode="json"), ensure_ascii=False), service_id, None
     except (ValueError, ValidationError, ReadinessInputError, TypeError):
-        return json.dumps({"error": "Invalid tool request"}), None
+        return json.dumps({"error": "Invalid tool request"}), None, None
 
 
 def _clarification_response(locale: SupportedLocale, registry: dict[str, LoadedProcedure], trace: list[str]) -> AssistantTurnResponse:
@@ -471,6 +487,7 @@ def _assemble_response(
     model_output: AgentModelOutput,
     service_id: str | None,
     trace: list[str],
+    explained_status_id: DemoStatusId | None = None,
 ) -> AssistantTurnResponse:
     if _UNSAFE_MODEL_PROSE.search(model_output.guidance_message):
         return safe_response(locale, "fallback")
@@ -483,6 +500,16 @@ def _assemble_response(
         FactCard(card_id="verified-requirements", title=_COPY[locale]["requirements"], text=requirements, source_ids=pack.provenance["requirements"]),
         FactCard(card_id="fee-information", title=_COPY[locale]["fee"], text=localized_text(pack, locale, "fee.display-message", pack.fee.display_message), source_ids=pack.fee.source_ids),
     ]
+    if explained_status_id is not None:
+        status = explain_simulated_status(loaded, explained_status_id, locale=locale)
+        cards.append(
+            FactCard(
+                card_id=f"demo-{status.status_id.value}",
+                title=status.title,
+                text=f"{status.explanation} {status.next_action}",
+                source_ids=status.source_ids,
+            )
+        )
     source_ids = {source_id for card in cards for source_id in card.source_ids}
     action_labels = {
         "view-procedure": "view",

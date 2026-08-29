@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 from datetime import UTC, date, datetime
@@ -78,6 +79,16 @@ class SourceType(StrEnum):
     PDF = "pdf"
 
 
+class SourceNormalizationVersion(StrEnum):
+    HTML_TEXT_V1 = "html-text-v1"
+    PDF_BYTES_V1 = "pdf-bytes-v1"
+
+
+class ExpectedSourceFormat(StrEnum):
+    HTML = "html"
+    PDF = "pdf"
+
+
 class TrustState(StrEnum):
     CURRENT = "current"
     STALE = "stale"
@@ -152,6 +163,65 @@ class Jurisdiction(StrictModel):
     name: ShortText
 
 
+class SourceMonitoringPolicy(StrictModel):
+    expected_format: ExpectedSourceFormat
+    normalization_version: SourceNormalizationVersion
+    reviewed_content_type: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)] | None = None
+    reviewed_fingerprint: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")] | None = None
+    reviewed_at: datetime | None = None
+    reviewed_size: Annotated[int, Field(ge=0, le=5_000_000)] | None = None
+    reviewed_etag: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
+    reviewed_last_modified: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)] | None = None
+    allowed_redirect_hosts: Annotated[list[str], Field(default_factory=list, max_length=4)]
+    max_bytes: Annotated[int, Field(ge=1024, le=5_000_000)] = 1_000_000
+
+    @field_validator("reviewed_at")
+    @classmethod
+    def require_aware_review_timestamp(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("reviewed_at must include a timezone")
+        return value
+
+    @field_validator("reviewed_etag", "reviewed_last_modified")
+    @classmethod
+    def reject_unsafe_header_values(cls, value: str | None) -> str | None:
+        if value is not None and ("\r" in value or "\n" in value):
+            raise ValueError("review metadata headers must be single-line")
+        return value
+
+    @field_validator("allowed_redirect_hosts")
+    @classmethod
+    def validate_redirect_hosts(cls, values: list[str]) -> list[str]:
+        if len(values) != len(set(values)):
+            raise ValueError("allowed redirect hosts must be unique")
+        for value in values:
+            if value != value.lower() or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", value):
+                raise ValueError("allowed redirect hosts must be lowercase DNS names")
+            try:
+                ipaddress.ip_address(value)
+            except ValueError:
+                pass
+            else:
+                raise ValueError("IP address redirect aliases are not permitted")
+        return values
+
+    @model_validator(mode="after")
+    def validate_reviewed_baseline(self) -> SourceMonitoringPolicy:
+        baseline_values = (self.reviewed_fingerprint, self.reviewed_at, self.reviewed_size, self.reviewed_content_type)
+        if any(value is not None for value in baseline_values) and not all(value is not None for value in baseline_values):
+            raise ValueError("reviewed fingerprint, timestamp, size, and content type must be supplied together")
+        if self.reviewed_content_type is not None:
+            media_type = self.reviewed_content_type.split(";", 1)[0].strip().lower()
+            accepted = {"application/pdf"} if self.expected_format is ExpectedSourceFormat.PDF else {"text/html", "application/xhtml+xml"}
+            if media_type not in accepted:
+                raise ValueError("reviewed content type must match the expected source format")
+        if self.expected_format is ExpectedSourceFormat.HTML and self.normalization_version is not SourceNormalizationVersion.HTML_TEXT_V1:
+            raise ValueError("HTML sources require html-text-v1 normalization")
+        if self.expected_format is ExpectedSourceFormat.PDF and self.normalization_version is not SourceNormalizationVersion.PDF_BYTES_V1:
+            raise ValueError("PDF sources require pdf-bytes-v1 normalization")
+        return self
+
+
 class SourceRecord(StrictModel):
     source_id: SourceId
     publisher: ShortText
@@ -161,12 +231,21 @@ class SourceRecord(StrictModel):
     official_updated_date: date | None = None
     sha256: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")] | None = None
     source_type: SourceType
+    monitoring: SourceMonitoringPolicy | None = None
 
     @field_validator("url")
     @classmethod
     def require_https(cls, value: HttpUrl) -> HttpUrl:
         if value.scheme != "https":
             raise ValueError("official source URLs must use HTTPS")
+        if value.username is not None or value.password is not None:
+            raise ValueError("official source URLs must not include credentials")
+        try:
+            ipaddress.ip_address(value.host)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("official source URLs must use public DNS names, not IP addresses")
         return value
 
     @field_validator("retrieved_at")
@@ -175,6 +254,15 @@ class SourceRecord(StrictModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("retrieved_at must include a timezone")
         return value
+
+    @model_validator(mode="after")
+    def validate_monitoring_policy(self) -> SourceRecord:
+        if self.monitoring is None:
+            return self
+        expected = ExpectedSourceFormat.PDF if self.source_type is SourceType.PDF else ExpectedSourceFormat.HTML
+        if self.monitoring.expected_format is not expected:
+            raise ValueError("monitoring format must match the source type")
+        return self
 
 
 class CitedFact(StrictModel):
@@ -671,6 +759,11 @@ class ProcedurePack(StrictModel):
         missing = sorted(set(references) - known_sources)
         if missing:
             raise ValueError(f"unknown source references: {', '.join(missing)}")
+        monitored_unreferenced = sorted(
+            source.source_id for source in self.sources if source.monitoring is not None and source.source_id not in references
+        )
+        if monitored_unreferenced:
+            raise ValueError(f"monitoring configured for unreferenced sources: {', '.join(monitored_unreferenced)}")
         required_provenance = _REQUIRED_PROVENANCE | ({"tracking-guidance"} if self.tracking_guidance else set())
         unmapped = sorted(required_provenance - self.provenance.keys())
         if unmapped:
@@ -795,6 +888,9 @@ def pack_digest(pack: ProcedurePack) -> str:
         del payload["readiness"]["additional_review_items"]
     if payload["assistance"] is None:
         del payload["assistance"]
+    for source in payload["sources"]:
+        if source["monitoring"] is None:
+            del source["monitoring"]
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -850,6 +946,14 @@ class ProcedureListResponse(StrictModel):
     procedures: list[ProcedureSummary]
 
 
+class MonitoringTrustInfo(StrictModel):
+    prototype_available: bool
+    continuous_monitoring: Literal[False]
+    baseline_status: Literal["reviewed", "review_required", "unavailable"]
+    human_review_required: Literal[True]
+    monitored_source_count: Annotated[int, Field(ge=0, le=30)]
+
+
 class ProcedureDetail(StrictModel):
     locale: SupportedLocale
     translation: TranslationInfo
@@ -877,6 +981,7 @@ class ProcedureDetail(StrictModel):
     review_due_at: datetime
     trust_state: TrustState
     attention_required: bool
+    monitoring: MonitoringTrustInfo
     limitations: list[CitedFact]
     additional_review_items: list[CitedFact]
 
@@ -910,6 +1015,13 @@ def detail_procedure(
     locale: SupportedLocale = "en",
 ) -> ProcedureDetail:
     pack = loaded.pack
+    monitored = [source for source in pack.sources if source.monitoring is not None]
+    if not monitored:
+        baseline_status = "unavailable"
+    elif all(source.monitoring.reviewed_fingerprint is not None for source in monitored):
+        baseline_status = "reviewed"
+    else:
+        baseline_status = "review_required"
     return ProcedureDetail(
         locale=locale,
         translation=translation_info(pack, locale),
@@ -963,6 +1075,13 @@ def detail_procedure(
         review_due_at=pack.review_due_at,
         trust_state=loaded.trust_state(now),
         attention_required=fee_attention_required(pack.fee),
+        monitoring=MonitoringTrustInfo(
+            prototype_available=bool(monitored),
+            continuous_monitoring=False,
+            baseline_status=baseline_status,
+            human_review_required=True,
+            monitored_source_count=len(monitored),
+        ),
         limitations=[item.model_copy(update={"text": localized_text(pack, locale, f"limitation.{item.fact_id}", item.text)}) for item in pack.limitations],
         additional_review_items=[
             item.model_copy(update={"text": localized_text(pack, locale, f"additional-review.{item.fact_id}", item.text)})

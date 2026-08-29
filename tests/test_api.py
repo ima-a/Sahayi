@@ -2,6 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sahayi_api.main import app
+from sahayi_api.config import get_settings
 
 
 @pytest.fixture
@@ -29,10 +30,24 @@ async def test_public_config_has_no_secret_configuration(client: AsyncClient) ->
     response = await client.get("/api/v1/public-config")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json() == {"application_name": "Sahayi", "kiosk_mode": True, "agent_available": False}
+    assert response.json() == {
+        "application_name": "Sahayi",
+        "kiosk_mode": True,
+        "agent_available": False,
+        "inactivity_timeout_seconds": 300,
+        "inactivity_warning_seconds": 30,
+    }
     serialized = response.text.lower()
     for prohibited in ("secret", "token", "password", "api_key", "origin", "environment"):
         assert prohibited not in serialized
+
+
+def test_kiosk_timeout_configuration_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SAHAYI_KIOSK_INACTIVITY_SECONDS", "999999")
+    monkeypatch.setenv("SAHAYI_KIOSK_WARNING_SECONDS", "1")
+    configured = get_settings()
+    assert configured.kiosk_inactivity_seconds == 1800
+    assert configured.kiosk_warning_seconds == 10
 
 
 @pytest.mark.anyio

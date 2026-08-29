@@ -1,7 +1,13 @@
 import type { Locale } from './i18n'
 
 export type HealthStatus = { status: 'ok' }
-export type PublicConfig = { application_name: string; kiosk_mode: boolean; agent_available: boolean }
+export type PublicConfig = {
+  application_name: string
+  kiosk_mode: boolean
+  agent_available: boolean
+  inactivity_timeout_seconds: number
+  inactivity_warning_seconds: number
+}
 export type TrustState = 'current' | 'stale'
 export type FeeVerificationStatus = 'confirmed' | 'conflicting' | 'free' | 'not_stated'
 export type TranslationInfo = {
@@ -73,6 +79,13 @@ export type ProcedureDetail = {
   attention_required: boolean
   limitations: CitedFact[]
   additional_review_items: CitedFact[]
+  monitoring: {
+    prototype_available: boolean
+    continuously_monitored: false
+    human_review_required: true
+    baseline_status: 'reviewed' | 'review_required' | 'unavailable'
+    monitored_source_count: number
+  }
 }
 export type ReadinessAnswer = boolean | number | string
 export type ReadinessQuestion = {
@@ -159,33 +172,69 @@ export type AssistantTurnResponse = {
   disclaimer: string
   fallback: boolean
 }
+export type DemoScenarioId = 'normal-completion' | 'action-required'
+export type DemoStatusId = 'preparation-completed' | 'demo-submitted' | 'simulated-review' | 'action-required' | 'demo-completed'
+export type DemoStatusItem = {
+  status_id: DemoStatusId
+  title: string
+  explanation: string
+  state: 'complete' | 'current' | 'upcoming'
+  simulated_time_label: string
+  next_action: string
+  source_ids: string[]
+}
+export type DemoJourneyResponse = {
+  locale: Locale
+  service_id: string
+  persona_id: string
+  scenario_id: DemoScenarioId
+  scenario_title: string
+  demo_reference: string
+  current_status_id: DemoStatusId
+  statuses: DemoStatusItem[]
+  can_advance: boolean
+  synthetic: true
+  disclosure: string
+  disclaimer: string
+}
 const apiBase = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 const localizedPath = (path: string, locale: Locale) => `${path}${path.includes('?') ? '&' : '?'}locale=${locale}`
-async function getJson<T>(path: string): Promise<T> { const response = await fetch(`${apiBase}${path}`, { headers: { Accept: 'application/json' } }); if (!response.ok) throw new Error('Service unavailable'); return response.json() as Promise<T> }
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> { const response = await fetch(`${apiBase}${path}`, { headers: { Accept: 'application/json' }, signal }); if (!response.ok) throw new Error('Service unavailable'); return response.json() as Promise<T> }
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   })
   if (!response.ok) throw new Error('Service unavailable')
   return response.json() as Promise<T>
 }
-export const getHealth = () => getJson<HealthStatus>('/health')
-export const getPublicConfig = () => getJson<PublicConfig>('/public-config')
-export const getProcedures = (locale: Locale = 'en') => getJson<{ locale: Locale; translation: TranslationInfo; procedures: ProcedureSummary[] }>(localizedPath('/procedures', locale))
-export const getProcedure = (serviceId: string, locale: Locale = 'en') => getJson<ProcedureDetail>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}`, locale))
-export const evaluateReadiness = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en') =>
-  postJson<ReadinessResponse>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/readiness/evaluate`, locale), { answers })
-export const buildChecklist = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en') =>
-  postJson<PersonalizedChecklist>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/checklist`, locale), { answers })
-export const prepareSyntheticForm = (serviceId: string, locale: Locale = 'en', personaId: string | null = null) =>
-  postJson<SyntheticFormAssistance>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/synthetic-form-assistance`, locale), { persona_id: personaId })
+export const getHealth = (signal?: AbortSignal) => getJson<HealthStatus>('/health', signal)
+export const getPublicConfig = (signal?: AbortSignal) => getJson<PublicConfig>('/public-config', signal)
+export const getProcedures = (locale: Locale = 'en', signal?: AbortSignal) => getJson<{ locale: Locale; translation: TranslationInfo; procedures: ProcedureSummary[] }>(localizedPath('/procedures', locale), signal)
+export const getProcedure = (serviceId: string, locale: Locale = 'en', signal?: AbortSignal) => getJson<ProcedureDetail>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}`, locale), signal)
+export const evaluateReadiness = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en', signal?: AbortSignal) =>
+  postJson<ReadinessResponse>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/readiness/evaluate`, locale), { answers }, signal)
+export const buildChecklist = (serviceId: string, answers: Record<string, ReadinessAnswer>, locale: Locale = 'en', signal?: AbortSignal) =>
+  postJson<PersonalizedChecklist>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/checklist`, locale), { answers }, signal)
+export const prepareSyntheticForm = (serviceId: string, locale: Locale = 'en', personaId: string | null = null, signal?: AbortSignal) =>
+  postJson<SyntheticFormAssistance>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/synthetic-form-assistance`, locale), { persona_id: personaId }, signal)
+export const startDemoSubmission = (serviceId: string, personaId: string, scenarioId: DemoScenarioId, locale: Locale = 'en', signal?: AbortSignal) =>
+  postJson<DemoJourneyResponse>(localizedPath(`/procedures/${encodeURIComponent(serviceId)}/demo-submission`, locale), { persona_id: personaId, scenario_id: scenarioId }, signal)
+export const getDemoStatus = (journey: DemoJourneyResponse, statusId: DemoStatusId, locale: Locale = journey.locale, signal?: AbortSignal) =>
+  postJson<DemoJourneyResponse>(localizedPath(`/procedures/${encodeURIComponent(journey.service_id)}/demo-status`, locale), {
+    persona_id: journey.persona_id,
+    scenario_id: journey.scenario_id,
+    demo_reference: journey.demo_reference,
+    status_id: statusId,
+  }, signal)
 export const assistantTurn = (body: {
   locale: Locale
   message: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   service_id: string | null
   readiness_answers: Record<string, ReadinessAnswer>
+  demo_status_id: DemoStatusId | null
   consent: true
-}) => postJson<AssistantTurnResponse>('/assistant/turn', body)
+}, signal?: AbortSignal) => postJson<AssistantTurnResponse>('/assistant/turn', body, signal)

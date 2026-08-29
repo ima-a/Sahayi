@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { assistantTurn, buildChecklist, evaluateReadiness, getHealth, getProcedure, getProcedures, getPublicConfig, prepareSyntheticForm, type AssistantTurnResponse, type PersonalizedChecklist, type ProcedureDetail, type ProcedureSummary, type ReadinessAnswer, type ReadinessResponse, type SyntheticFormAssistance } from './api'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { assistantTurn, buildChecklist, evaluateReadiness, getDemoStatus, getHealth, getProcedure, getProcedures, getPublicConfig, prepareSyntheticForm, startDemoSubmission, type AssistantTurnResponse, type DemoJourneyResponse, type DemoScenarioId, type PersonalizedChecklist, type ProcedureDetail, type ProcedureSummary, type ReadinessAnswer, type ReadinessResponse, type SyntheticFormAssistance } from './api'
 import { formatMessage, LANGUAGE_NAMES, LOCALES, UI_MESSAGES, type Locale, type Messages } from './i18n'
 import { detectHighRiskPii, matchProcedures, MAX_QUERY_LENGTH, type MatchResult } from './matcher'
 import './App.css'
 
 type Availability = 'loading' | 'available' | 'unavailable'
-type Screen = 'welcome' | 'intake' | 'catalogue' | 'detail' | 'readiness' | 'assistant' | 'checklist' | 'form'
+type Screen = 'welcome' | 'intake' | 'catalogue' | 'detail' | 'readiness' | 'assistant' | 'checklist' | 'form' | 'demo'
 type ConversationMessage = { role: 'user' | 'assistant'; content: string }
 
 const dateLocales: Record<Locale, string> = { en: 'en-IN', hi: 'hi-IN', ml: 'ml-IN' }
@@ -19,6 +19,10 @@ function LanguageControls({ locale, onChange, messages }: { locale: Locale; onCh
     </select>
     <p className="translation-note" role="note">{messages.canonicalNotice}</p>
   </div>
+}
+
+function TrustExplanation({ messages }: { messages: Messages }) {
+  return <details className="trust-explanation no-print"><summary>{messages.howSahayiWorks}</summary><p>{messages.trustExplanation}</p></details>
 }
 
 function App() {
@@ -50,22 +54,98 @@ function App() {
   const [formAssistance, setFormAssistance] = useState<SyntheticFormAssistance | null>(null)
   const [assistanceLoading, setAssistanceLoading] = useState(false)
   const [assistanceError, setAssistanceError] = useState(false)
+  const [demo, setDemo] = useState<DemoJourneyResponse | null>(null)
+  const [demoLoading, setDemoLoading] = useState(false)
+  const [demoError, setDemoError] = useState(false)
+  const [sessionNotice, setSessionNotice] = useState<'ended' | 'inactive' | null>(null)
+  const [inactivityWarning, setInactivityWarning] = useState(false)
+  const [activityReset, setActivityReset] = useState(0)
+  const [inactivityTimeoutSeconds, setInactivityTimeoutSeconds] = useState(300)
+  const [inactivityWarningSeconds, setInactivityWarningSeconds] = useState(30)
+  const requestControllers = useRef(new Set<AbortController>())
+  const sessionGeneration = useRef(0)
+  const objectUrls = useRef(new Set<string>())
+  const lastInteraction = useRef(0)
   const messages = UI_MESSAGES[locale]
+
+  const isAbort = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
+  const request = async <T,>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+    const controller = new AbortController()
+    const generation = sessionGeneration.current
+    requestControllers.current.add(controller)
+    try {
+      const result = await operation(controller.signal)
+      if (generation !== sessionGeneration.current) throw new DOMException('Session ended', 'AbortError')
+      return result
+    } finally {
+      requestControllers.current.delete(controller)
+    }
+  }
+
+  const clearCitizenState = (notice: 'ended' | 'inactive' | null) => {
+    sessionGeneration.current += 1
+    requestControllers.current.forEach(controller => controller.abort())
+    requestControllers.current.clear()
+    objectUrls.current.forEach(url => URL.revokeObjectURL(url))
+    objectUrls.current.clear()
+    setScreen('welcome'); setProcedures(null); setDetail(null); setCatalogueError(false); setDetailError(false)
+    setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setReadinessLoading(false); setReadinessError(false)
+    setQuery(''); setMatch(null); setPiiWarning(false)
+    setAgentConsent(false); setAgentInput(''); setAgentHistory([]); setAgentResponse(null); setAgentLoading(false); setAgentError(false); setAgentPiiWarning(false)
+    setChecklist(null); setFormAssistance(null); setAssistanceLoading(false); setAssistanceError(false)
+    setDemo(null); setDemoLoading(false); setDemoError(false); setInactivityWarning(false); setSessionNotice(notice)
+    lastInteraction.current = Date.now()
+  }
+
+  const startOver = () => clearCitizenState(null)
+  const endSession = () => clearCitizenState('ended')
+  const continueSession = () => { lastInteraction.current = Date.now(); setInactivityWarning(false); setActivityReset(value => value + 1) }
 
   useEffect(() => { document.documentElement.lang = locale }, [locale])
   useEffect(() => {
     let active = true
-    Promise.all([getHealth(), getPublicConfig()])
+    const controller = new AbortController()
+    Promise.all([getHealth(controller.signal), getPublicConfig(controller.signal)])
       .then(([health, config]) => {
-        if (active && health.status === 'ok') { setName(config.application_name); setAgentAvailable(config.agent_available); setAvailability('available') }
+        if (active && health.status === 'ok') {
+          setName(config.application_name); setAgentAvailable(config.agent_available)
+          setInactivityTimeoutSeconds(config.inactivity_timeout_seconds); setInactivityWarningSeconds(config.inactivity_warning_seconds)
+          setAvailability('available')
+        }
       })
       .catch(() => active && setAvailability('unavailable'))
-    return () => { active = false }
+    return () => { active = false; controller.abort() }
   }, [])
+
+  useEffect(() => {
+    if (screen === 'welcome') return
+    let warningTimer = 0
+    let expiryTimer = 0
+    const schedule = () => {
+      window.clearTimeout(warningTimer); window.clearTimeout(expiryTimer)
+      const elapsed = Date.now() - lastInteraction.current
+      const expiryMs = inactivityTimeoutSeconds * 1000
+      const warningAtMs = Math.max(0, expiryMs - inactivityWarningSeconds * 1000)
+      if (elapsed >= expiryMs) { clearCitizenState('inactive'); return }
+      setInactivityWarning(elapsed >= warningAtMs)
+      warningTimer = window.setTimeout(() => setInactivityWarning(true), Math.max(0, warningAtMs - elapsed))
+      expiryTimer = window.setTimeout(() => clearCitizenState('inactive'), expiryMs - elapsed)
+    }
+    const interact = () => { lastInteraction.current = Date.now(); setInactivityWarning(false); schedule() }
+    const visibility = () => { if (document.visibilityState === 'visible') schedule() }
+    lastInteraction.current = Date.now(); schedule()
+    window.addEventListener('pointerdown', interact); window.addEventListener('keydown', interact); window.addEventListener('touchstart', interact)
+    document.addEventListener('visibilitychange', visibility)
+    return () => {
+      window.clearTimeout(warningTimer); window.clearTimeout(expiryTimer)
+      window.removeEventListener('pointerdown', interact); window.removeEventListener('keydown', interact); window.removeEventListener('touchstart', interact)
+      document.removeEventListener('visibilitychange', visibility)
+    }
+  }, [screen, inactivityTimeoutSeconds, inactivityWarningSeconds, activityReset])
 
   const loadProcedures = (nextLocale: Locale) => {
     setCatalogueError(false)
-    getProcedures(nextLocale).then(({ procedures: items }) => setProcedures(items)).catch(() => setCatalogueError(true))
+    request(signal => getProcedures(nextLocale, signal)).then(({ procedures: items }) => setProcedures(items)).catch(error => { if (!isAbort(error)) setCatalogueError(true) })
   }
 
   const changeLocale = (nextLocale: Locale) => {
@@ -81,30 +161,35 @@ function App() {
     if (screen === 'checklist' && checklist) {
       setChecklist(null)
       setAssistanceLoading(true)
-      buildChecklist(checklist.service_id, readinessAnswers, nextLocale).then(setChecklist).catch(() => setAssistanceError(true)).finally(() => setAssistanceLoading(false))
+      request(signal => buildChecklist(checklist.service_id, readinessAnswers, nextLocale, signal)).then(setChecklist).catch(error => { if (!isAbort(error)) setAssistanceError(true) }).finally(() => setAssistanceLoading(false))
     } else setChecklist(null)
     if (screen === 'form' && formAssistance) {
       setFormAssistance(null)
       setAssistanceLoading(true)
-      prepareSyntheticForm(formAssistance.service_id, nextLocale, formAssistance.persona.persona_id).then(setFormAssistance).catch(() => setAssistanceError(true)).finally(() => setAssistanceLoading(false))
+      request(signal => prepareSyntheticForm(formAssistance.service_id, nextLocale, formAssistance.persona.persona_id, signal)).then(setFormAssistance).catch(error => { if (!isAbort(error)) setAssistanceError(true) }).finally(() => setAssistanceLoading(false))
     } else setFormAssistance(null)
     if (procedures !== null || screen === 'intake' || screen === 'catalogue') {
       setProcedures(null)
       loadProcedures(nextLocale)
     }
     if (detail) {
-      getProcedure(detail.service_id, nextLocale).then(setDetail).catch(() => setDetailError(true))
+      request(signal => getProcedure(detail.service_id, nextLocale, signal)).then(setDetail).catch(error => { if (!isAbort(error)) setDetailError(true) })
       if (screen === 'readiness' && readiness !== null) {
         setReadinessLoading(true)
-        evaluateReadiness(detail.service_id, readinessAnswers, nextLocale)
+        request(signal => evaluateReadiness(detail.service_id, readinessAnswers, nextLocale, signal))
           .then(setReadiness)
           .catch(() => setReadinessError(true))
           .finally(() => setReadinessLoading(false))
       }
     }
+    if (screen === 'demo' && demo) {
+      setDemoLoading(true)
+      request(signal => getDemoStatus(demo, demo.current_status_id, nextLocale, signal)).then(setDemo).catch(error => { if (!isAbort(error)) setDemoError(true) }).finally(() => setDemoLoading(false))
+    }
   }
 
   const start = () => {
+    setSessionNotice(null)
     setScreen('intake')
     setProcedures(null)
     loadProcedures(locale)
@@ -117,40 +202,13 @@ function App() {
     setPiiWarning(false)
     setDetail(null)
     setDetailError(false)
-    getProcedure(serviceId, locale).then(setDetail).catch(() => setDetailError(true))
+    request(signal => getProcedure(serviceId, locale, signal)).then(setDetail).catch(error => { if (!isAbort(error)) setDetailError(true) })
   }
 
   const findService = () => {
     if (detectHighRiskPii(query)) { setPiiWarning(true); setMatch(null); return }
     setPiiWarning(false)
     setMatch(matchProcedures(query, procedures ?? []))
-  }
-
-  const startOver = () => {
-    setScreen('welcome')
-    setProcedures(null)
-    setDetail(null)
-    setCatalogueError(false)
-    setDetailError(false)
-    setReadiness(null)
-    setReadinessAnswers({})
-    setReadinessHistory([])
-    setReadinessLoading(false)
-    setReadinessError(false)
-    setQuery('')
-    setMatch(null)
-    setPiiWarning(false)
-    setAgentConsent(false)
-    setAgentInput('')
-    setAgentHistory([])
-    setAgentResponse(null)
-    setAgentLoading(false)
-    setAgentError(false)
-    setAgentPiiWarning(false)
-    setChecklist(null)
-    setFormAssistance(null)
-    setAssistanceLoading(false)
-    setAssistanceError(false)
   }
 
   const openAssistant = () => {
@@ -167,34 +225,35 @@ function App() {
     setAgentLoading(true)
     const current = agentInput.trim()
     try {
-      const response = await assistantTurn({
+      const response = await request(signal => assistantTurn({
         locale,
         message: current,
         history: agentHistory.slice(-4),
         service_id: detail?.service_id ?? null,
         readiness_answers: detail ? readinessAnswers : {},
+        demo_status_id: demo?.current_status_id ?? null,
         consent: true,
-      })
+      }, signal))
       setAgentResponse(response)
       if (response.status !== 'blocked') {
         const nextHistory: ConversationMessage[] = [...agentHistory, { role: 'user', content: current }, { role: 'assistant', content: response.message }]
         setAgentHistory(nextHistory.slice(-6))
         setAgentInput('')
       }
-    } catch { setAgentError(true) }
+    } catch (error) { if (!isAbort(error)) setAgentError(true) }
     finally { setAgentLoading(false) }
   }
 
   const chooseAgentService = async (serviceId: string) => {
     setAgentError(false)
     try {
-      const selected = await getProcedure(serviceId, locale)
+      const selected = await request(signal => getProcedure(serviceId, locale, signal))
       setDetail(selected)
       setReadiness(null)
       setReadinessAnswers({})
       setReadinessHistory([])
       setAgentResponse(previous => previous ? { ...previous, selection: { state: 'selected', service_id: serviceId, choices: [] } } : previous)
-    } catch { setAgentError(true) }
+    } catch (error) { if (!isAbort(error)) setAgentError(true) }
   }
 
   const openChecklist = async (serviceId = detail?.service_id) => {
@@ -203,8 +262,8 @@ function App() {
     setChecklist(null)
     setAssistanceError(false)
     setAssistanceLoading(true)
-    try { setChecklist(await buildChecklist(serviceId, detail?.service_id === serviceId ? readinessAnswers : {}, locale)) }
-    catch { setAssistanceError(true) }
+    try { setChecklist(await request(signal => buildChecklist(serviceId, detail?.service_id === serviceId ? readinessAnswers : {}, locale, signal))) }
+    catch (error) { if (!isAbort(error)) setAssistanceError(true) }
     finally { setAssistanceLoading(false) }
   }
 
@@ -214,8 +273,8 @@ function App() {
     setFormAssistance(null)
     setAssistanceError(false)
     setAssistanceLoading(true)
-    try { setFormAssistance(await prepareSyntheticForm(serviceId, locale, personaId)) }
-    catch { setAssistanceError(true) }
+    try { setFormAssistance(await request(signal => prepareSyntheticForm(serviceId, locale, personaId, signal))) }
+    catch (error) { if (!isAbort(error)) setAssistanceError(true) }
     finally { setAssistanceLoading(false) }
   }
 
@@ -226,21 +285,21 @@ function App() {
     if (actionId === 'prepare-synthetic-form') { await openFormAssistance(serviceId); return }
     if (actionId === 'start-readiness') {
       try {
-        const selected = await getProcedure(serviceId, locale)
+        const selected = await request(signal => getProcedure(serviceId, locale, signal))
         setDetail(selected)
         setReadiness(null)
         setReadinessAnswers({})
         setReadinessHistory([])
         setReadinessError(false)
         setScreen('readiness')
-      } catch { setAgentError(true) }
+      } catch (error) { if (!isAbort(error)) setAgentError(true) }
       return
     }
     if (actionId === 'open-official-service') {
       try {
-        const selected = await getProcedure(serviceId, locale)
+        const selected = await request(signal => getProcedure(serviceId, locale, signal))
         window.open(selected.official_handoff_url, '_blank', 'noopener,noreferrer')
-      } catch { setAgentError(true) }
+      } catch (error) { if (!isAbort(error)) setAgentError(true) }
     }
   }
 
@@ -256,8 +315,8 @@ function App() {
     if (!detail) return null
     setReadinessLoading(true)
     setReadinessError(false)
-    try { return await evaluateReadiness(detail.service_id, answers, locale) }
-    catch { setReadinessError(true); return null }
+    try { return await request(signal => evaluateReadiness(detail.service_id, answers, locale, signal)) }
+    catch (error) { if (!isAbort(error)) setReadinessError(true); return null }
     finally { setReadinessLoading(false) }
   }
 
@@ -280,27 +339,68 @@ function App() {
     if (result) { setReadinessHistory(readinessHistory.slice(0, -1)); setReadinessAnswers(previousAnswers); setReadiness(result) }
   }
 
+  const openDemo = async (serviceId = formAssistance?.service_id ?? checklist?.service_id ?? detail?.service_id) => {
+    if (!serviceId) return
+    setScreen('demo'); setDemo(null); setDemoError(false)
+    if (!formAssistance || formAssistance.service_id !== serviceId) {
+      setDemoLoading(true)
+      try { setFormAssistance(await request(signal => prepareSyntheticForm(serviceId, locale, null, signal))) }
+      catch (error) { if (!isAbort(error)) setDemoError(true) }
+      finally { setDemoLoading(false) }
+    }
+  }
+  const beginDemo = async (scenarioId: DemoScenarioId) => {
+    const serviceId = demo?.service_id ?? formAssistance?.service_id
+    const personaId = demo?.persona_id ?? formAssistance?.persona.persona_id
+    if (!serviceId || !personaId) return
+    setDemoLoading(true); setDemoError(false)
+    try { setDemo(await request(signal => startDemoSubmission(serviceId, personaId, scenarioId, locale, signal))) }
+    catch (error) { if (!isAbort(error)) setDemoError(true) }
+    finally { setDemoLoading(false) }
+  }
+  const advanceDemo = async () => {
+    if (!demo || !demo.can_advance) return
+    const index = demo.statuses.findIndex(item => item.status_id === demo.current_status_id)
+    const next = demo.statuses[index + 1]?.status_id
+    if (!next) return
+    setDemoLoading(true); setDemoError(false)
+    try { setDemo(await request(signal => getDemoStatus(demo, next, locale, signal))) }
+    catch (error) { if (!isAbort(error)) setDemoError(true) }
+    finally { setDemoLoading(false) }
+  }
+
   const language = <LanguageControls locale={locale} onChange={changeLocale} messages={messages} />
   const statusText = availability === 'loading' ? messages.availabilityLoading : availability === 'available' ? messages.availabilityReady : messages.availabilityUnavailable
+  const wrapSession = (content: ReactNode) => <>{content}{screen !== 'welcome' && <>
+    <button className="end-session no-print" type="button" onClick={endSession}>{messages.endSession}</button>
+    <TrustExplanation messages={messages} />
+    {inactivityWarning && <div className="session-warning" role="alertdialog" aria-modal="true" aria-labelledby="session-warning-title">
+      <div><h2 id="session-warning-title">{messages.inactivityTitle}</h2><p>{messages.inactivityBody}</p><button type="button" autoFocus onClick={continueSession}>{messages.continueSession}</button><button className="secondary" type="button" onClick={endSession}>{messages.endSession}</button></div>
+    </div>}
+  </>}</>
 
-  if (screen === 'assistant') return <AssistantGuide messages={messages} language={language} available={agentAvailable} consent={agentConsent} input={agentInput}
+  if (screen === 'assistant') return wrapSession(<AssistantGuide messages={messages} language={language} available={agentAvailable} consent={agentConsent} input={agentInput}
     history={agentHistory} response={agentResponse} loading={agentLoading} error={agentError} piiWarning={agentPiiWarning}
     onConsent={setAgentConsent} onInput={value => { setAgentInput(value); setAgentPiiWarning(false) }} onSubmit={submitAgent}
-    onChooseService={chooseAgentService} onAction={handleAgentAction} onBack={() => setScreen(detail ? 'detail' : 'welcome')} onStartOver={startOver} />
+    onChooseService={chooseAgentService} onAction={handleAgentAction} onBack={() => setScreen(demo ? 'demo' : detail ? 'detail' : 'welcome')} onStartOver={startOver} />)
 
-  if (screen === 'checklist') return <ChecklistView messages={messages} language={language} checklist={checklist} loading={assistanceLoading} error={assistanceError}
-    onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onForm={() => openFormAssistance(checklist?.service_id)} />
+  if (screen === 'checklist') return wrapSession(<ChecklistView messages={messages} language={language} checklist={checklist} loading={assistanceLoading} error={assistanceError}
+    onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onForm={() => openFormAssistance(checklist?.service_id)} onDemo={() => openDemo(checklist?.service_id)} />)
 
-  if (screen === 'form') return <FormAssistanceView messages={messages} language={language} assistance={formAssistance} loading={assistanceLoading} error={assistanceError}
-    onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onSelectPersona={personaId => openFormAssistance(formAssistance?.service_id, personaId)} />
+  if (screen === 'form') return wrapSession(<FormAssistanceView messages={messages} language={language} assistance={formAssistance} loading={assistanceLoading} error={assistanceError}
+    onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onSelectPersona={personaId => openFormAssistance(formAssistance?.service_id, personaId)} onDemo={() => openDemo(formAssistance?.service_id)} />)
 
-  if (screen === 'intake') return <Intake locale={locale} messages={messages} language={language} procedures={procedures} error={catalogueError} query={query} match={match} piiWarning={piiWarning}
+  if (screen === 'demo') return wrapSession(<DemoJourney messages={messages} language={language} journey={demo} loading={demoLoading} error={demoError}
+    onBack={() => setScreen(formAssistance ? 'form' : detail ? 'detail' : 'welcome')} onStartOver={startOver} onBegin={beginDemo} onAdvance={advanceDemo}
+    onSwitch={beginDemo} onAskAi={openAssistant} />)
+
+  if (screen === 'intake') return wrapSession(<Intake locale={locale} messages={messages} language={language} procedures={procedures} error={catalogueError} query={query} match={match} piiWarning={piiWarning}
     onQueryChange={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onFind={findService}
     onExample={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onBrowse={() => setScreen('catalogue')}
     onConfirm={serviceId => { setQuery(''); setMatch(null); setPiiWarning(false); selectProcedure(serviceId) }}
-    onChooseAnother={() => { setMatch(null); setQuery('') }} onStartOver={startOver} />
+    onChooseAnother={() => { setMatch(null); setQuery('') }} onStartOver={startOver} />)
 
-  if (screen === 'catalogue') return <main className="kiosk-shell"><section className="content-card" aria-labelledby="catalogue-title">{language}
+  if (screen === 'catalogue') return wrapSession(<main className="kiosk-shell"><section className="content-card" aria-labelledby="catalogue-title">{language}
     <header className="page-header"><div><p className="eyebrow">{messages.verifiedGuidance}</p><h1 id="catalogue-title">{messages.supportedServices}</h1><p>{messages.chooseService}</p></div><button className="secondary compact" type="button" onClick={startOver}>{messages.startOver}</button></header>
     {catalogueError ? <div className="state-panel error" role="alert"><h2>{messages.loadServicesTitle}</h2><p>{messages.loadServicesBody}</p></div>
       : procedures === null ? <div className="state-panel" role="status" aria-live="polite">{messages.loadingServices}</div>
@@ -308,20 +408,21 @@ function App() {
           : <ul className="service-list">{procedures.map(procedure => <li key={procedure.service_id}><button className="service-card" type="button" onClick={() => selectProcedure(procedure.service_id)}>
             <span><strong>{procedure.title}</strong><small>{procedure.short_description}</small>{procedure.attention_required && <small className="attention-badge">{messages.feeNeedsConfirmation}</small>}</span><span aria-hidden="true">→</span>
           </button></li>)}</ul>}
-  </section></main>
+  </section></main>)
 
-  if (screen === 'detail') return <main className="kiosk-shell"><section className="content-card detail-page" aria-live="polite">{language}
+  if (screen === 'detail') return wrapSession(<main className="kiosk-shell"><section className="content-card detail-page" aria-live="polite">{language}
     <nav className="page-actions" aria-label={messages.procedureNavigation}><button className="secondary compact" type="button" onClick={() => setScreen('catalogue')}>{messages.back}</button><button className="secondary compact" type="button" onClick={startOver}>{messages.startOver}</button></nav>
     {detailError ? <div className="state-panel error" role="alert"><h1>{messages.procedureUnavailable}</h1><p>{messages.procedureUnavailableBody}</p></div>
       : detail === null ? <div className="state-panel" role="status">{messages.loadingProcedure}</div>
         : <ProcedureOverview procedure={detail} locale={locale} messages={messages} onStartReadiness={openReadiness} onAskAi={openAssistant} onChecklist={() => openChecklist()} onForm={() => openFormAssistance()} />}
-  </section></main>
+  </section></main>)
 
-  if (screen === 'readiness' && detail) return <ReadinessFlow key={readiness?.complete ? readiness.outcome?.outcome_id : readiness?.next_question?.question_id ?? `introduction-${locale}`}
+  if (screen === 'readiness' && detail) return wrapSession(<ReadinessFlow key={readiness?.complete ? readiness.outcome?.outcome_id : readiness?.next_question?.question_id ?? `introduction-${locale}`}
     response={readiness} loading={readinessLoading} error={readinessError} locale={locale} messages={messages} language={language}
-    onBegin={beginReadiness} onAnswer={answerReadiness} onBack={backReadiness} onStartOver={startOver} onChecklist={() => openChecklist()} onForm={() => openFormAssistance()} />
+    onBegin={beginReadiness} onAnswer={answerReadiness} onBack={backReadiness} onStartOver={startOver} onChecklist={() => openChecklist()} onForm={() => openFormAssistance()} />)
 
   return <main className="kiosk-shell"><section className="welcome-card" aria-labelledby="sahayi-title">{language}
+    {sessionNotice && <p className="session-cleared" role="status" aria-live="polite">{sessionNotice === 'ended' ? messages.sessionCleared : messages.inactivityCleared}</p>}
     <p className="eyebrow">{messages.prototype}</p><div className="mark" aria-hidden="true">S</div>
     <h1 id="sahayi-title">{name}</h1><p className="tagline">{messages.tagline}</p>
     <p className={`availability ${availability}`} role="status" aria-live="polite"><span className="status-dot" aria-hidden="true" />{statusText}</p>
@@ -363,7 +464,7 @@ function ProcedureOverview({ procedure, locale, messages, onStartReadiness, onAs
     <p className="eyebrow">{procedure.category_label}</p><h1 id="procedure-title">{procedure.title}</h1><p className="lead">{procedure.short_description}</p>
     {procedure.trust_state === 'stale' && <div className="stale-warning" role="alert"><strong>{messages.staleTitle}</strong> {messages.staleBody}</div>}
     <section className={`trust-card ${procedure.trust_state}`} aria-labelledby="trust-title"><div><p className="overline">{messages.trustProvenance}</p><h2 id="trust-title">{messages.verifiedOfficial}</h2></div>
-      <dl><div><dt>{messages.officialPublisher}</dt><dd>{procedure.official_publisher}</dd></div><div><dt>{messages.packVersion}</dt><dd>{procedure.pack_version}</dd></div><div><dt>{messages.verified}</dt><dd>{formatDate(procedure.last_verified_at, locale)}</dd></div><div><dt>{messages.freshness}</dt><dd>{procedure.trust_state === 'current' ? messages.current : messages.stale}</dd></div></dl>
+      <dl><div><dt>{messages.officialPublisher}</dt><dd>{procedure.official_publisher}</dd></div><div><dt>{messages.packVersion}</dt><dd>{procedure.pack_version}</dd></div><div><dt>{messages.verified}</dt><dd>{formatDate(procedure.last_verified_at, locale)}</dd></div><div><dt>{messages.nextReview}</dt><dd>{formatDate(procedure.review_due_at, locale)}</dd></div><div><dt>{messages.freshness}</dt><dd>{procedure.trust_state === 'current' ? messages.current : messages.stale}</dd></div><div><dt>{messages.monitoringPrototype}</dt><dd>{procedure.monitoring.prototype_available ? messages.oneShotReview : messages.notAvailable}</dd></div><div><dt>{messages.humanReview}</dt><dd>{messages.required}</dd></div></dl>
       <div><h3>{messages.officialSources}</h3><ul className="source-list">{procedure.sources.map(source => <li key={source.source_id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} <span aria-hidden="true">↗</span></a></li>)}</ul></div>
     </section>
     <p className="disclaimer"><strong>{messages.guidanceOnly}</strong> {messages.governmentDisclaimer}</p>
@@ -453,8 +554,8 @@ function AssistantGuide({ messages, language, available, consent, input, history
   </section></main>
 }
 
-function ChecklistView({ messages, language, checklist, loading, error, onBack, onStartOver, onForm }: {
-  messages: Messages; language: React.ReactNode; checklist: PersonalizedChecklist | null; loading: boolean; error: boolean; onBack: () => void; onStartOver: () => void; onForm: () => void
+function ChecklistView({ messages, language, checklist, loading, error, onBack, onStartOver, onForm, onDemo }: {
+  messages: Messages; language: React.ReactNode; checklist: PersonalizedChecklist | null; loading: boolean; error: boolean; onBack: () => void; onStartOver: () => void; onForm: () => void; onDemo: () => void
 }) {
   const sources = new Map((checklist?.sources ?? []).map(source => [source.source_id, source]))
   const citedItems = (items: Array<{ item_id: string; text: string; source_ids: string[] }>) => <ul className="checklist-items">{items.map(item => <li key={item.item_id}><p>{item.text}</p><SourceReferences ids={item.source_ids} sources={sources} messages={messages} /></li>)}</ul>
@@ -468,13 +569,13 @@ function ChecklistView({ messages, language, checklist, loading, error, onBack, 
       <section><h2>{messages.confirmSection}</h2>{citedItems(checklist.confirm)}</section><section><h2>{messages.steps}</h2>{citedItems(checklist.steps)}</section>
       <section><h2>{messages.warningsSection}</h2>{citedItems(checklist.warnings)}</section><section><h2>{messages.whereSection}</h2>{citedItems(checklist.where)}</section>
       <section><h2>{messages.notVerifiedSection}</h2>{citedItems(checklist.not_verified)}</section><p className="result-disclaimer">{checklist.disclaimer}</p>
-      <div className="assistance-actions no-print"><button type="button" onClick={() => window.print()}>{messages.print}</button><button type="button" className="secondary" onClick={onForm}>{messages.syntheticForm}</button></div>
+      <div className="assistance-actions no-print"><button type="button" onClick={() => window.print()}>{messages.print}</button><button type="button" className="secondary" onClick={onForm}>{messages.syntheticForm}</button><button type="button" className="secondary" onClick={onDemo}>{messages.continueDemo}</button></div>
     </>}
   </section></main>
 }
 
-function FormAssistanceView({ messages, language, assistance, loading, error, onBack, onStartOver, onSelectPersona }: {
-  messages: Messages; language: React.ReactNode; assistance: SyntheticFormAssistance | null; loading: boolean; error: boolean; onBack: () => void; onStartOver: () => void; onSelectPersona: (personaId: string) => void
+function FormAssistanceView({ messages, language, assistance, loading, error, onBack, onStartOver, onSelectPersona, onDemo }: {
+  messages: Messages; language: React.ReactNode; assistance: SyntheticFormAssistance | null; loading: boolean; error: boolean; onBack: () => void; onStartOver: () => void; onSelectPersona: (personaId: string) => void; onDemo: () => void
 }) {
   const sources = new Map((assistance?.sources ?? []).map(source => [source.source_id, source]))
   return <main className="kiosk-shell"><section className="content-card printable" aria-labelledby="form-title">{language}
@@ -483,7 +584,34 @@ function FormAssistanceView({ messages, language, assistance, loading, error, on
       <p className="watermark" role="note">{assistance.watermark}</p><p className="eyebrow">{messages.worksheetTitle}</p><h1 id="form-title">{assistance.title}</h1><label className="persona-choice" htmlFor="persona-select">{messages.sampleCitizen}</label><select id="persona-select" value={assistance.persona.persona_id} onChange={event => onSelectPersona(event.target.value)}>{assistance.available_personas.map(persona => <option value={persona.persona_id} key={persona.persona_id}>{persona.display_name}</option>)}</select>
       <p className="privacy-callout"><strong>{messages.privacyNotice}:</strong> {assistance.privacy_notice}</p>
       <dl className="worksheet-fields">{assistance.fields.map(field => <div key={field.field_id}><dt>{field.label}</dt><dd><p>{field.explanation}</p><p><strong>{field.value === null ? messages.privateValue : messages.demoValue}:</strong> {field.value ?? '—'}</p><p><strong>{messages.sourceStatus}:</strong> {field.status === 'verified_official_form' ? messages.verifiedOfficialForm : messages.preparationOnly}</p><SourceReferences ids={field.source_ids} sources={sources} messages={messages} /></dd></div>)}</dl>
-      <p className="result-disclaimer">{assistance.disclaimer}</p><div className="assistance-actions no-print"><button type="button" onClick={() => window.print()}>{messages.print}</button></div>
+      <p className="result-disclaimer">{assistance.disclaimer}</p><div className="assistance-actions no-print"><button type="button" onClick={() => window.print()}>{messages.print}</button><button type="button" onClick={onDemo}>{messages.continueDemo}</button></div>
+    </>}
+  </section></main>
+}
+
+function DemoJourney({ messages, language, journey, loading, error, onBack, onStartOver, onBegin, onAdvance, onSwitch, onAskAi }: {
+  messages: Messages; language: ReactNode; journey: DemoJourneyResponse | null; loading: boolean; error: boolean
+  onBack: () => void; onStartOver: () => void; onBegin: (scenario: DemoScenarioId) => void; onAdvance: () => void; onSwitch: (scenario: DemoScenarioId) => void; onAskAi: () => void
+}) {
+  const currentRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => { if (journey) currentRef.current?.focus() }, [journey])
+  return <main className="kiosk-shell"><section className="content-card demo-page" aria-labelledby="demo-title">{language}
+    <nav className="page-actions" aria-label={messages.demoNavigation}><button className="secondary compact" type="button" onClick={onBack}>{messages.back}</button><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
+    <p className="eyebrow">{messages.syntheticSimulation}</p><h1 id="demo-title">{messages.demoSubmission}</h1>
+    {!journey ? <section className="disclosure-card" aria-labelledby="demo-disclosure-title"><h2 id="demo-disclosure-title">{messages.beforeDemo}</h2>
+      <ul><li>{messages.noApplicationSubmitted}</li><li>{messages.noGovernmentContact}</li><li>{messages.onlySyntheticData}</li><li>{messages.demoClears}</li></ul>
+      {error && <p className="inline-error" role="alert">{messages.demoError}</p>}
+      <div className="assistance-actions"><button type="button" disabled={loading} onClick={() => onBegin('normal-completion')}>{messages.normalScenario}</button><button className="secondary" type="button" disabled={loading} onClick={() => onBegin('action-required')}>{messages.actionScenario}</button></div>
+    </section> : <>
+      <p className="demo-reference"><strong>{messages.syntheticReference}:</strong> <code>{journey.demo_reference}</code></p>
+      <p className="result-disclaimer">{journey.disclosure}</p>
+      <div className="scenario-controls"><span>{messages.switchScenario}</span><button type="button" className="secondary compact" disabled={loading || journey.scenario_id === 'normal-completion'} onClick={() => onSwitch('normal-completion')}>{messages.normalScenario}</button><button type="button" className="secondary compact" disabled={loading || journey.scenario_id === 'action-required'} onClick={() => onSwitch('action-required')}>{messages.actionScenario}</button></div>
+      <ol className="demo-timeline" aria-label={messages.simulatedStatus} aria-live="polite">{journey.statuses.map(item => <li key={item.status_id} className={item.state} aria-current={item.state === 'current' ? 'step' : undefined}>
+        <span className="status-marker" aria-hidden="true" /><div><p className="status-state">{item.state === 'complete' ? messages.complete : item.state === 'current' ? messages.currentStatus : messages.upcoming}</p><h2 ref={item.state === 'current' ? currentRef : undefined} tabIndex={item.state === 'current' ? -1 : undefined}>{item.title}</h2><p>{item.explanation}</p><p><strong>{item.simulated_time_label}</strong></p><p>{item.next_action}</p>{item.source_ids.length > 0 && <small className="source-references"><strong>{messages.relatedReferences}:</strong> {item.source_ids.join(', ')}</small>}</div>
+      </li>)}</ol>
+      {error && <p className="inline-error" role="alert">{messages.demoError}</p>}
+      <div className="assistance-actions"><button type="button" disabled={loading || !journey.can_advance} onClick={onAdvance}>{loading ? messages.checking : journey.can_advance ? messages.advanceDemo : messages.demoComplete}</button><button className="secondary" type="button" onClick={onAskAi}>{messages.askAiStatus}</button></div>
+      <p className="result-disclaimer">{journey.disclaimer}</p>
     </>}
   </section></main>
 }
