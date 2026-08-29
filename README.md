@@ -1,48 +1,179 @@
 # Sahayi
 
-Sahayi is a privacy-first local kiosk prototype for making government services easier to understand in English, Hindi, and Malayalam. Its deterministic journey includes a browser-only service finder with a compact trained on-device intent classifier, verified procedures, closed-choice readiness, source-linked personalized checklists, synthetic preparation worksheets, and a clearly non-government demo submission/status timeline. An optional consent-gated AI guide can choose among seven verified local tools; it is disabled by default and never becomes the source of procedure facts.
+Sahayi is a privacy-first, multilingual guide that helps citizens understand verified government-service procedures without starting from department names or exposing their service-search text to a server.
 
-English is the canonical verified guidance. Hindi and Malayalam are machine-assisted prototype translations of that already-validated content, require native-speaker and legal review before production use, and defer to the linked official source wording. Sahayi uses no runtime translation API, external translation resource, or external font.
+**Public demo:** [https://sahayi.onrender.com](https://sahayi.onrender.com)
 
-The hackathon deliverable will be a hosted web demonstration of the intended kiosk experience. Project context and implementation decisions are in [`.ai/`](.ai/PROJECT_CONTEXT.md).
+The public URL still serves the older deployed release. It will be updated only after this release candidate passes hosted verification; preparing this branch does not deploy it.
 
-## Prerequisites
+## Why Sahayi
 
-- Python 3.14+
-- Node.js 20.19+ (or 22.12+) and npm
+Government portals often assume that a person already knows the responsible department, scheme name, and correct channel. Sahayi starts with the citizen's need, proposes a supported service locally, asks for confirmation, and then presents a source-linked, step-by-step journey. It is designed for citizens and assisted-kiosk operators who need plain guidance in English, Hindi, or Malayalam.
 
-## Setup
+This release supports exactly two services:
 
-Create and activate a virtual environment, then run `python -m pip install -e '.[test]'`. Install frontend packages with `cd frontend && npm install`.
+- UIDAI Aadhaar address update
+- Kerala Indira Gandhi National Old Age Pension preliminary guidance
 
-Copy `.env.example` to `.env` only when configuration is needed. The complete deterministic application requires no OpenAI key. For an intentionally enabled local AI test, keep `OPENAI_API_KEY` server-only and set `SAHAYI_AGENT_ENABLED=true`; never place a real key in source or Git.
+English is the canonical verified guidance. Hindi and Malayalam are machine-assisted prototype translations that require native-speaker and legal review; linked official wording prevails.
 
-## Development
+## Citizen journey
 
-Start FastAPI with `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --reload`. Start Vite with `cd frontend && npm run dev`. Open `http://127.0.0.1:5173`; it calls `http://127.0.0.1:8000/api/v1` during development.
+1. Choose English, Hindi, or Malayalam and describe the need, or browse both services.
+2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. The text is not sent online for this finder action.
+3. Confirm the proposed service before opening it.
+4. Review provenance, freshness, conflicts, requirements, documents, fees, steps, and official links.
+5. Answer bounded closed-choice readiness questions to receive deterministic guidance and a personalized checklist.
+6. Optionally explore a watermarked fictional worksheet and simulated submission/status journey, or explicitly consent to the separately gated cloud assistant when it is configured.
+7. Select **End session** at any time; inactivity expiry uses the same in-memory clearing boundary.
 
-## Testing and production build
+## Architecture
 
-Run `python -m pytest`, then `cd frontend && npm run typecheck && npm test && npm run build`, and finally `git diff --check`.
+```mermaid
+flowchart LR
+    C[Citizen browser] --> L[Local phrase matcher + Naive Bayes model]
+    L -->|confirmed service ID only| UI[React journey]
+    UI -->|same-origin, no-store JSON| API[FastAPI]
+    API --> P[Validated Procedure Packs]
+    P --> R[Deterministic readiness, checklist, worksheet, simulation]
+    UI -. explicit consent + bounded text .-> A[Optional OpenAI assistant]
+    A -->|strict tool calls| R
+    M[Offline one-shot source monitor] -. review metadata only .-> P
+```
 
-The local intent model uses no runtime ML dependency. Reproduce its canonical artifact/report with `python -m tools.intent_model --write`, check dataset/model digest and regeneration drift with `python -m tools.intent_model --check`, and inspect held-out synthetic metrics with `python -m tools.intent_model --evaluate`. See the [model card](docs/intent-model-card.md) for labels, provenance, metrics, privacy, ensemble behavior, retraining, and native-review limitations.
+The production image builds React with Vite and serves the compiled files and `/api/v1` API from one unprivileged FastAPI container. There is no citizen database or durable server session.
 
-Validate procedure packs with `.venv/bin/python -m sahayi_api.procedure_tool validate`. Check generated-schema drift with `.venv/bin/python -m sahayi_api.procedure_tool check-schema`; regenerate it only after an intentional contract change with `.venv/bin/python -m sahayi_api.procedure_tool export-schema`.
+## Feature status
 
-Run the source-change demonstration with `.venv/bin/python -m sahayi_api.procedure_tool monitor` (offline fixture mode is the default). It intentionally demonstrates unchanged, quarantined change, and unreachable cases, so it exits non-zero. Live retrieval is not used by the hosted app and requires the explicit one-shot pair `--live --acknowledge-live-public-source-check`; it is restricted to active-pack allowlists and cannot update a pack. Production scheduling would require separate authorization and operational controls. Review reports contain bounded metadata, never full source content or citizen data.
+| Area | Status | Boundary |
+| --- | --- | --- |
+| Local service finder, multilingual catalogue, procedures, readiness, checklist, End Session and inactivity clearing | Fully working and deterministic | Browser-local matching plus validated server-side rules; no AI decides facts or outcomes |
+| Procedure Pack provenance, version selection, freshness, fee-conflict display and schema validation | Fully working and deterministic | Active packs fail closed; reviewed facts remain source-linked |
+| Optional “Ask Sahayi AI” guidance | Consent-gated cloud feature; disabled without both flag and server key | OpenAI may guide tool order/prose, while Sahayi reconstructs facts and actions from deterministic results |
+| Form preparation and application/status journey | Synthetic/demo-only | Fixed fictional personas, blank private fields and obvious `DEMO-...` references; no government contact |
+| Live submission, real status, OTP/payment, DigiLocker, voice, certified translation and continuous monitoring | Planned or out of prototype scope | No integration or production claim |
 
-After `npm run build`, run `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000` and open `http://127.0.0.1:8000` for the same-origin production-style build.
+## Local matching ensemble
+
+The browser first runs a reproducible locale-specific phrase scorer over the active catalogue. It also runs a bundled character 2–5-gram Multinomial Naive Bayes classifier trained offline with Python's standard library on 81 owned synthetic examples. TypeScript inference is synchronous and dependency-free: no browser LLM, WebGPU, WASM, runtime model download, generation, or network request.
+
+Agreement can propose the shared allowlisted service; one-sided confidence still requires confirmation; disagreement becomes a choice; unsupported or dual abstention never claims a service. An invalid artifact silently falls back to the phrase matcher. The model cannot change eligibility, readiness, fees, sources, or Procedure Packs. See the [model card](docs/intent-model-card.md) for digests and the synthetic-only evaluation caveat.
+
+## Procedure Packs and trust
+
+Versioned JSON [Procedure Packs](procedure-packs/README.md) hold facts, localized text, deterministic readiness rules, citations, review dates, and lifecycle state. Strict Pydantic validation permits one active version per service, excludes draft/superseded packs, checks every reference and translation key, and produces a canonical SHA-256 digest. Response-time freshness uses `review_due_at`; stale guidance is labeled rather than silently treated as current.
+
+Conflicting official claims are preserved independently with their sources. Sahayi does not pick an unsupported winner: the current UIDAI fee conflict remains visible, and the Kerala pension amount is omitted pending authoritative resolution. Offline administrative monitoring is a one-shot, human-reviewed comparison tool; it is not a hosted route, continuous crawler, or automatic fact updater.
+
+## Privacy and safety boundary
+
+Finder text, match results, language, readiness state, checklist, worksheet, demo status, consent, and conversation stay in React memory except for the bounded data deliberately sent in current API requests. Sahayi adds no cookies, browser storage, service worker, analytics, telemetry, citizen database, or answer/body logging. API responses use `Cache-Control: no-store`.
+
+The optional assistant requires affirmative consent and sends only a bounded, PII-screened request. Its server-only key, prompts, provider output, and tool arguments are not exposed to the browser. `store: false` is requested, but Sahayi makes no Zero Data Retention claim and cannot control browser, network, hosting, or provider retention outside its boundary. See [Privacy and safety](docs/privacy-boundary.md).
+
+## Local development
+
+Verified release runtimes are Python 3.14.7 and Node.js 25.2.1.
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[test]'
+cd frontend
+npm ci
+```
+
+Run the backend and frontend in separate shells:
+
+```bash
+. .venv/bin/activate
+uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The default development configuration uses `http://127.0.0.1:8000/api/v1`.
+
+## Verification
+
+```bash
+# Complete backend and offline-agent suite
+.venv/bin/python -m pytest
+.venv/bin/python -m pytest tests/test_agent_evals.py
+
+# Frontend lint, types, tests and production build
+cd frontend
+npm run lint
+npm run typecheck
+npm test
+npm run build
+cd ..
+
+# Model and Procedure Pack integrity/drift
+.venv/bin/python -m tools.intent_model --check
+.venv/bin/python -m tools.intent_model --evaluate
+.venv/bin/python -m sahayi_api.procedure_tool validate
+.venv/bin/python -m sahayi_api.procedure_tool check-schema
+
+# Dependency and patch checks
+.venv/bin/python -m pip check
+.venv/bin/pip-audit --skip-editable
+cd frontend && npm audit && cd ..
+git diff --check
+```
+
+Canonical model regeneration is `python -m tools.intent_model --write`; use it only for an intentional reviewed model change. Schema regeneration is `python -m sahayi_api.procedure_tool export-schema`; use it only for an intentional contract change.
+
+Build and run the same-origin container:
+
+```bash
+docker build --no-cache -t sahayi:release-candidate .
+docker run --rm --name sahayi-rc -p 10000:10000 sahayi:release-candidate
+curl -fsS http://127.0.0.1:10000/api/v1/health
+```
+
+The Docker image must run as UID/GID 10001, serve hashed frontend assets, include the active Procedure Packs and compiled local model, and return `Cache-Control: no-store` on important API responses.
+
+## Configuration
+
+Copy `.env.example` to an ignored `.env` only for local configuration. Deterministic Sahayi needs no secret.
+
+| Variable | Purpose |
+| --- | --- |
+| `SAHAYI_DEV_FRONTEND_ORIGIN` | Exact permitted Vite development origin |
+| `VITE_API_BASE_URL` | Development-only frontend API base |
+| `SAHAYI_KIOSK_INACTIVITY_SECONDS`, `SAHAYI_KIOSK_WARNING_SECONDS` | Bounded public inactivity/warning durations |
+| `OPENAI_API_KEY` | Optional server-only secret; use a secret manager, never frontend code or Git |
+| `SAHAYI_AGENT_ENABLED` | Explicit optional-agent feature flag; defaults to false |
+| `SAHAYI_AGENT_MODEL` | Fixed allowlisted model name |
+| `SAHAYI_AGENT_TIMEOUT_SECONDS`, `SAHAYI_AGENT_MAX_OUTPUT_TOKENS` | Bounded provider timeout/output controls |
+| `SAHAYI_AGENT_MAX_TOOL_CALLS`, `SAHAYI_AGENT_MAX_ROUNDS` | Bounded tool-loop controls |
+| `SAHAYI_AGENT_CONCURRENCY`, `SAHAYI_AGENT_REQUEST_BUDGET` | Process-local concurrency/request limits |
+| `SAHAYI_AGENT_RATE_LIMIT`, `SAHAYI_AGENT_RATE_WINDOW_SECONDS` | Process-local rate window controls |
 
 ## Render deployment
 
-`Dockerfile` builds the Vite frontend and serves it with FastAPI as one same-origin, non-root container. `render.yaml` defines one free Render Docker Web Service from `feat/sahayi-deployment`, with `/api/v1/health` and manual deploys. In Render, create a Blueprint from this repository and branch, review the single service, deploy it, and complete the post-deployment checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). No live URL is committed.
+`render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `OPENAI_API_KEY` prompt (`sync: false`), and disabled agent flag. The current service still tracks the older `feat/sahayi-deployment` release. After this candidate is reviewed, promotion requires an explicit branch decision, a manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). This repository task does not deploy or alter the public service.
 
-Sahayi is a hackathon prototype, not an official government service. It does not submit real applications, collect OTPs or payments, or integrate with government systems.
+## Known limitations and disclaimers
 
-## Optional AI and synthetic assistance
+- Sahayi is a hackathon prototype, not a government service and not affiliated with or endorsed by UIDAI, the Government of Kerala, or any department.
+- Guidance is not legal advice, an eligibility decision, approval, or application submission. Always confirm with the linked official service.
+- Only two services are supported. There is no real government form submission, OTP/payment handling, status lookup, or application tracking.
+- Model evaluation uses a tiny fixed synthetic dataset; it is not evidence of verified real-world accuracy, fairness, or production readiness.
+- Hindi/Malayalam dataset phrases and UI/procedure translations still need native-speaker and legal review; they are not certified translations.
+- The reviewed UIDAI sources disagree on the applicable update fee, so Sahayi shows the conflict. The Kerala pension amount is deliberately omitted.
+- Source monitoring is offline, one-shot, and human-reviewed—not continuous. There is no production, universal retention, or Zero Data Retention claim.
 
-“Ask Sahayi AI” requires a localized disclosure and affirmative memory-only consent. Sanitized bounded turns may then be processed by OpenAI using the Responses API with `gpt-5.6-luna`, low reasoning, strict local functions, `store: false`, no streaming, and explicit cost bounds. `store: false` is not represented as a Zero Data Retention guarantee. Missing configuration, privacy blocks, provider failures, malformed output, rate limits, or exhausted budgets return citizens to deterministic guidance. The dependency-free process-local limiter is a prototype control, not distributed production abuse protection.
+## Technology and official sources
 
-Form assistance and demo submission/status use bundled fictional DEMO personas only. The worksheet is prominently watermarked, and the deterministic status timeline uses only obvious `DEMO-...` references. Sahayi never fills a live site, generates a server file, contacts a government system, submits or tracks an application, or accepts citizen free-text PII for the demo.
+Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, a standard-library Naive Bayes trainer, and an optional OpenAI Responses API integration. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
 
-The persistent End session control aborts frontend requests and clears all Sahayi citizen workflow state from memory. The same clearing boundary runs after a localized inactivity warning (five-minute default). It does not claim control over browser, network, or optional provider retention outside Sahayi. No cookies or browser storage are used. Voice remains unimplemented.
+Deeper documentation: [architecture](docs/architecture.md), [privacy and safety](docs/privacy-boundary.md), [Procedure Packs](procedure-packs/README.md), [on-device model](docs/intent-model-card.md), and [deployment](.ai/DEPLOYMENT.md).
+
+## Built with Codex
+
+Codex assisted with repository analysis, implementation, tests, documentation, and release verification. It is a development tool, not a runtime dependency and not a source of citizen-facing procedure facts.

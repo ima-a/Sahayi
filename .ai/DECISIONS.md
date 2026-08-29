@@ -47,6 +47,7 @@
 | 2026-08-29 | Add a dependency-free character n-gram Multinomial Naive Bayes intent classifier | A 167 KiB deterministic trained artifact improves native-script, transliteration and spelling coverage without a browser LLM, runtime dependency, model download, generation, or network call. |
 | 2026-08-29 | Ensemble local ML with the existing pack-phrase matcher behind PII and confirmation gates | Agreement and one-sided confidence may propose only allowlisted catalogue services; disagreement, unsupported, abstention and artifact failure fail safely without changing procedure facts or readiness decisions. |
 | 2026-08-29 | Train only on owned synthetic examples and reserve validation/test roles | Fixed balanced splits, canonical generation, digests, native-review markers, validation-only threshold tuning and candid synthetic metrics make limitations and retraining drift reviewable. |
+| 2026-08-29 | Prepare the submission as a dedicated release branch from the complete linear feature chain | Keeps candidate review and verification isolated while `main`, the deployment branch, and the public service remain unchanged until separate authorization. |
 
 ## Official HTTPX documentation basis
 

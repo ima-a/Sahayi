@@ -7,6 +7,8 @@
 !src/
 !src/sahayi_api/
 !src/sahayi_api/*.py
+!src/sahayi_api/fixtures/
+!src/sahayi_api/fixtures/*.json
 
 !frontend/
 !frontend/package.json

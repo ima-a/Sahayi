@@ -1,14 +1,14 @@
 # Deployment
 
-Sahayi is configured for one Render Docker Web Service. No live service or URL is created by the repository change. The hosted experience remains a hackathon prototype, not an official government service. It does not submit applications, receive OTPs or payments, authenticate citizens, or integrate with a government system.
+Sahayi is configured for one Render Docker Web Service at https://sahayi.onrender.com. The public URL currently serves the older deployed release and must not be updated until the release candidate passes a separately authorized hosted verification. The hosted experience is a hackathon prototype, not an official government service. It does not submit applications, receive OTPs or payments, authenticate citizens, or integrate with a government system.
 
 ## Architecture and runtime
 
-`render.yaml` selects the `feat/sahayi-deployment` branch, the Docker runtime, the free plan, and `/api/v1/health` as the HTTP health check. Automatic service deploys are off: this repository has no CI, so the owner must manually deploy only a commit that has passed the complete release gates. Blueprint syncing is a separate Render setting and should also remain manual after initial creation.
+`render.yaml` still selects the older `feat/sahayi-deployment` branch, the Docker runtime, the free plan, and `/api/v1/health` as the HTTP health check. `main` and that deployment branch remain at the older release while `release/sahayi-submission-2026-08-29` is reviewed. Automatic service deploys are off: this repository has no CI, so the owner must manually deploy only a commit that has passed the complete local release gates. Blueprint syncing is a separate Render setting and remains manual.
 
 The multi-stage `Dockerfile` uses the project's verified Python 3.14.7 and Node 25.2.1 versions. The Node stage runs `npm ci` and the existing Vite build. The Python stage installs only the project's runtime dependencies. The final image contains the installed backend under `/app/src`, the compiled frontend under `/app/frontend/dist`, and active Procedure Packs under `/app/procedure-packs/packs`; this preserves the application's `__file__`-relative paths without depending on the process working directory. It runs as an unprivileged user and starts one Uvicorn process on `0.0.0.0`, using Render's `PORT` or local fallback `10000`.
 
-The `.dockerignore` is an allowlist for only the Dockerfile, manifests, backend package, frontend build inputs, and Procedure Packs. It excludes Git data, environment files, local virtual environments, dependency directories, caches, tests, documentation, and local build outputs from the build context. No database, disk, worker, cron job, continuous source monitoring, government-source retrieval, or analytics is configured. Procedure Intelligence remains a one-shot administrative CLI that would require separately authorized scheduling and human approval in any production operating model. The Blueprint declares an unsynchronized `OPENAI_API_KEY` secret prompt and leaves `SAHAYI_AGENT_ENABLED=false`, so deterministic deployment remains complete and AI remains unavailable until deliberately configured.
+The `.dockerignore` is an allowlist for only the Dockerfile, manifests, backend package and packaged monitoring fixture, frontend build inputs, on-device model artifact, and Procedure Packs. It excludes Git data, environment files, local virtual environments, dependency directories, caches, tests, documentation, datasets/evaluation reports, and local build outputs from the build context. No database, disk, worker, cron job, continuous source monitoring, government-source retrieval, or analytics is configured. Procedure Intelligence remains a one-shot administrative CLI that would require separately authorized scheduling and human approval in any production operating model. The Blueprint declares an unsynchronized `OPENAI_API_KEY` secret prompt and leaves `SAHAYI_AGENT_ENABLED=false`, so deterministic deployment remains complete and AI remains unavailable until deliberately configured.
 
 ## Official Render documentation
 
@@ -23,20 +23,20 @@ Retrieved 2026-08-28:
 - [Deploy for Free](https://render.com/docs/free)
 - [Rollbacks](https://render.com/docs/rollbacks)
 
-## Dashboard setup
+## Candidate promotion and dashboard operation
 
-1. Sign in to Render, choose **New > Blueprint**, connect the Git provider, and select this repository.
-2. Set the Blueprint branch to `feat/sahayi-deployment` and keep the default Blueprint path `render.yaml`.
-3. Review the proposed single `sahayi` Docker Web Service. Confirm there is no database, disk, worker, or cron job. Leave the prompted `OPENAI_API_KEY` unset and `SAHAYI_AGENT_ENABLED=false` for deterministic-only deployment.
-4. Click **Deploy Blueprint**. After creation, set the Blueprint's **Auto Sync** to **No** and confirm the service's **Auto-Deploy** setting is **Off**.
-5. Open the service and use **Manual Deploy > Deploy latest commit**. Watch the Docker build, startup log, and `/api/v1/health` result. Render supplies HTTPS and the service URL; do not record a URL until Render creates it.
-6. The free service spins down after 15 minutes without inbound traffic and can take about one minute to wake. Upgrade the service plan in the dashboard if the demo must avoid this delay.
+1. Confirm the candidate branch commit, clean worktree, remote equality, `0/0` divergence, full local gates, secret/PII audit, and container/browser results.
+2. In a separate explicitly authorized task, review how the verified candidate will advance `feat/sahayi-deployment`; do not silently change `render.yaml`, merge, or force-push. Keep `main` promotion separately authorized.
+3. In Render, confirm the existing `sahayi` service still has no database, disk, worker, or cron job, Blueprint Auto Sync is **No**, and service Auto-Deploy is **Off**.
+4. Leave `OPENAI_API_KEY` unset and `SAHAYI_AGENT_ENABLED=false` for deterministic-only deployment unless optional cloud processing has received separate security, retention, budget, and product approval.
+5. Use a manual deploy only after the service is pointed at the explicitly approved verified commit. Watch the build/startup log and `/api/v1/health`; then run every hosted check below before saying the public URL is updated.
+6. The free service may spin down and need a cold start. Treat availability/plan changes as an operator decision, not a code claim.
 
 To enable the optional agent later, the owner must create a restricted OpenAI project key in Render's secret manager, set project spend/rate limits and review retention controls, then set `SAHAYI_AGENT_ENABLED=true` and manually deploy a verified commit. Never put the key in Blueprint YAML, public config, frontend variables, logs, chat, or Git. The process-local limiter and budget reduce demo cost but are not distributed production abuse protection. A native-language review and a separately authorized non-billable/live evaluation plan are still required before representing AI mode as production-ready.
 
 ## Post-deployment checks
 
-Using the Render-created HTTPS URL, verify `/`, a hashed `/assets/` resource, `/api/v1/health`, public config, catalogue, both procedure details, readiness, checklist, synthetic form, demo submission/status, End session, and disabled-agent fallback endpoints. Confirm API responses retain `Cache-Control: no-store`, the Aadhaar fee remains an unresolved ₹50/₹75 conflict, Kerala displays no canonical pension amount or approval, the synthetic watermark/private blanks and non-government demo disclosure are visible, inactivity clearing works, trust copy says monitoring is one-shot/human-reviewed rather than continuous, official-source limitations remain visible, and the page identifies itself as a hackathon prototype rather than a government service. If AI is separately enabled, additionally verify consent, multilingual blocked-input behavior, generic provider fallback, and deterministic action/source/status reconstruction without making unsupported product claims.
+Using https://sahayi.onrender.com, verify `/`, a hashed `/assets/` resource, `/api/v1/health`, public config, catalogue, both procedure details, readiness, checklist, synthetic form, demo submission/status, End session, and disabled-agent fallback endpoints. Confirm API responses retain `Cache-Control: no-store`, the Aadhaar fee remains an unresolved ₹50/₹75 conflict, Kerala displays no canonical pension amount or approval, the synthetic watermark/private blanks and non-government demo disclosure are visible, inactivity clearing works, trust copy says monitoring is one-shot/human-reviewed rather than continuous, official-source limitations remain visible, and the page identifies itself as a hackathon prototype rather than a government service. Repeat the established 360/390/768/1280 English/Hindi/Malayalam graphical smoke checks. If AI is separately enabled, additionally verify consent, multilingual blocked-input behavior, generic provider fallback, and deterministic action/source/status reconstruction without making unsupported product claims.
 
 ## Rollback
 

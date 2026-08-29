@@ -1,7 +1,17 @@
 # Sahayi project context
 
-Sahayi addresses the difficulty of understanding which government-service steps may apply to a person's need. It will offer a clear kiosk experience that explains verified procedures around that need.
+Sahayi addresses the citizen problem of not knowing which department, scheme, channel, or sequence applies to a need. The final hackathon release candidate is a publicly demonstrable, privacy-first multilingual guide: it starts from the person's need, proposes one of two supported services locally, requires confirmation, and presents deterministic source-linked procedure guidance.
 
-The long-term vision is a trustworthy assisted kiosk; the hackathon delivery is a publicly hosted web application demonstrating that experience. The current MVP is only the React/FastAPI foundation and welcome screen.
+The implemented release supports UIDAI Aadhaar address update and Kerala Indira Gandhi National Old Age Pension in English, Hindi, and Malayalam. English is canonical. Hindi/Malayalam UI, Procedure Pack text, and synthetic intent examples are machine-assisted prototypes pending native-speaker and legal review.
 
-Non-goals: government affiliation, application submission, OTP handling, universal form filling, live DigiLocker integration, or legal eligibility decisions. Core rule: AI may understand or explain; verified deterministic procedure data decides.
+Architecture boundaries:
+
+- Browser-local inference combines deterministic pack phrases with a bundled character 2–5-gram Multinomial Naive Bayes classifier; raw finder text is not sent online.
+- FastAPI serves the React build and stateless deterministic Procedure Pack, readiness, checklist, synthetic worksheet, and demo status APIs from one same-origin container.
+- Optional OpenAI guidance is separately disclosed, consent-gated, unavailable without server configuration, and limited to strict local tools; AI never supplies authoritative facts or outcomes.
+- Procedure Intelligence is an offline-first, one-shot, human-reviewed source comparison CLI, not a hosted or continuous monitor.
+- Citizen workflow state is memory-only and cleared by End Session/inactivity. No citizen database, cookies, browser storage, analytics, or telemetry exists.
+
+The public demo is https://sahayi.onrender.com, but it remains on the older deployed release until a separately authorized deployment and hosted verification. The release-candidate branch is `release/sahayi-submission-2026-08-29`; `main` and `feat/sahayi-deployment` remain on the older release during candidate preparation.
+
+Non-goals and limitations: government affiliation/endorsement, legal eligibility decisions, real forms/submission/status, OTP/payment, DigiLocker, voice, production readiness, certified translation, continuously running monitoring, verified real-world model accuracy, universal external-provider non-retention, or a Zero Data Retention claim. The UIDAI fee conflict remains unresolved and source-linked; the Kerala pension amount is omitted. Procedure facts must remain deterministic and verified before display.
