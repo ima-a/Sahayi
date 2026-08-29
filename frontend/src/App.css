@@ -25,11 +25,22 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 4px solid
 .language-controls select { min-height: 44px; padding: 7px 34px 7px 10px; border: 2px solid #78988b; border-radius: 10px; background: #fff; color: #173d2e; }
 .translation-note { grid-column: 1 / -1; max-width: 620px; margin: 0; color: #526d62; font-size: .82rem; line-height: 1.45; }
 .start-note { margin: 14px 0 0; color: #526d62; font-size: .95rem; }
+.first-help { margin-top: 22px; padding: 12px 16px; border: 1px solid #78988b; border-radius: 10px; text-align: left; }
+.first-help summary, .procedure-details summary, .procedure-intelligence summary { cursor: pointer; color: #173d2e; font-weight: 850; }
+.journey-summary { position: sticky; z-index: 10; top: 12px; width: min(880px, calc(100vw - 32px)); margin: 12px auto -10px; padding: 16px 20px; border: 2px solid #287355; border-radius: 14px; background: #f8fcfa; box-shadow: 0 6px 20px rgba(4, 45, 29, .12); }
+.journey-summary h2 { margin: 0 0 10px; font-size: 1.35rem; }
+.journey-summary dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.journey-summary dl > div { min-width: 0; }
+.journey-summary dt { color: #526d62; font-size: .82rem; font-weight: 800; }
+.journey-summary dd { margin: 3px 0 0; overflow-wrap: anywhere; font-weight: 750; }
+.journey-summary details { margin-top: 12px; }
+.journey-summary details summary { cursor: pointer; font-weight: 800; }
+.journey-audio { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .page-header h1 { font-size: clamp(2.4rem, 7vw, 4rem); }
 .page-header p:not(.eyebrow) { margin-bottom: 0; }
 .secondary { border: 1px solid #8bb5a3; background: #fff; color: #075a3b; }
-.compact { width: auto; min-height: 44px; padding: 9px 16px; white-space: nowrap; font-size: .95rem; }
+.compact { width: auto; min-height: 48px; padding: 9px 16px; white-space: normal; font-size: .95rem; }
 .state-panel { padding: 30px; border-radius: 16px; background: #edf6f2; color: #26493b; text-align: center; }
 .state-panel h1, .state-panel h2 { margin-top: 0; }
 .state-panel.error { border: 1px solid #dfbaba; background: #fff3f3; }
@@ -50,11 +61,14 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 4px solid
 .privacy-note { margin: 10px 0 18px; font-weight: 700; }
 .local-match-status { margin: 24px 0 0; padding: 12px 14px; border-left: 5px solid #087a4d; background: #eff9f4; }
 .example-chips, .intake-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
-.chip { min-height: 42px; padding: 8px 12px; text-align: left; font-size: .9rem; }
+.chip { min-height: 48px; padding: 8px 12px; text-align: left; font-size: .9rem; }
 .intake-actions > button { padding: 0 18px; }
 .match-result { margin-top: 28px; padding: 22px; border: 2px solid #6ca48d; border-radius: 16px; background: #eff9f4; }
 .match-result h2 { margin-top: 0; }
 .candidate-list { display: grid; gap: 12px; margin: 16px 0; }
+.voice-controls { margin: 12px 0; padding: 14px; border: 1px solid #78988b; border-radius: 10px; background: #f6faf8; }
+.voice-controls p { margin-top: 0; font-size: .92rem; }
+.voice-controls > div { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .trust-card { margin: 34px 0 24px; padding: clamp(22px, 5vw, 34px); border: 2px solid #6ca48d; border-radius: 20px; background: #eff9f4; }
 .trust-card.stale { border-color: #bd7816; background: #fff8e8; }
 .trust-card h2, .trust-card h3 { margin-top: 3px; }
@@ -67,6 +81,8 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 4px solid
 a { color: #006b43; font-weight: 700; overflow-wrap: anywhere; }
 .stale-warning { margin: 28px 0; padding: 18px; border-left: 6px solid #bd7816; border-radius: 8px; background: #fff3d5; color: #593600; line-height: 1.55; }
 .disclaimer { padding: 18px; border-radius: 12px; background: #f1f3f2; }
+.procedure-intelligence, .procedure-details { margin: 24px 0; padding: 16px 18px; border: 1px solid #78988b; border-radius: 12px; background: #fff; }
+.procedure-intelligence ol { display: grid; gap: 10px; }
 .detail-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 24px; margin-top: 34px; }
 .detail-grid h2 { margin-top: 0; }
 .fee-card { padding: 24px; border-radius: 18px; background: #e6f4ed; }
@@ -167,13 +183,17 @@ fieldset { margin: 0; padding: 0; border: 0; }
   .translation-note { grid-column: 1; }
   .end-session { top: auto; right: 12px; bottom: 12px; }
   .trust-explanation { width: auto; margin: 0 12px 78px; }
+  .journey-summary { position: static; width: auto; margin: 12px 12px 0; }
+  .journey-summary dl { grid-template-columns: 1fr; }
+  .page-actions, .welcome-actions, .intake-actions, .assistance-actions { align-items: stretch; flex-direction: column; }
+  .page-actions button, .welcome-actions button, .intake-actions button, .assistance-actions button { width: 100%; }
 }
 
 @media print {
   body { background: #fff; }
   .kiosk-shell { display: block; min-height: auto; padding: 0; background: #fff; }
   .content-card { width: 100%; max-width: none; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
-  .no-print, .language-controls { display: none !important; }
+  .no-print, .language-controls, .journey-summary { display: none !important; }
   a { color: #000; text-decoration: underline; }
   .watermark { break-inside: avoid; }
 }

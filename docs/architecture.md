@@ -5,10 +5,11 @@ Sahayi is a same-origin React/TypeScript and FastAPI application with four delib
 ```mermaid
 flowchart TB
     subgraph Browser[Citizen browser — ephemeral memory]
-      UI[React multilingual journey]
+      UI[React multilingual conversation-first journey]
+      Voice[Optional browser voice and read-aloud]
       Gate[Identifier-shape gate]
       Match[Procedure phrases + bundled MNB classifier]
-      UI --> Gate --> Match
+      Voice --> UI --> Gate --> Match
     end
 
     subgraph Server[FastAPI — stateless deterministic API]
@@ -29,7 +30,7 @@ flowchart TB
     Agent -->|strict local tools| Catalogue
     Agent --> Readiness
     Agent --> Demo
-    Monitor[Offline one-shot source monitor] -. bounded human-review report .-> Packs
+    Monitor[Bounded one-shot source monitor] -. quarantined human-review report .-> Packs
 ```
 
 ## Browser-local inference
@@ -59,7 +60,9 @@ The model may guide phrasing and tool order, but the server rebuilds factual car
 
 ## Procedure intelligence and simulation
 
-Active sources may declare bounded monitoring metadata. The monitoring CLI is offline-first and one-shot; live public retrieval requires two explicit flags and exact pack allowlists. It cannot publish packs, edit facts, resolve conflicts, or run from hosted routes. A changed or missing baseline requires human review while the last reviewed pack stays active.
+Active sources may declare bounded monitoring metadata. The monitoring CLI is offline-first and one-shot; live public retrieval requires two explicit flags and exact pack allowlists. A read-only daily GitHub Actions workflow may invoke that same bounded command and upload its report, but it cannot publish packs, edit facts, resolve conflicts, deploy, or run from hosted routes. Changed, error, and missing-baseline states fail visibly and require human review while the last reviewed pack stays active.
+
+The conversation-first browser workspace retains only ephemeral journey state. Optional SpeechRecognition/webkitSpeechRecognition starts only after an explicit microphone action and uses `en-IN`, `hi-IN`, or `ml-IN`; it may rely on browser/vendor processing and always has a complete text fallback. Speech synthesis reads only the current visible deterministic question, explanation, checklist, or next step. Recognition and synthesis stop on navigation, language change, session clearing, inactivity expiry, and unmount. Sahayi does not store or log audio or transcripts.
 
 Worksheets and submission/status flows use allowlisted fictional personas, closed choices, watermarks, and `DEMO-...` references. They do not fill an official form, create a server file, contact a government system, or track an application.
 

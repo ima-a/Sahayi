@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { assistantTurn, buildChecklist, evaluateReadiness, getDemoStatus, getHealth, getProcedure, getProcedures, getPublicConfig, prepareSyntheticForm, startDemoSubmission, type AssistantTurnResponse, type DemoJourneyResponse, type DemoScenarioId, type PersonalizedChecklist, type ProcedureDetail, type ProcedureSummary, type ReadinessAnswer, type ReadinessResponse, type SyntheticFormAssistance } from './api'
 import { formatMessage, LANGUAGE_NAMES, LOCALES, UI_MESSAGES, type Locale, type Messages } from './i18n'
 import { classifyServiceQuery, detectHighRiskPii, MAX_QUERY_LENGTH, type Candidate, type MatchResult } from './matcher'
+import { useVoiceAssistance, type VoiceInputState } from './voice'
 import './App.css'
 
 type Availability = 'loading' | 'available' | 'unavailable'
@@ -25,6 +26,26 @@ function TrustExplanation({ messages }: { messages: Messages }) {
   return <details className="trust-explanation no-print"><summary>{messages.howSahayiWorks}</summary><p>{messages.trustExplanation}</p></details>
 }
 
+function VoiceControls({ messages, state, supported, onStart, onStop }: { messages: Messages; state: VoiceInputState; supported: boolean; onStart: () => void; onStop: () => void }) {
+  const status = state === 'listening' ? messages.voiceListening : state === 'processing' ? messages.voiceProcessing : state === 'permission-denied' ? messages.voicePermissionDenied : state === 'unavailable' ? messages.voiceUnavailable : messages.voiceStopped
+  return <aside className="voice-controls" aria-label={messages.useMicrophone}>
+    <p>{messages.voiceDisclosure}</p>
+    <div><button type="button" className="secondary" onClick={state === 'listening' || state === 'processing' ? onStop : onStart} disabled={!supported}>{state === 'listening' || state === 'processing' ? messages.stopListening : messages.useMicrophone}</button><span role="status" aria-live="polite">{status}</span></div>
+  </aside>
+}
+
+function JourneySummary({ messages, goal, procedure, screen, readiness, checklistReady, formReady, onRepeat, onStopReading, speechSupported }: {
+  messages: Messages; goal: string; procedure: ProcedureDetail; screen: Screen; readiness: ReadinessResponse | null; checklistReady: boolean; formReady: boolean; onRepeat: () => void; onStopReading: () => void; speechSupported: boolean
+}) {
+  const step = screen === 'detail' ? messages.identifiedService : screen === 'readiness' ? messages.readinessCheck : screen === 'checklist' ? messages.checklistTitle : screen === 'form' ? messages.worksheetTitle : screen === 'demo' ? messages.demoSubmission : messages.aiTitle
+  return <aside className="journey-summary" aria-labelledby="journey-summary-title">
+    <p className="eyebrow">{messages.currentStep}</p><h2 id="journey-summary-title">{messages.journeyTitle}</h2>
+    <dl><div><dt>{messages.citizenGoal}</dt><dd>{goal}</dd></div><div><dt>{messages.identifiedService}</dt><dd>{procedure.title}</dd></div><div><dt>{messages.currentStep}</dt><dd>{step}</dd></div></dl>
+    <div className="journey-audio"><button type="button" className="secondary compact" onClick={onRepeat} disabled={!speechSupported}>{messages.repeat}</button><button type="button" className="secondary compact" onClick={onStopReading} disabled={!speechSupported}>{messages.stopReading}</button></div>
+    <details><summary>{messages.howPrepared}</summary><ul><li>{messages.preparedMatch}</li><li>{formatMessage(messages.preparedPack, { version: procedure.pack_version })}</li>{readiness && <li>{messages.preparedAnswers}</li>}{checklistReady && <li>{messages.preparedChecklist}</li>}{formReady && <li>{messages.preparedForm}</li>}<li>{messages.preparedSources}</li></ul></details>
+  </aside>
+}
+
 function App() {
   const [locale, setLocale] = useState<Locale>('en')
   const [availability, setAvailability] = useState<Availability>('loading')
@@ -41,6 +62,7 @@ function App() {
   const [readinessLoading, setReadinessLoading] = useState(false)
   const [readinessError, setReadinessError] = useState(false)
   const [query, setQuery] = useState('')
+  const [journeyGoal, setJourneyGoal] = useState('')
   const [match, setMatch] = useState<MatchResult | null>(null)
   const [piiWarning, setPiiWarning] = useState(false)
   const [agentConsent, setAgentConsent] = useState(false)
@@ -52,6 +74,7 @@ function App() {
   const [agentPiiWarning, setAgentPiiWarning] = useState(false)
   const [checklist, setChecklist] = useState<PersonalizedChecklist | null>(null)
   const [formAssistance, setFormAssistance] = useState<SyntheticFormAssistance | null>(null)
+  const [formStep, setFormStep] = useState(0)
   const [assistanceLoading, setAssistanceLoading] = useState(false)
   const [assistanceError, setAssistanceError] = useState(false)
   const [demo, setDemo] = useState<DemoJourneyResponse | null>(null)
@@ -67,6 +90,7 @@ function App() {
   const objectUrls = useRef(new Set<string>())
   const lastInteraction = useRef(0)
   const messages = UI_MESSAGES[locale]
+  const voice = useVoiceAssistance(locale, screen)
 
   const isAbort = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
   const request = async <T,>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> => {
@@ -90,9 +114,10 @@ function App() {
     objectUrls.current.clear()
     setScreen('welcome'); setProcedures(null); setDetail(null); setCatalogueError(false); setDetailError(false)
     setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setReadinessLoading(false); setReadinessError(false)
-    setQuery(''); setMatch(null); setPiiWarning(false)
+    voice.stopAll()
+    setQuery(''); setJourneyGoal(''); setMatch(null); setPiiWarning(false)
     setAgentConsent(false); setAgentInput(''); setAgentHistory([]); setAgentResponse(null); setAgentLoading(false); setAgentError(false); setAgentPiiWarning(false)
-    setChecklist(null); setFormAssistance(null); setAssistanceLoading(false); setAssistanceError(false)
+    setChecklist(null); setFormAssistance(null); setFormStep(0); setAssistanceLoading(false); setAssistanceError(false)
     setDemo(null); setDemoLoading(false); setDemoError(false); setInactivityWarning(false); setSessionNotice(notice)
     lastInteraction.current = Date.now()
   }
@@ -159,6 +184,7 @@ function App() {
     setAgentResponse(null)
     setAgentError(false)
     setAgentPiiWarning(false)
+    setFormStep(0)
     if (screen === 'checklist' && checklist) {
       setChecklist(null)
       setAssistanceLoading(true)
@@ -196,8 +222,9 @@ function App() {
     loadProcedures(locale)
   }
 
-  const selectProcedure = (serviceId: string) => {
+  const selectProcedure = (serviceId: string, goal = journeyGoal) => {
     setScreen('detail')
+    setJourneyGoal(goal)
     setQuery('')
     setMatch(null)
     setPiiWarning(false)
@@ -250,6 +277,7 @@ function App() {
     try {
       const selected = await request(signal => getProcedure(serviceId, locale, signal))
       setDetail(selected)
+      setJourneyGoal(current => current || selected.title)
       setReadiness(null)
       setReadinessAnswers({})
       setReadinessHistory([])
@@ -271,6 +299,7 @@ function App() {
   const openFormAssistance = async (serviceId = detail?.service_id, personaId: string | null = null) => {
     if (!serviceId) return
     setScreen('form')
+    setFormStep(0)
     setFormAssistance(null)
     setAssistanceError(false)
     setAssistanceLoading(true)
@@ -330,6 +359,9 @@ function App() {
       setReadinessHistory([...readinessHistory, readinessAnswers])
       setReadinessAnswers(nextAnswers)
       setReadiness(result)
+      if (result.complete && detail) {
+        request(signal => buildChecklist(detail.service_id, nextAnswers, locale, signal)).then(setChecklist).catch(() => { /* The visible readiness result remains deterministic and usable. */ })
+      }
     }
   }
   const backReadiness = async () => {
@@ -372,7 +404,14 @@ function App() {
 
   const language = <LanguageControls locale={locale} onChange={changeLocale} messages={messages} />
   const statusText = availability === 'loading' ? messages.availabilityLoading : availability === 'available' ? messages.availabilityReady : messages.availabilityUnavailable
-  const wrapSession = (content: ReactNode) => <>{content}{screen !== 'welcome' && <>
+  const readText = screen === 'readiness' ? readiness?.next_question?.prompt ?? readiness?.outcome?.explanation ?? messages.readinessLead
+    : screen === 'checklist' ? [checklist?.title, checklist?.result.text, ...(checklist?.steps.map(item => item.text) ?? [])].filter(Boolean).join('. ')
+      : screen === 'form' ? formAssistance?.fields[Math.min(formStep, Math.max(0, formAssistance.fields.length - 1))]?.explanation ?? formAssistance?.privacy_notice ?? ''
+        : screen === 'demo' ? demo?.statuses.find(item => item.status_id === demo.current_status_id)?.explanation ?? messages.noApplicationSubmitted
+          : screen === 'assistant' ? agentResponse?.message ?? messages.aiDataUse
+            : detail ? `${detail.title}. ${detail.short_description}` : messages.helpIntro
+  const wrapSession = (content: ReactNode) => <>{detail && !['welcome', 'intake', 'catalogue'].includes(screen) && <JourneySummary messages={messages} goal={journeyGoal || detail.title} procedure={detail} screen={screen}
+    readiness={readiness} checklistReady={Boolean(checklist)} formReady={Boolean(formAssistance)} onRepeat={() => voice.readAloud(readText)} onStopReading={voice.stopSpeech} speechSupported={voice.speechSupported} />}{content}{screen !== 'welcome' && <>
     <button className="end-session no-print" type="button" onClick={endSession}>{messages.endSession}</button>
     <TrustExplanation messages={messages} />
     {inactivityWarning && <div className="session-warning" role="alertdialog" aria-modal="true" aria-labelledby="session-warning-title">
@@ -382,6 +421,7 @@ function App() {
 
   if (screen === 'assistant') return wrapSession(<AssistantGuide messages={messages} language={language} available={agentAvailable} consent={agentConsent} input={agentInput}
     history={agentHistory} response={agentResponse} loading={agentLoading} error={agentError} piiWarning={agentPiiWarning}
+    voiceState={voice.inputState} voiceSupported={voice.inputSupported} onVoiceStart={() => voice.startInput(value => { if (detectHighRiskPii(value)) { setAgentInput(''); setAgentPiiWarning(true) } else { setAgentInput(value); setAgentPiiWarning(false) } })} onVoiceStop={() => voice.stopInput()}
     onConsent={setAgentConsent} onInput={value => { setAgentInput(value); setAgentPiiWarning(false) }} onSubmit={submitAgent}
     onChooseService={chooseAgentService} onAction={handleAgentAction} onBack={() => setScreen(demo ? 'demo' : detail ? 'detail' : 'welcome')} onStartOver={startOver} />)
 
@@ -389,7 +429,8 @@ function App() {
     onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onForm={() => openFormAssistance(checklist?.service_id)} onDemo={() => openDemo(checklist?.service_id)} />)
 
   if (screen === 'form') return wrapSession(<FormAssistanceView messages={messages} language={language} assistance={formAssistance} loading={assistanceLoading} error={assistanceError}
-    onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onSelectPersona={personaId => openFormAssistance(formAssistance?.service_id, personaId)} onDemo={() => openDemo(formAssistance?.service_id)} />)
+    step={formStep} onNext={() => setFormStep(value => Math.min(value + 1, formAssistance?.fields.length ?? value + 1))}
+    onBack={() => formStep > 0 ? setFormStep(value => value - 1) : setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onSelectPersona={personaId => openFormAssistance(formAssistance?.service_id, personaId)} onDemo={() => openDemo(formAssistance?.service_id)} />)
 
   if (screen === 'demo') return wrapSession(<DemoJourney messages={messages} language={language} journey={demo} loading={demoLoading} error={demoError}
     onBack={() => setScreen(formAssistance ? 'form' : detail ? 'detail' : 'welcome')} onStartOver={startOver} onBegin={beginDemo} onAdvance={advanceDemo}
@@ -399,7 +440,8 @@ function App() {
     onQueryChange={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onFind={findService}
     onExample={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onBrowse={() => setScreen('catalogue')}
     onCandidate={candidate => setMatch({ kind: 'confident', candidate, source: 'deterministic' })}
-    onConfirm={serviceId => { setQuery(''); setMatch(null); setPiiWarning(false); selectProcedure(serviceId) }}
+    voiceState={voice.inputState} voiceSupported={voice.inputSupported} onVoiceStart={() => voice.startInput(value => { if (detectHighRiskPii(value)) { setQuery(''); setPiiWarning(true) } else { setQuery(value); setPiiWarning(false) }; setMatch(null) })} onVoiceStop={() => voice.stopInput()}
+    onConfirm={serviceId => { const goal = procedures?.find(item => item.service_id === serviceId)?.title || ''; setQuery(''); setMatch(null); setPiiWarning(false); selectProcedure(serviceId, goal) }}
     onChooseAnother={() => { setMatch(null); setQuery('') }} onStartOver={startOver} />)
 
   if (screen === 'catalogue') return wrapSession(<main className="kiosk-shell"><section className="content-card" aria-labelledby="catalogue-title">{language}
@@ -407,7 +449,7 @@ function App() {
     {catalogueError ? <div className="state-panel error" role="alert"><h2>{messages.loadServicesTitle}</h2><p>{messages.loadServicesBody}</p></div>
       : procedures === null ? <div className="state-panel" role="status" aria-live="polite">{messages.loadingServices}</div>
         : procedures.length === 0 ? <div className="state-panel" role="status"><h2>{messages.noProceduresTitle}</h2><p>{messages.noProceduresBody}</p></div>
-          : <ul className="service-list">{procedures.map(procedure => <li key={procedure.service_id}><button className="service-card" type="button" onClick={() => selectProcedure(procedure.service_id)}>
+          : <ul className="service-list">{procedures.map(procedure => <li key={procedure.service_id}><button className="service-card" type="button" onClick={() => selectProcedure(procedure.service_id, procedure.title)}>
             <span><strong>{procedure.title}</strong><small>{procedure.short_description}</small>{procedure.attention_required && <small className="attention-badge">{messages.feeNeedsConfirmation}</small>}</span><span aria-hidden="true">→</span>
           </button></li>)}</ul>}
   </section></main>)
@@ -428,12 +470,15 @@ function App() {
     <p className="eyebrow">{messages.prototype}</p><div className="mark" aria-hidden="true">S</div>
     <h1 id="sahayi-title">{name}</h1><p className="tagline">{messages.tagline}</p>
     <p className={`availability ${availability}`} role="status" aria-live="polite"><span className="status-dot" aria-hidden="true" />{statusText}</p>
-    <div className="welcome-actions"><button type="button" disabled={availability !== 'available'} onClick={start} aria-describedby="start-note">{messages.start}</button><button className="secondary" type="button" disabled={availability !== 'available'} onClick={openAssistant}>{messages.askAi}</button></div><p id="start-note" className="start-note">{messages.startNote}</p>
+    <h2 className="welcome-question">{messages.intakeTitle}</h2>
+    <div className="welcome-actions"><button type="button" disabled={availability !== 'available'} onClick={start} aria-describedby="start-note">{messages.start}</button><button className="secondary" type="button" disabled={availability !== 'available'} onClick={() => { start(); setScreen('catalogue') }}>{messages.browseServices}</button></div><p id="start-note" className="start-note">{messages.startNote} {messages.supportedOnly}</p>
+    <details className="first-help"><summary>{messages.needHelp}</summary><p>{messages.helpIntro}</p></details>
   </section></main>
 }
 
-function Intake({ messages, language, procedures, error, query, match, piiWarning, onQueryChange, onFind, onExample, onBrowse, onCandidate, onConfirm, onChooseAnother, onStartOver }: {
+function Intake({ messages, language, procedures, error, query, match, piiWarning, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onQueryChange, onFind, onExample, onBrowse, onCandidate, onConfirm, onChooseAnother, onStartOver }: {
   locale: Locale; messages: Messages; language: React.ReactNode; procedures: ProcedureSummary[] | null; error: boolean; query: string; match: MatchResult | null; piiWarning: boolean
+  voiceState: VoiceInputState; voiceSupported: boolean; onVoiceStart: () => void; onVoiceStop: () => void
   onQueryChange: (value: string) => void; onFind: () => void; onExample: (value: string) => void; onBrowse: () => void; onCandidate: (candidate: Candidate) => void; onConfirm: (serviceId: string) => void; onChooseAnother: () => void; onStartOver: () => void
 }) {
   const focusTarget = useRef<HTMLHeadingElement>(null)
@@ -449,6 +494,7 @@ function Intake({ messages, language, procedures, error, query, match, piiWarnin
         : <><label className="intake-label" htmlFor="service-query">{messages.queryLabel}</label><p id="service-query-help" className="question-help">{messages.queryHelp}</p>
           <textarea id="service-query" value={query} maxLength={MAX_QUERY_LENGTH} rows={4} aria-describedby="service-query-help" onChange={event => onQueryChange(event.target.value)} />
           <p className="privacy-note">{messages.privacyNote}</p>
+          <VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} />
           {examples.length > 0 && <div className="example-chips" aria-label={messages.examples}>{examples.map(example => <button className="secondary chip" type="button" key={example} onClick={() => onExample(example)}>{example}</button>)}</div>}
           <div className="intake-actions"><button type="button" onClick={onFind} disabled={!query.trim()}>{messages.findService}</button><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></div></>}
     <div ref={resultTarget} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true">
@@ -471,8 +517,10 @@ function ProcedureOverview({ procedure, locale, messages, onStartReadiness, onAs
       <div><h3>{messages.officialSources}</h3><ul className="source-list">{procedure.sources.map(source => <li key={source.source_id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} <span aria-hidden="true">↗</span></a></li>)}</ul></div>
     </section>
     <p className="disclaimer"><strong>{messages.guidanceOnly}</strong> {messages.governmentDisclaimer}</p>
-    <div className="assistance-actions"><button type="button" className="secondary" onClick={onAskAi}>{messages.askAi}</button><button type="button" className="secondary" onClick={onChecklist}>{messages.createChecklist}</button><button type="button" className="secondary" onClick={onForm}>{messages.syntheticForm}</button></div>
     <section className="readiness-callout" aria-labelledby="readiness-callout-title"><div><h2 id="readiness-callout-title">{messages.checkNeed}</h2><p>{messages.checkNeedBody}</p></div><button type="button" onClick={onStartReadiness}>{messages.checkNeed}</button></section>
+    <div className="assistance-actions"><button type="button" className="secondary" onClick={onAskAi}>{messages.askAi}</button><button type="button" className="secondary" onClick={onChecklist}>{messages.createChecklist}</button><button type="button" className="secondary" onClick={onForm}>{messages.syntheticForm}</button></div>
+    <details className="procedure-intelligence"><summary>{messages.procedureIntelligenceTitle}</summary><p>{messages.procedureIntelligenceIntro}</p><ol><li>{messages.sourceChecked}</li><li>{messages.fingerprintCompared}</li><li><strong>{messages.syntheticChange}:</strong> {messages.changeQuarantined}</li><li>{messages.humanReviewed}</li><li>{messages.packApproved}</li></ol></details>
+    <details className="procedure-details"><summary>{messages.beforeStart}</summary>
     <div className="detail-grid"><section><h2>{messages.beforeStart}</h2><ul>{procedure.requirements.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul><h3>{messages.documentGuidance}</h3>{procedure.required_documents.map(document => <div key={document.document_id}><strong>{document.name}</strong><p>{document.guidance}</p></div>)}</section>
       <section className={`fee-card ${procedure.fee.verification_status}`} role={procedure.fee.verification_status === 'conflicting' ? 'alert' : undefined} aria-labelledby="fee-title">
         <h2 id="fee-title">{procedure.fee.verification_status === 'conflicting' ? messages.feeNeedsConfirmation : messages.feeInformation}</h2><p>{procedure.fee.display_message}</p>
@@ -485,6 +533,7 @@ function ProcedureOverview({ procedure, locale, messages, onStartReadiness, onAs
     {procedure.tracking_guidance && <section><h2>{messages.tracking}</h2><p>{procedure.tracking_guidance.text}</p></section>}
     {procedure.additional_review_items.length > 0 && <section><h2>{messages.additionalReview}</h2><p>{messages.additionalReviewBody}</p><ul>{procedure.additional_review_items.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul></section>}
     <section><h2>{messages.limitations}</h2><ul>{procedure.limitations.map(item => <li key={item.fact_id}>{item.text}</li>)}</ul></section>
+    </details>
     <a className="official-handoff" href={procedure.official_handoff_url} target="_blank" rel="noopener noreferrer">{messages.openOfficialService} <span aria-hidden="true">↗</span></a>
   </article>
 }
@@ -524,8 +573,9 @@ function ReadinessFlow({ response, loading, error, locale, messages, language, o
   </section></main>
 }
 
-function AssistantGuide({ messages, language, available, consent, input, history, response, loading, error, piiWarning, onConsent, onInput, onSubmit, onChooseService, onAction, onBack, onStartOver }: {
+function AssistantGuide({ messages, language, available, consent, input, history, response, loading, error, piiWarning, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onConsent, onInput, onSubmit, onChooseService, onAction, onBack, onStartOver }: {
   messages: Messages; language: React.ReactNode; available: boolean; consent: boolean; input: string; history: ConversationMessage[]; response: AssistantTurnResponse | null; loading: boolean; error: boolean; piiWarning: boolean
+  voiceState: VoiceInputState; voiceSupported: boolean; onVoiceStart: () => void; onVoiceStop: () => void
   onConsent: (value: boolean) => void; onInput: (value: string) => void; onSubmit: () => void; onChooseService: (serviceId: string) => void; onAction: (actionId: string, serviceId: string | null) => void; onBack: () => void; onStartOver: () => void
 }) {
   const responseTarget = useRef<HTMLDivElement>(null)
@@ -541,6 +591,7 @@ function AssistantGuide({ messages, language, available, consent, input, history
     {available && consent && <form className="agent-form" onSubmit={event => { event.preventDefault(); onSubmit() }}>
       <label htmlFor="agent-message">{messages.aiMessageLabel}</label><p id="agent-message-help">{messages.aiMessageHelp}</p>
       <textarea id="agent-message" maxLength={500} rows={4} value={input} aria-describedby="agent-message-help" onChange={event => onInput(event.target.value)} />
+      <VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} />
       <button type="submit" disabled={loading || !input.trim()}>{loading ? messages.sending : messages.send}</button>
     </form>}
     {visibleHistory.length > 0 && <section className="conversation" aria-labelledby="conversation-title"><h2 id="conversation-title">{messages.aiConversation}</h2>{visibleHistory.map((message, index) => <p className={`message ${message.role}`} key={`${message.role}-${index}`}>{message.content}</p>)}</section>}
@@ -578,17 +629,20 @@ function ChecklistView({ messages, language, checklist, loading, error, onBack, 
   </section></main>
 }
 
-function FormAssistanceView({ messages, language, assistance, loading, error, onBack, onStartOver, onSelectPersona, onDemo }: {
-  messages: Messages; language: React.ReactNode; assistance: SyntheticFormAssistance | null; loading: boolean; error: boolean; onBack: () => void; onStartOver: () => void; onSelectPersona: (personaId: string) => void; onDemo: () => void
+function FormAssistanceView({ messages, language, assistance, loading, error, step, onNext, onBack, onStartOver, onSelectPersona, onDemo }: {
+  messages: Messages; language: React.ReactNode; assistance: SyntheticFormAssistance | null; loading: boolean; error: boolean; step: number; onNext: () => void; onBack: () => void; onStartOver: () => void; onSelectPersona: (personaId: string) => void; onDemo: () => void
 }) {
   const sources = new Map((assistance?.sources ?? []).map(source => [source.source_id, source]))
+  const complete = Boolean(assistance && step >= assistance.fields.length)
+  const visibleFields = assistance ? complete ? assistance.fields : assistance.fields.slice(step, step + 1) : []
   return <main className="kiosk-shell"><section className="content-card printable" aria-labelledby="form-title">{language}
     <nav className="page-actions no-print" aria-label={messages.assistanceNavigation}><button className="secondary compact" type="button" onClick={onBack}>{messages.back}</button><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
     {loading ? <div className="state-panel" role="status">{messages.checking}</div> : error || !assistance ? <p className="inline-error" role="alert">{messages.continueError}</p> : <>
       <p className="watermark" role="note">{assistance.watermark}</p><p className="eyebrow">{messages.worksheetTitle}</p><h1 id="form-title">{assistance.title}</h1><label className="persona-choice" htmlFor="persona-select">{messages.sampleCitizen}</label><select id="persona-select" value={assistance.persona.persona_id} onChange={event => onSelectPersona(event.target.value)}>{assistance.available_personas.map(persona => <option value={persona.persona_id} key={persona.persona_id}>{persona.display_name}</option>)}</select>
       <p className="privacy-callout"><strong>{messages.privacyNotice}:</strong> {assistance.privacy_notice}</p>
-      <dl className="worksheet-fields">{assistance.fields.map(field => <div key={field.field_id}><dt>{field.label}</dt><dd><p>{field.explanation}</p><p><strong>{field.value === null ? messages.privateValue : messages.demoValue}:</strong> {field.value ?? '—'}</p><p><strong>{messages.sourceStatus}:</strong> {field.status === 'verified_official_form' ? messages.verifiedOfficialForm : messages.preparationOnly}</p><SourceReferences ids={field.source_ids} sources={sources} messages={messages} /></dd></div>)}</dl>
-      <p className="result-disclaimer">{assistance.disclaimer}</p><div className="assistance-actions no-print"><button type="button" onClick={() => window.print()}>{messages.print}</button><button type="button" onClick={onDemo}>{messages.continueDemo}</button></div>
+      <p className="question-progress">{complete ? messages.preparationPreview : formatMessage(messages.formQuestion, { current: step + 1, total: assistance.fields.length })}</p>
+      <dl className="worksheet-fields">{visibleFields.map(field => <div key={field.field_id}><dt>{field.label}</dt><dd><p>{field.explanation}</p><p><strong>{field.value === null ? messages.privateValue : messages.demoValue}:</strong> {field.value ?? '—'}</p><p><strong>{messages.sourceStatus}:</strong> {field.status === 'verified_official_form' ? messages.verifiedOfficialForm : messages.preparationOnly}</p><SourceReferences ids={field.source_ids} sources={sources} messages={messages} /></dd></div>)}</dl>
+      <p className="result-disclaimer">{assistance.disclaimer}</p><div className="assistance-actions no-print">{!complete && <button type="button" onClick={onNext}>{messages.nextField}</button>}{complete && <><button type="button" onClick={() => window.print()}>{messages.print}</button><button type="button" onClick={onDemo}>{messages.continueDemo}</button></>}</div>
     </>}
   </section></main>
 }

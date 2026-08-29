@@ -4,9 +4,11 @@ Sahayi minimizes citizen data by separating local service discovery, determinist
 
 ## What remains in browser memory
 
-The raw service-search query and local inference result never leave the browser. Language, selection, readiness answers/history, checklist, worksheet/persona, synthetic demo reference/status, optional-agent consent and conversation, and navigation state live in React memory. Sahayi does not add cookies, `localStorage`, `sessionStorage`, IndexedDB, Cache API, a service worker, analytics, telemetry, or browser-persisted citizen state.
+The raw service-search query and local inference result never leave the browser. Language, selection, readiness answers/history, checklist, worksheet/persona, synthetic demo reference/status, optional-agent consent and conversation, voice transcript, and navigation state live in React memory. Sahayi does not add cookies, `localStorage`, `sessionStorage`, IndexedDB, Cache API, a service worker, analytics, telemetry, or browser-persisted citizen state.
 
 The local finder blocks obvious Aadhaar-, Indian-phone-, email-, and numbered-address-shaped values before matching. This is a warning gate, not a guarantee that every personal detail can be recognized. Citizens are instructed not to enter identifiers or private details.
+
+Voice input is an explicit browser enhancement and never auto-starts. Browser recognition may use browser/vendor processing and is not guaranteed to be on-device; Sahayi does not persist or log audio or transcripts. Transcripts pass through the same identifier gate before deterministic or optional cloud processing. Unsupported browsers retain the full text path. Navigation, locale changes, unmount, Start Over, End session, and inactivity clearing stop recognition and speech synthesis.
 
 ## What reaches FastAPI
 
@@ -30,7 +32,7 @@ This confirmation covers Sahayi's own in-memory state only. It does not promise 
 
 ## Durable and administrative data
 
-Durable repository data is limited to source code, static UI copy, versioned Procedure Packs, generated schema/model artifacts, owned synthetic datasets/evaluations, and an offline monitoring fixture. There is no citizen database. Offline monitoring compares official-source fingerprints and emits bounded administrative review metadata; it is not continuous, hosted, autonomous, or citizen-facing.
+Durable repository data is limited to source code, static UI copy, versioned Procedure Packs, generated schema/model artifacts, owned synthetic datasets/evaluations, an offline monitoring fixture, and bounded Procedure Intelligence workflow artifacts. There is no citizen database. Scheduled checks invoke the one-shot allowlisted monitor, never carry citizen information or credentials, never mutate facts, and visibly require human review for changed/error states. They are not hosted citizen functionality or automatic fact activation.
 
 ## Safety rules and limitations
 
@@ -39,6 +41,6 @@ Durable repository data is limited to source code, static UI copy, versioned Pro
 - Conflicting official facts remain visible and source-linked rather than silently resolved.
 - Hindi and Malayalam are machine-assisted prototypes pending native/legal review.
 - Only synthetic model evaluation and demo personas are included; no real-world accuracy or production claim is made.
-- Real submission/status, government authentication, OTP/payment, voice, file upload, analytics, and telemetry are absent.
+- Real submission/status, government authentication, OTP/payment, file upload, analytics, and telemetry are absent. Voice remains browser-dependent prototype assistance, not certified pronunciation or complete accessibility coverage.
 
 Any future collection, persistence, third-party integration, or telemetry requires an explicit privacy design, retention decision, threat review, and user approval before implementation.

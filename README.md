@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first, multilingual guide that helps citizens understand verified government-service procedures without starting from department names or exposing their service-search text to a server.
+Sahayi is a privacy-first multilingual text-and-touch public-service guide prototype with optional voice assistance. It identifies supported verified procedures, asks relevant questions, creates a personalised checklist, prepares synthetic form information and guides citizens to official channels.
 
 **Public demo:** [https://sahayi.onrender.com](https://sahayi.onrender.com)
 
@@ -22,9 +22,9 @@ English is the canonical verified guidance. Hindi and Malayalam are machine-assi
 1. Choose English, Hindi, or Malayalam and describe the need, or browse both services.
 2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. The text is not sent online for this finder action.
 3. Confirm the proposed service before opening it.
-4. Review provenance, freshness, conflicts, requirements, documents, fees, steps, and official links.
-5. Answer bounded closed-choice readiness questions to receive deterministic guidance and a personalized checklist.
-6. Optionally explore a watermarked fictional worksheet and simulated submission/status journey, or explicitly consent to the separately gated cloud assistant when it is configured.
+4. Enter one progressive **Your Sahayi journey** workspace with the confirmed goal, service, current step, trust information, and factual preparation record.
+5. Answer one bounded closed-choice readiness question at a time; Sahayi automatically prepares the deterministic personalized checklist when the evaluation completes.
+6. Optionally use explicit browser voice input/read-aloud, explore a one-field-at-a-time fictional worksheet carrying `DEMO — NOT FOR SUBMISSION`, and view simulated submission/status, or explicitly consent to the separately gated cloud assistant when it is configured.
 7. Select **End session** at any time; inactivity expiry uses the same in-memory clearing boundary.
 
 ## Architecture
@@ -38,7 +38,7 @@ flowchart LR
     P --> R[Deterministic readiness, checklist, worksheet, simulation]
     UI -. explicit consent + bounded text .-> A[Optional GroqCloud assistant]
     A -->|strict tool calls| R
-    M[Offline one-shot source monitor] -. review metadata only .-> P
+    M[Offline-first one-shot source monitor] -. quarantined review metadata only .-> P
 ```
 
 The production image builds React with Vite and serves the compiled files and `/api/v1` API from one unprivileged FastAPI container. There is no citizen database or durable server session.
@@ -47,11 +47,12 @@ The production image builds React with Vite and serves the compiled files and `/
 
 | Area | Status | Boundary |
 | --- | --- | --- |
-| Local service finder, multilingual catalogue, procedures, readiness, checklist, End Session and inactivity clearing | Fully working and deterministic | Browser-local matching plus validated server-side rules; no AI decides facts or outcomes |
+| Conversation-first journey, local service finder, multilingual catalogue, procedures, readiness, checklist, End Session and inactivity clearing | Fully working and deterministic | Browser-local matching plus validated server-side rules; no AI decides facts or outcomes |
 | Procedure Pack provenance, version selection, freshness, fee-conflict display and schema validation | Fully working and deterministic | Active packs fail closed; reviewed facts remain source-linked |
 | Optional “Ask Sahayi AI” guidance | Consent-gated GroqCloud feature; disabled without both flag and server key | Groq's selected model may guide tool order/prose, while Sahayi validates output and reconstructs facts/actions from deterministic results |
-| Form preparation and application/status journey | Synthetic/demo-only | Fixed fictional personas, blank private fields and obvious `DEMO-...` references; no government contact |
-| Live submission, real status, OTP/payment, DigiLocker, voice, certified translation and continuous monitoring | Planned or out of prototype scope | No integration or production claim |
+| Voice input and read-aloud | Progressive browser enhancement | Explicit start only; browser/vendor recognition may not be on-device; transcript is memory-only and text remains complete fallback |
+| Form preparation and application/status journey | Synthetic/demo-only | Fixed fictional personas, blank private fields, `DEMO — NOT FOR SUBMISSION`, and obvious `DEMO-...` references; no government contact |
+| Live submission, real status, OTP/payment, DigiLocker, certified translation and automatic fact activation | Out of prototype scope | No integration or production claim |
 
 ## Local matching ensemble
 
@@ -63,13 +64,13 @@ Agreement can propose the shared allowlisted service; one-sided confidence still
 
 Versioned JSON [Procedure Packs](procedure-packs/README.md) hold facts, localized text, deterministic readiness rules, citations, review dates, and lifecycle state. Strict Pydantic validation permits one active version per service, excludes draft/superseded packs, checks every reference and translation key, and produces a canonical SHA-256 digest. Response-time freshness uses `review_due_at`; stale guidance is labeled rather than silently treated as current.
 
-Conflicting official claims are preserved independently with their sources. Sahayi does not pick an unsupported winner: the current UIDAI fee conflict remains visible, and the Kerala pension amount is omitted pending authoritative resolution. Offline administrative monitoring is a one-shot, human-reviewed comparison tool; it is not a hosted route, continuous crawler, or automatic fact updater.
+Conflicting official claims are preserved independently with their sources. Sahayi does not pick an unsupported winner: the current UIDAI fee conflict remains visible, and the Kerala pension amount is omitted pending authoritative resolution. Procedure Intelligence is an offline-first, bounded one-shot comparison tool. A read-only daily GitHub Actions invocation may create a review artifact, but it never edits or activates facts; changed, error, and missing-baseline states fail visibly and require human review.
 
 ## Privacy and safety boundary
 
 Finder text, match results, language, readiness state, checklist, worksheet, demo status, consent, and conversation stay in React memory except for the bounded data deliberately sent in current API requests. Sahayi adds no cookies, browser storage, service worker, analytics, telemetry, citizen database, or answer/body logging. API responses use `Cache-Control: no-store`.
 
-The optional assistant requires affirmative consent and sends only a minimized, identifier-screened current message plus at most four memory-only turns. Its server-only key, prompts, provider output, and tool arguments are not exposed to the browser. Groq collects usage metadata; Zero Data Retention is an owner-controlled Groq Console setting that Sahayi code does not enable or guarantee. See [Privacy and safety](docs/privacy-boundary.md).
+The optional assistant requires affirmative consent and sends only a minimized, identifier-screened current message plus at most four memory-only turns. Its server-only key, prompts, provider output, and tool arguments are not exposed to the browser. Groq collects usage metadata; Zero Data Retention is an owner-controlled Groq Console setting that Sahayi code does not enable or guarantee. Browser recognition may use browser/vendor processing and is not guaranteed to remain on-device; Sahayi never persists audio or transcripts. See [Privacy and safety](docs/privacy-boundary.md).
 
 ## Local development
 
@@ -171,7 +172,8 @@ Groq's current published free-plan row for this model is 30 requests/minute, 1,0
 - Model evaluation uses a tiny fixed synthetic dataset; it is not evidence of verified real-world accuracy, fairness, or production readiness.
 - Hindi/Malayalam dataset phrases and UI/procedure translations still need native-speaker and legal review; they are not certified translations.
 - The reviewed UIDAI sources disagree on the applicable update fee, so Sahayi shows the conflict. The Kerala pension amount is deliberately omitted.
-- Source monitoring is offline, one-shot, and human-reviewed—not continuous. There is no production, universal retention, or Zero Data Retention claim.
+- Source monitoring consists of bounded one-shot checks, optionally scheduled daily, with human review and no automatic activation. It is not continuous fact updating. There is no production, universal retention, or Zero Data Retention claim.
+- Voice availability and pronunciation depend on the browser and installed voices; pronunciation and complete accessibility coverage are not certified.
 - Groq records `llama-3.3-70b-versatile` as retired for free/developer-tier use on 2026-08-16 and recommends `openai/gpt-oss-120b` as a replacement. The retired name is historical migration context only; this candidate made no live provider call.
 - Groq account/tier rate limits may be low or change over time. The published free-plan figures above are indicative; exact organization limits belong in Groq Console. HTTP 429 and provider failures return generic deterministic fallback; Sahayi's in-process limits are demo safeguards, not a guarantee of cloud availability.
 

@@ -110,7 +110,7 @@ def test_synthetic_form_is_watermarked_and_never_prefills_private_fields(service
     assert worksheet.sources
     assert worksheet.watermark
     if locale == "en":
-        assert worksheet.watermark == "SYNTHETIC DEMO — NOT AN OFFICIAL APPLICATION — DO NOT SUBMIT"
+        assert worksheet.watermark == "DEMO — NOT FOR SUBMISSION"
     assert all(field.value is None for field in worksheet.fields if field.handling != "fictional_demo")
     assert all(field.value is not None for field in worksheet.fields if field.handling == "fictional_demo")
     serialized = worksheet.model_dump_json()

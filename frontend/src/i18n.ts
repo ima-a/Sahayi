@@ -16,7 +16,7 @@ const en = {
   piiWarning: 'Please remove personal identifiers before continuing. This simple check cannot guarantee that all personal information is removed.',
   matchedOnDevice: 'Matched on this device.', notSentOnline: 'This request has not been sent online.', confirmMatch: 'Sahayi needs you to confirm.',
   suggestedTitle: 'Is this the service you mean?', yesContinue: 'Yes, continue', chooseAnother: 'Choose another service', chooseServiceTitle: 'Choose the service you mean',
-  noMatchTitle: 'We could not find a matching service', noMatchBody: 'Sahayi currently supports a limited number of services. You can browse the complete catalogue.',
+  noMatchTitle: 'We do not yet have a verified procedure for that request', noMatchBody: 'Sahayi currently supports only its verified catalogue. You can browse those supported services.',
   trustProvenance: 'Trust and provenance', verifiedOfficial: 'Verified official guidance', officialPublisher: 'Official publisher', packVersion: 'Pack version',
   verified: 'Source last reviewed', freshness: 'Procedure status', current: 'Current', stale: 'Stale — review overdue', officialSources: 'Official sources',
   staleTitle: 'This guidance needs review.', staleBody: 'The review date has passed. Confirm every detail on the official service website before continuing.',
@@ -59,6 +59,14 @@ const en = {
   noApplicationSubmitted: 'No application will be submitted.', noGovernmentContact: 'No government system will be contacted.', onlySyntheticData: 'Only bundled synthetic data is used.', demoClears: 'The simulation disappears when this Sahayi session ends.',
   normalScenario: 'Normal completion scenario', actionScenario: 'Action-required scenario', demoError: 'The deterministic demo could not continue.', syntheticReference: 'Synthetic demo reference', switchScenario: 'Switch demo scenario:', simulatedStatus: 'Simulated status timeline',
   complete: 'Complete', currentStatus: 'Current', upcoming: 'Upcoming', relatedReferences: 'Related verified references', advanceDemo: 'Advance demo deliberately', demoComplete: 'Demo completed', askAiStatus: 'Ask AI to explain this demo status',
+  needHelp: 'Need help?', helpIntro: 'Tell Sahayi the service you need. It checks your words privately on this device, asks you to confirm, and then guides you one step at a time. You can always browse the verified catalogue instead.',
+  supportedOnly: 'Sahayi currently supports only the services in its verified catalogue.', journeyTitle: 'Your Sahayi journey', citizenGoal: 'Your goal', identifiedService: 'Identified service', currentStep: 'Current step',
+  howPrepared: 'How Sahayi prepared this', preparedMatch: 'Matched a supported service on this device', preparedPack: 'Loaded Procedure Pack version {version}', preparedAnswers: 'Evaluated the readiness answers you chose', preparedChecklist: 'Generated a source-linked checklist', preparedForm: 'Prepared bundled synthetic fields', preparedSources: 'Linked the reviewed official sources',
+  repeat: 'Repeat', readAloud: 'Read aloud', stopReading: 'Stop reading', useMicrophone: 'Use microphone', stopListening: 'Stop listening',
+  voiceDisclosure: 'Voice is optional. Browser speech recognition may use browser or vendor processing and may not run on this device. Audio and transcripts are not stored by Sahayi. You can always type instead.',
+  voiceListening: 'Listening…', voiceProcessing: 'Processing speech…', voiceStopped: 'Microphone stopped.', voiceUnavailable: 'Voice input is unavailable in this browser. Please type instead.', voicePermissionDenied: 'Microphone permission was denied. Please type instead.',
+  formQuestion: 'Demo field {current} of {total}', nextField: 'Next demo field', preparationPreview: 'Preparation preview',
+  procedureIntelligenceTitle: 'Procedure Intelligence demonstration', procedureIntelligenceIntro: 'Read-only synthetic example. Detected changes never replace verified guidance automatically.', sourceChecked: 'Source checked', fingerprintCompared: 'Fingerprint compared', changeQuarantined: 'Potential change quarantined', humanReviewed: 'Human review required', packApproved: 'Approved Procedure Pack remains active', syntheticChange: 'Synthetic change example',
 }
 
 export type Messages = Record<keyof typeof en, string>
@@ -78,7 +86,7 @@ const hi: Messages = {
   piiWarning: 'आगे बढ़ने से पहले निजी पहचान संबंधी जानकारी हटाएँ। यह सामान्य जाँच सारी निजी जानकारी हटने की गारंटी नहीं देती।',
   matchedOnDevice: 'इस डिवाइस पर मिलान हुआ।', notSentOnline: 'यह अनुरोध ऑनलाइन नहीं भेजा गया है।', confirmMatch: 'Sahayi को आपकी पुष्टि चाहिए।',
   suggestedTitle: 'क्या आपका मतलब यही सेवा है?', yesContinue: 'हाँ, आगे बढ़ें', chooseAnother: 'दूसरी सेवा चुनें', chooseServiceTitle: 'अपनी सेवा चुनें',
-  noMatchTitle: 'मिलती-जुलती सेवा नहीं मिली', noMatchBody: 'Sahayi अभी सीमित सेवाएँ समर्थित करता है। आप पूरी सूची देख सकते हैं।',
+  noMatchTitle: 'उस अनुरोध के लिए अभी सत्यापित प्रक्रिया नहीं है', noMatchBody: 'Sahayi अभी केवल अपनी सत्यापित सूची का समर्थन करता है। आप वे समर्थित सेवाएँ देख सकते हैं।',
   trustProvenance: 'विश्वास और स्रोत', verifiedOfficial: 'सत्यापित आधिकारिक मार्गदर्शन', officialPublisher: 'आधिकारिक प्रकाशक', packVersion: 'पैक संस्करण',
   verified: 'स्रोत की पिछली समीक्षा', freshness: 'प्रक्रिया स्थिति', current: 'वर्तमान', stale: 'पुराना — समीक्षा लंबित', officialSources: 'आधिकारिक स्रोत',
   staleTitle: 'इस मार्गदर्शन की समीक्षा आवश्यक है।', staleBody: 'समीक्षा तिथि बीत चुकी है। आगे बढ़ने से पहले आधिकारिक सेवा वेबसाइट पर हर विवरण की पुष्टि करें।',
@@ -121,6 +129,14 @@ const hi: Messages = {
   noApplicationSubmitted: 'कोई आवेदन जमा नहीं होगा।', noGovernmentContact: 'किसी सरकारी प्रणाली से संपर्क नहीं होगा।', onlySyntheticData: 'केवल बंडल किया गया कृत्रिम डेटा उपयोग होगा।', demoClears: 'यह Sahayi सत्र समाप्त होने पर सिमुलेशन मिट जाता है।',
   normalScenario: 'सामान्य पूर्णता परिदृश्य', actionScenario: 'कार्रवाई-आवश्यक परिदृश्य', demoError: 'नियत डेमो आगे नहीं बढ़ सका।', syntheticReference: 'कृत्रिम डेमो संदर्भ', switchScenario: 'डेमो परिदृश्य बदलें:', simulatedStatus: 'सिमुलेटेड स्थिति समयरेखा',
   complete: 'पूर्ण', currentStatus: 'वर्तमान', upcoming: 'आगामी', relatedReferences: 'संबंधित सत्यापित संदर्भ', advanceDemo: 'डेमो जानबूझकर आगे बढ़ाएँ', demoComplete: 'डेमो पूरा हुआ', askAiStatus: 'AI से इस डेमो स्थिति की व्याख्या पूछें',
+  needHelp: 'मदद चाहिए?', helpIntro: 'Sahayi को बताएं कि आपको कौन-सी सेवा चाहिए। यह आपके शब्दों को इसी डिवाइस पर निजी रूप से जाँचता है, पुष्टि माँगता है और फिर एक बार में एक कदम बताता है। आप सत्यापित सूची भी देख सकते हैं।',
+  supportedOnly: 'Sahayi अभी केवल अपनी सत्यापित सूची की सेवाओं का समर्थन करता है।', journeyTitle: 'आपकी Sahayi यात्रा', citizenGoal: 'आपका लक्ष्य', identifiedService: 'पहचानी गई सेवा', currentStep: 'मौजूदा कदम',
+  howPrepared: 'Sahayi ने इसे कैसे तैयार किया', preparedMatch: 'इस डिवाइस पर समर्थित सेवा से मिलान किया', preparedPack: 'Procedure Pack संस्करण {version} लोड किया', preparedAnswers: 'आपके चुने तैयारी उत्तरों का मूल्यांकन किया', preparedChecklist: 'स्रोत-सहित चेकलिस्ट बनाई', preparedForm: 'बंडल किए गए कृत्रिम फ़ील्ड तैयार किए', preparedSources: 'समीक्षित आधिकारिक स्रोत जोड़े',
+  repeat: 'दोहराएँ', readAloud: 'पढ़कर सुनाएँ', stopReading: 'पढ़ना रोकें', useMicrophone: 'माइक्रोफ़ोन इस्तेमाल करें', stopListening: 'सुनना रोकें',
+  voiceDisclosure: 'आवाज़ वैकल्पिक है। ब्राउज़र की वाणी पहचान ब्राउज़र या विक्रेता प्रसंस्करण का उपयोग कर सकती है और जरूरी नहीं कि डिवाइस पर चले। Sahayi ऑडियो या प्रतिलेख संग्रहित नहीं करता। आप हमेशा टाइप कर सकते हैं।',
+  voiceListening: 'सुन रहा है…', voiceProcessing: 'वाणी संसाधित हो रही है…', voiceStopped: 'माइक्रोफ़ोन बंद है।', voiceUnavailable: 'इस ब्राउज़र में आवाज़ इनपुट उपलब्ध नहीं है। कृपया टाइप करें।', voicePermissionDenied: 'माइक्रोफ़ोन अनुमति नहीं मिली। कृपया टाइप करें।',
+  formQuestion: 'डेमो फ़ील्ड {current}, कुल {total}', nextField: 'अगला डेमो फ़ील्ड', preparationPreview: 'तैयारी पूर्वावलोकन',
+  procedureIntelligenceTitle: 'Procedure Intelligence प्रदर्शन', procedureIntelligenceIntro: 'केवल पढ़ने योग्य कृत्रिम उदाहरण। मिले बदलाव सत्यापित मार्गदर्शन को अपने आप नहीं बदलते।', sourceChecked: 'स्रोत जाँचा गया', fingerprintCompared: 'फिंगरप्रिंट तुलना की गई', changeQuarantined: 'संभावित बदलाव अलग रखा गया', humanReviewed: 'मानवीय समीक्षा आवश्यक', packApproved: 'स्वीकृत Procedure Pack सक्रिय रहता है', syntheticChange: 'कृत्रिम बदलाव उदाहरण',
 }
 
 const ml: Messages = {
@@ -138,7 +154,7 @@ const ml: Messages = {
   piiWarning: 'തുടരുന്നതിന് മുമ്പ് വ്യക്തിഗത തിരിച്ചറിയൽ വിവരങ്ങൾ നീക്കുക. എല്ലാ സ്വകാര്യ വിവരങ്ങളും നീങ്ങിയെന്ന് ഈ ലളിത പരിശോധന ഉറപ്പാക്കില്ല.',
   matchedOnDevice: 'ഈ ഉപകരണത്തിൽ പൊരുത്തപ്പെടുത്തി.', notSentOnline: 'ഈ അഭ്യർത്ഥന ഓൺലൈനായി അയച്ചിട്ടില്ല.', confirmMatch: 'Sahayiക്ക് നിങ്ങളുടെ സ്ഥിരീകരണം ആവശ്യമാണ്.',
   suggestedTitle: 'നിങ്ങൾ ഉദ്ദേശിച്ച സേവനം ഇതാണോ?', yesContinue: 'അതെ, തുടരുക', chooseAnother: 'മറ്റൊരു സേവനം തിരഞ്ഞെടുക്കുക', chooseServiceTitle: 'നിങ്ങൾ ഉദ്ദേശിച്ച സേവനം തിരഞ്ഞെടുക്കുക',
-  noMatchTitle: 'പൊരുത്തപ്പെടുന്ന സേവനം കണ്ടെത്തിയില്ല', noMatchBody: 'Sahayi ഇപ്പോൾ പരിമിത സേവനങ്ങൾ മാത്രമാണ് പിന്തുണയ്ക്കുന്നത്. പൂർണ്ണ പട്ടിക കാണാം.',
+  noMatchTitle: 'ആ അഭ്യർത്ഥനയ്ക്ക് പരിശോധിച്ച നടപടിക്രമം ഇതുവരെ ഇല്ല', noMatchBody: 'Sahayi ഇപ്പോൾ പരിശോധിച്ച പട്ടിക മാത്രമാണ് പിന്തുണയ്ക്കുന്നത്. പിന്തുണയ്ക്കുന്ന സേവനങ്ങൾ കാണാം.',
   trustProvenance: 'വിശ്വാസവും സ്രോതസ്സും', verifiedOfficial: 'പരിശോധിച്ച ഔദ്യോഗിക മാർഗനിർദേശം', officialPublisher: 'ഔദ്യോഗിക പ്രസാധകൻ', packVersion: 'പാക്ക് പതിപ്പ്',
   verified: 'സ്രോതസ് അവസാനമായി പരിശോധിച്ചത്', freshness: 'നടപടിയുടെ നില', current: 'നിലവിലുള്ളത്', stale: 'പഴയത് — പുനഃപരിശോധന വൈകി', officialSources: 'ഔദ്യോഗിക സ്രോതസ്സുകൾ',
   staleTitle: 'ഈ മാർഗനിർദേശം പുനഃപരിശോധിക്കണം.', staleBody: 'പുനഃപരിശോധന തീയതി കഴിഞ്ഞു. തുടരുന്നതിന് മുമ്പ് ഔദ്യോഗിക സേവന വെബ്സൈറ്റിൽ എല്ലാ വിവരങ്ങളും സ്ഥിരീകരിക്കുക.',
@@ -181,6 +197,14 @@ const ml: Messages = {
   noApplicationSubmitted: 'അപേക്ഷ സമർപ്പിക്കില്ല.', noGovernmentContact: 'സർക്കാർ സംവിധാനവുമായി ബന്ധപ്പെടില്ല.', onlySyntheticData: 'ബണ്ടിൽ ചെയ്ത കൃത്രിമ ഡാറ്റ മാത്രം ഉപയോഗിക്കും.', demoClears: 'ഈ Sahayi സെഷൻ അവസാനിക്കുമ്പോൾ സിമുലേഷൻ മായും.',
   normalScenario: 'സാധാരണ പൂർത്തീകരണ സാഹചര്യം', actionScenario: 'നടപടി-ആവശ്യമായ സാഹചര്യം', demoError: 'നിശ്ചിത ഡെമോ തുടരാനായില്ല.', syntheticReference: 'കൃത്രിമ ഡെമോ റഫറൻസ്', switchScenario: 'ഡെമോ സാഹചര്യം മാറ്റുക:', simulatedStatus: 'സിമുലേറ്റഡ് നില സമയരേഖ',
   complete: 'പൂർത്തിയായി', currentStatus: 'നിലവിൽ', upcoming: 'വരാനിരിക്കുന്നത്', relatedReferences: 'ബന്ധപ്പെട്ട പരിശോധിച്ച റഫറൻസുകൾ', advanceDemo: 'ഡെമോ മനപ്പൂർവം മുന്നോട്ട് നീക്കുക', demoComplete: 'ഡെമോ പൂർത്തിയായി', askAiStatus: 'ഈ ഡെമോ നില വിശദീകരിക്കാൻ AIയോട് ചോദിക്കുക',
+  needHelp: 'സഹായം വേണോ?', helpIntro: 'നിങ്ങൾക്ക് വേണ്ട സേവനം Sahayiയോട് പറയുക. നിങ്ങളുടെ വാക്കുകൾ ഈ ഉപകരണത്തിൽ സ്വകാര്യമായി പരിശോധിച്ച് സ്ഥിരീകരണം ചോദിച്ച ശേഷം ഓരോ ഘട്ടമായി മാർഗനിർദേശം നൽകും. പരിശോധിച്ച പട്ടികയും കാണാം.',
+  supportedOnly: 'Sahayi ഇപ്പോൾ പരിശോധിച്ച പട്ടികയിലെ സേവനങ്ങൾ മാത്രമാണ് പിന്തുണയ്ക്കുന്നത്.', journeyTitle: 'നിങ്ങളുടെ Sahayi യാത്ര', citizenGoal: 'നിങ്ങളുടെ ലക്ഷ്യം', identifiedService: 'കണ്ടെത്തിയ സേവനം', currentStep: 'ഇപ്പോഴത്തെ ഘട്ടം',
+  howPrepared: 'Sahayi ഇത് എങ്ങനെ തയ്യാറാക്കി', preparedMatch: 'ഈ ഉപകരണത്തിൽ പിന്തുണയ്ക്കുന്ന സേവനവുമായി പൊരുത്തപ്പെടുത്തി', preparedPack: 'Procedure Pack പതിപ്പ് {version} ലോഡ് ചെയ്തു', preparedAnswers: 'നിങ്ങൾ തിരഞ്ഞെടുത്ത തയ്യാറെടുപ്പ് ഉത്തരങ്ങൾ വിലയിരുത്തി', preparedChecklist: 'സ്രോതസ്സുകളുള്ള ചെക്ക്‌ലിസ്റ്റ് സൃഷ്ടിച്ചു', preparedForm: 'ബണ്ടിൽ ചെയ്ത കൃത്രിമ ഫീൽഡുകൾ തയ്യാറാക്കി', preparedSources: 'അവലോകനം ചെയ്ത ഔദ്യോഗിക സ്രോതസ്സുകൾ ബന്ധിപ്പിച്ചു',
+  repeat: 'വീണ്ടും പറയുക', readAloud: 'വായിച്ചുകേൾപ്പിക്കുക', stopReading: 'വായന നിർത്തുക', useMicrophone: 'മൈക്രോഫോൺ ഉപയോഗിക്കുക', stopListening: 'കേൾക്കൽ നിർത്തുക',
+  voiceDisclosure: 'ശബ്ദസഹായം ഐച്ഛികമാണ്. ബ്രൗസർ വാക്ക് തിരിച്ചറിയൽ ബ്രൗസർ അല്ലെങ്കിൽ സേവനദാതാവിന്റെ പ്രോസസ്സിംഗ് ഉപയോഗിച്ചേക്കാം; ഇത് ഉപകരണത്തിൽ തന്നെയാകണമെന്നില്ല. Sahayi ശബ്ദമോ എഴുത്താക്കിയ വാക്കുകളോ സൂക്ഷിക്കില്ല. എപ്പോഴും ടൈപ്പ് ചെയ്യാം.',
+  voiceListening: 'കേൾക്കുന്നു…', voiceProcessing: 'സംസാരം പ്രോസസ്സ് ചെയ്യുന്നു…', voiceStopped: 'മൈക്രോഫോൺ നിർത്തി.', voiceUnavailable: 'ഈ ബ്രൗസറിൽ ശബ്ദ ഇൻപുട്ട് ലഭ്യമല്ല. ടൈപ്പ് ചെയ്യുക.', voicePermissionDenied: 'മൈക്രോഫോൺ അനുമതി നിഷേധിച്ചു. ടൈപ്പ് ചെയ്യുക.',
+  formQuestion: 'ഡെമോ ഫീൽഡ് {current} / {total}', nextField: 'അടുത്ത ഡെമോ ഫീൽഡ്', preparationPreview: 'തയ്യാറെടുപ്പ് പ്രിവ്യൂ',
+  procedureIntelligenceTitle: 'Procedure Intelligence പ്രദർശനം', procedureIntelligenceIntro: 'വായിക്കാൻ മാത്രം കഴിയുന്ന കൃത്രിമ ഉദാഹരണം. കണ്ടെത്തിയ മാറ്റങ്ങൾ പരിശോധിച്ച മാർഗനിർദേശം സ്വയമേവ മാറ്റില്ല.', sourceChecked: 'സ്രോതസ്സ് പരിശോധിച്ചു', fingerprintCompared: 'ഫിംഗർപ്രിന്റ് താരതമ്യം ചെയ്തു', changeQuarantined: 'സാധ്യതയുള്ള മാറ്റം വേർതിരിച്ചു', humanReviewed: 'മനുഷ്യ അവലോകനം ആവശ്യമാണ്', packApproved: 'അംഗീകരിച്ച Procedure Pack സജീവമായി തുടരും', syntheticChange: 'കൃത്രിമ മാറ്റ ഉദാഹരണം',
 }
 
 export const UI_MESSAGES: Record<Locale, Messages> = { en, hi, ml }

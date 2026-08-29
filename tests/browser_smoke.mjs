@@ -52,6 +52,14 @@ const clickText = async text => {
   const clicked = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent.trim() === ${JSON.stringify(text)}); if (!button) return false; button.click(); return true })()`)
   if (!clicked) throw new Error(`Missing button: ${text}`)
 }
+const clickWhilePresent = async text => {
+  for (let step = 0; step < 30; step += 1) {
+    const clicked = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent.trim() === ${JSON.stringify(text)}); if (!button) return false; button.click(); return true })()`)
+    if (!clicked) return step
+    await delay(50)
+  }
+  throw new Error(`Too many progressive fields: ${text}`)
+}
 const setLocale = async locale => evaluate(`(() => { const select = document.querySelector('#language-selector'); select.value = ${JSON.stringify(locale)}; select.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
 const intentTimings = []
 
@@ -111,20 +119,24 @@ await waitFor(`document.documentElement.lang === 'en'`)
 
 await clickText('Start')
 await waitFor(`document.querySelector('h1')?.textContent === 'What do you need help with?'`)
+const voiceFallback = await evaluate(`document.body.textContent.includes('Voice is optional.') && document.body.textContent.includes('You can always type instead.')`)
+if (!voiceFallback) throw new Error('Voice disclosure and text fallback are missing')
 await clickText('Browse all services')
 await waitFor(`document.querySelector('h1')?.textContent === 'Supported services'`)
 await viewport(1280, 900)
 await screenshot('catalogue-en-desktop')
 if (!await evaluate(`(() => { const button = [...document.querySelectorAll('.service-card')].find(item => item.textContent.includes('Update your Aadhaar address online')); if (!button) return false; button.click(); return true })()`)) throw new Error('Aadhaar service card is missing')
 await waitFor(`document.querySelector('h1')?.textContent === 'Update your Aadhaar address online'`)
+if (!await evaluate(`document.body.textContent.includes('Your Sahayi journey') && document.body.textContent.includes('Procedure Intelligence demonstration')`)) throw new Error('Unified journey or Procedure Intelligence is missing')
 await screenshot('aadhaar-detail-en-desktop')
 await clickText('Build personalized checklist')
 await waitFor(`document.querySelector('h1')?.textContent === 'Personalized preparation checklist'`)
 await viewport(390, 844)
 await screenshot('checklist-en-390')
 await clickText('Prepare synthetic demo worksheet')
-await waitFor(`document.querySelector('.watermark')?.textContent.includes('DO NOT SUBMIT')`)
+await waitFor(`document.querySelector('.watermark')?.textContent.trim() === 'DEMO — NOT FOR SUBMISSION'`)
 await viewport(360, 800)
+await clickWhilePresent('Next demo field')
 const privateBlank = await evaluate(`[...document.querySelectorAll('.worksheet-fields dd')].some(item => item.textContent.includes('not collected') && item.textContent.includes('—'))`)
 if (!privateBlank) throw new Error('Private worksheet field is not visibly blank')
 await screenshot('synthetic-form-en-360')
@@ -147,6 +159,10 @@ await waitFor(`document.querySelector('h1')?.textContent === 'Sahayi' && documen
 if (await evaluate(`document.body.textContent.includes('DEMO-UIDAI-ACTION')`)) throw new Error('End session retained the demo reference')
 await screenshot('session-cleared-en-768')
 
+await clickText('Browse all services')
+await waitFor(`document.querySelectorAll('.service-card').length === 2`)
+await evaluate(`document.querySelector('.service-card').click()`)
+await waitFor(`Boolean(document.querySelector('.trust-card'))`)
 await clickText('Ask Sahayi AI')
 await waitFor(`document.querySelector('h1')?.textContent === 'Ask Sahayi AI'`)
 await viewport(768, 900)
@@ -178,6 +194,7 @@ const localizedDemo = async ({ locale, start, browse, form, demo, end, width, na
   await waitFor(`Boolean(document.querySelector('.trust-card'))`)
   await clickText(form)
   await waitFor(`Boolean(document.querySelector('.watermark'))`)
+  await clickWhilePresent(locale === 'hi' ? 'अगला डेमो फ़ील्ड' : 'അടുത്ത ഡെമോ ഫീൽഡ്')
   await clickText(demo)
   await waitFor(`Boolean(document.querySelector('.disclosure-card'))`)
   await viewport(width, width === 390 ? 844 : 900)
