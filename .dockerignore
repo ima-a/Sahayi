@@ -21,6 +21,10 @@
 !frontend/src/
 !frontend/src/**
 
+!intent-model/
+!intent-model/artifacts/
+!intent-model/artifacts/intent-model.v1.json
+
 !procedure-packs/
 !procedure-packs/packs/
 !procedure-packs/packs/**

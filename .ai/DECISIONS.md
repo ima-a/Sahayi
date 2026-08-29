@@ -44,6 +44,9 @@
 | 2026-08-29 | Leave reviewed monitoring baselines empty when no authorized live retrieval occurred | Do not fabricate fingerprints; report `review_required` until an authorized human establishes each baseline. |
 | 2026-08-29 | Model demo submission/status as a strict stateless synthetic contract | Demonstrate a journey without government contact, arbitrary input, real references, implied acceptance, submission, approval or tracking. |
 | 2026-08-29 | Use one shared session-clear operation for explicit end and inactivity | Abort requests and clear every in-memory citizen state consistently, while making no claim beyond Sahayi's retention boundary. |
+| 2026-08-29 | Add a dependency-free character n-gram Multinomial Naive Bayes intent classifier | A 167 KiB deterministic trained artifact improves native-script, transliteration and spelling coverage without a browser LLM, runtime dependency, model download, generation, or network call. |
+| 2026-08-29 | Ensemble local ML with the existing pack-phrase matcher behind PII and confirmation gates | Agreement and one-sided confidence may propose only allowlisted catalogue services; disagreement, unsupported, abstention and artifact failure fail safely without changing procedure facts or readiness decisions. |
+| 2026-08-29 | Train only on owned synthetic examples and reserve validation/test roles | Fixed balanced splits, canonical generation, digests, native-review markers, validation-only threshold tuning and candid synthetic metrics make limitations and retraining drift reviewable. |
 
 ## Official HTTPX documentation basis
 

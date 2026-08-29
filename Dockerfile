@@ -6,6 +6,7 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+COPY intent-model/artifacts/intent-model.v1.json /build/intent-model/artifacts/intent-model.v1.json
 RUN npm run build
 
 

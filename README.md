@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first local kiosk prototype for making government services easier to understand in English, Hindi, and Malayalam. Its deterministic journey includes a browser-only service finder, verified procedures, closed-choice readiness, source-linked personalized checklists, synthetic preparation worksheets, and a clearly non-government demo submission/status timeline. An optional consent-gated AI guide can choose among seven verified local tools; it is disabled by default and never becomes the source of procedure facts.
+Sahayi is a privacy-first local kiosk prototype for making government services easier to understand in English, Hindi, and Malayalam. Its deterministic journey includes a browser-only service finder with a compact trained on-device intent classifier, verified procedures, closed-choice readiness, source-linked personalized checklists, synthetic preparation worksheets, and a clearly non-government demo submission/status timeline. An optional consent-gated AI guide can choose among seven verified local tools; it is disabled by default and never becomes the source of procedure facts.
 
 English is the canonical verified guidance. Hindi and Malayalam are machine-assisted prototype translations of that already-validated content, require native-speaker and legal review before production use, and defer to the linked official source wording. Sahayi uses no runtime translation API, external translation resource, or external font.
 
@@ -24,6 +24,8 @@ Start FastAPI with `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --r
 ## Testing and production build
 
 Run `python -m pytest`, then `cd frontend && npm run typecheck && npm test && npm run build`, and finally `git diff --check`.
+
+The local intent model uses no runtime ML dependency. Reproduce its canonical artifact/report with `python -m tools.intent_model --write`, check dataset/model digest and regeneration drift with `python -m tools.intent_model --check`, and inspect held-out synthetic metrics with `python -m tools.intent_model --evaluate`. See the [model card](docs/intent-model-card.md) for labels, provenance, metrics, privacy, ensemble behavior, retraining, and native-review limitations.
 
 Validate procedure packs with `.venv/bin/python -m sahayi_api.procedure_tool validate`. Check generated-schema drift with `.venv/bin/python -m sahayi_api.procedure_tool check-schema`; regenerate it only after an intentional contract change with `.venv/bin/python -m sahayi_api.procedure_tool export-schema`.
 

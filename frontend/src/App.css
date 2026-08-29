@@ -48,6 +48,7 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 4px solid
 .intake-page textarea { width: 100%; min-height: 120px; padding: 14px; border: 2px solid #78988b; border-radius: 12px; color: #173d2e; resize: vertical; }
 .intake-page textarea:focus-visible { outline: 4px solid #d6a312; outline-offset: 3px; }
 .privacy-note { margin: 10px 0 18px; font-weight: 700; }
+.local-match-status { margin: 24px 0 0; padding: 12px 14px; border-left: 5px solid #087a4d; background: #eff9f4; }
 .example-chips, .intake-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
 .chip { min-height: 42px; padding: 8px 12px; text-align: left; font-size: .9rem; }
 .intake-actions > button { padding: 0 18px; }

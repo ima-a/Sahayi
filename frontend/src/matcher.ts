@@ -1,4 +1,6 @@
 import type { ProcedureSummary } from './api'
+import { classifyLocalIntent, serviceIdForLabel, type LocalIntentResult } from './localIntent'
+import { normalizeIntentText } from './normalization'
 
 export const MAX_QUERY_LENGTH = 500
 const MAX_CATALOGUE_CANDIDATES = 100
@@ -15,12 +17,51 @@ const DECIMAL_ZERO_CODE_POINTS = [0x30, 0x660, 0x6f0, 0x966, 0x9e6, 0xa66, 0xae6
 export type MatchReason = 'exact_phrase' | 'phrase_containment' | 'token_overlap'
 export type Candidate = { procedure: ProcedureSummary; score: number; reason: MatchReason; matched_tokens: string[] }
 export type MatchResult =
-  | { kind: 'confident'; candidate: Candidate }
-  | { kind: 'ambiguous'; candidates: Candidate[] }
-  | { kind: 'none' }
+  | { kind: 'confident'; candidate: Candidate; source?: 'both' | 'ml' | 'deterministic' | 'fallback' }
+  | { kind: 'ambiguous'; candidates: Candidate[]; source?: 'disagreement' | 'deterministic' }
+  | { kind: 'none'; source?: 'unsupported' | 'both_abstained' | 'fallback' }
+
+export type ServiceQueryResult = { kind: 'pii' } | { kind: 'result'; result: MatchResult }
 
 export function normalise(text: string): string {
-  return text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
+  return normalizeIntentText(text)
+}
+
+export function matchProceduresHybrid(query: string, procedures: ProcedureSummary[], infer: (text: string) => LocalIntentResult = classifyLocalIntent): MatchResult {
+  const deterministic = matchProcedures(query, procedures)
+  const ml = infer(query)
+  if (ml.kind === 'unavailable') return withFallback(deterministic)
+  if (ml.kind === 'abstain') return withDeterministicSource(deterministic)
+  if (ml.label === 'unsupported_other') return { kind: 'none', source: 'unsupported' }
+  const serviceId = serviceIdForLabel(ml.label)
+  const procedure = procedures.find(item => item.service_id === serviceId)
+  if (!procedure) return withFallback(deterministic)
+  const mlCandidate: Candidate = { procedure, score: Math.round(ml.confidence * 1000), reason: 'token_overlap', matched_tokens: [] }
+  if (deterministic.kind === 'none') return { kind: 'confident', candidate: mlCandidate, source: 'ml' }
+  if (deterministic.kind === 'ambiguous') return { ...deterministic, source: 'deterministic' }
+  if (deterministic.candidate.procedure.service_id === serviceId) return { ...deterministic, source: 'both' }
+  return { kind: 'ambiguous', candidates: uniqueCandidates([deterministic.candidate, mlCandidate]), source: 'disagreement' }
+}
+
+export function classifyServiceQuery(query: string, procedures: ProcedureSummary[], infer: (text: string) => LocalIntentResult = classifyLocalIntent): ServiceQueryResult {
+  if (detectHighRiskPii(query)) return { kind: 'pii' }
+  return { kind: 'result', result: matchProceduresHybrid(query, procedures, infer) }
+}
+
+function withFallback(result: MatchResult): MatchResult {
+  if (result.kind === 'confident') return { ...result, source: 'fallback' }
+  if (result.kind === 'none') return { ...result, source: 'fallback' }
+  return { ...result, source: 'deterministic' }
+}
+
+function withDeterministicSource(result: MatchResult): MatchResult {
+  if (result.kind === 'confident') return { ...result, source: 'deterministic' }
+  if (result.kind === 'none') return { ...result, source: 'both_abstained' }
+  return { ...result, source: 'deterministic' }
+}
+
+function uniqueCandidates(candidates: Candidate[]): Candidate[] {
+  return [...new Map(candidates.map(candidate => [candidate.procedure.service_id, candidate])).values()]
 }
 
 export function meaningfulTokens(text: string): string[] {

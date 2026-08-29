@@ -466,6 +466,24 @@ describe('Sahayi verified procedure flow', () => {
     expect(await screen.findByRole('heading', { name: 'Supported services' })).toBeInTheDocument()
   })
 
+  it('announces local matching, makes no finder request, and clears inference on language change', async () => {
+    const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    const query = await screen.findByLabelText('Tell us what service you need')
+    await screen.findByRole('button', { name: 'change Aadhaar address' })
+    const beforeInference = fetchMock.mock.calls.length
+    fireEvent.change(query, { target: { value: 'need aadhaar adress updation after moving' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find my service' }))
+    expect(await screen.findByText(/Matched on this device/)).toBeInTheDocument()
+    expect(screen.getByText(/This request has not been sent online/)).toHaveTextContent('Sahayi needs you to confirm.')
+    expect(fetchMock.mock.calls).toHaveLength(beforeInference)
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
+    expect(await screen.findByLabelText('बताएँ कि आपको कौन-सी सेवा चाहिए')).toHaveValue('')
+    expect(screen.queryByText(/इस डिवाइस पर मिलान हुआ/)).not.toBeInTheDocument()
+  })
+
   it('asks the citizen to choose when catalogue phrases are tied', async () => {
     mockApi({ procedures: [{ ...summary, intent_phrases: ['address update'] }, { ...pensionSummary, intent_phrases: ['address update'] }] })
     render(<App />)

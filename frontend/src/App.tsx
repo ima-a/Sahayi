@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { assistantTurn, buildChecklist, evaluateReadiness, getDemoStatus, getHealth, getProcedure, getProcedures, getPublicConfig, prepareSyntheticForm, startDemoSubmission, type AssistantTurnResponse, type DemoJourneyResponse, type DemoScenarioId, type PersonalizedChecklist, type ProcedureDetail, type ProcedureSummary, type ReadinessAnswer, type ReadinessResponse, type SyntheticFormAssistance } from './api'
 import { formatMessage, LANGUAGE_NAMES, LOCALES, UI_MESSAGES, type Locale, type Messages } from './i18n'
-import { detectHighRiskPii, matchProcedures, MAX_QUERY_LENGTH, type MatchResult } from './matcher'
+import { classifyServiceQuery, detectHighRiskPii, MAX_QUERY_LENGTH, type Candidate, type MatchResult } from './matcher'
 import './App.css'
 
 type Availability = 'loading' | 'available' | 'unavailable'
@@ -151,6 +151,7 @@ function App() {
   const changeLocale = (nextLocale: Locale) => {
     if (nextLocale === locale) return
     setLocale(nextLocale)
+    setQuery('')
     setMatch(null)
     setPiiWarning(false)
     setAgentInput('')
@@ -206,9 +207,9 @@ function App() {
   }
 
   const findService = () => {
-    if (detectHighRiskPii(query)) { setPiiWarning(true); setMatch(null); return }
-    setPiiWarning(false)
-    setMatch(matchProcedures(query, procedures ?? []))
+    const result = classifyServiceQuery(query, procedures ?? [])
+    if (result.kind === 'pii') { setPiiWarning(true); setMatch(null); return }
+    setPiiWarning(false); setMatch(result.result)
   }
 
   const openAssistant = () => {
@@ -397,6 +398,7 @@ function App() {
   if (screen === 'intake') return wrapSession(<Intake locale={locale} messages={messages} language={language} procedures={procedures} error={catalogueError} query={query} match={match} piiWarning={piiWarning}
     onQueryChange={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onFind={findService}
     onExample={value => { setQuery(value); setMatch(null); setPiiWarning(false) }} onBrowse={() => setScreen('catalogue')}
+    onCandidate={candidate => setMatch({ kind: 'confident', candidate, source: 'deterministic' })}
     onConfirm={serviceId => { setQuery(''); setMatch(null); setPiiWarning(false); selectProcedure(serviceId) }}
     onChooseAnother={() => { setMatch(null); setQuery('') }} onStartOver={startOver} />)
 
@@ -430,9 +432,9 @@ function App() {
   </section></main>
 }
 
-function Intake({ messages, language, procedures, error, query, match, piiWarning, onQueryChange, onFind, onExample, onBrowse, onConfirm, onChooseAnother, onStartOver }: {
+function Intake({ messages, language, procedures, error, query, match, piiWarning, onQueryChange, onFind, onExample, onBrowse, onCandidate, onConfirm, onChooseAnother, onStartOver }: {
   locale: Locale; messages: Messages; language: React.ReactNode; procedures: ProcedureSummary[] | null; error: boolean; query: string; match: MatchResult | null; piiWarning: boolean
-  onQueryChange: (value: string) => void; onFind: () => void; onExample: (value: string) => void; onBrowse: () => void; onConfirm: (serviceId: string) => void; onChooseAnother: () => void; onStartOver: () => void
+  onQueryChange: (value: string) => void; onFind: () => void; onExample: (value: string) => void; onBrowse: () => void; onCandidate: (candidate: Candidate) => void; onConfirm: (serviceId: string) => void; onChooseAnother: () => void; onStartOver: () => void
 }) {
   const focusTarget = useRef<HTMLHeadingElement>(null)
   const resultTarget = useRef<HTMLDivElement>(null)
@@ -449,10 +451,11 @@ function Intake({ messages, language, procedures, error, query, match, piiWarnin
           <p className="privacy-note">{messages.privacyNote}</p>
           {examples.length > 0 && <div className="example-chips" aria-label={messages.examples}>{examples.map(example => <button className="secondary chip" type="button" key={example} onClick={() => onExample(example)}>{example}</button>)}</div>}
           <div className="intake-actions"><button type="button" onClick={onFind} disabled={!query.trim()}>{messages.findService}</button><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></div></>}
-    <div ref={resultTarget} tabIndex={-1}>
+    <div ref={resultTarget} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true">
       {piiWarning && <p className="inline-error" role="alert">{messages.piiWarning}</p>}
+      {match && <p className="local-match-status">{match.kind !== 'none' && <><strong>{messages.matchedOnDevice}</strong> </>}{messages.notSentOnline}{match.kind !== 'none' && <> {messages.confirmMatch}</>}</p>}
       {match?.kind === 'confident' && <section className="match-result" aria-labelledby="suggested-title"><h2 id="suggested-title">{messages.suggestedTitle}</h2><h3>{match.candidate.procedure.title}</h3><p>{match.candidate.procedure.short_description}</p><div className="intake-actions"><button type="button" onClick={() => onConfirm(match.candidate.procedure.service_id)}>{messages.yesContinue}</button><button type="button" className="secondary" onClick={onChooseAnother}>{messages.chooseAnother}</button></div></section>}
-      {match?.kind === 'ambiguous' && <section className="match-result" aria-labelledby="choose-title"><h2 id="choose-title">{messages.chooseServiceTitle}</h2><div className="candidate-list">{match.candidates.map(candidate => <button type="button" className="service-card" key={candidate.procedure.service_id} onClick={() => onConfirm(candidate.procedure.service_id)}><span><strong>{candidate.procedure.title}</strong><small>{candidate.procedure.short_description}</small></span><span aria-hidden="true">→</span></button>)}</div><button type="button" className="secondary compact" onClick={onChooseAnother}>{messages.chooseAnother}</button></section>}
+      {match?.kind === 'ambiguous' && <section className="match-result" aria-labelledby="choose-title"><h2 id="choose-title">{messages.chooseServiceTitle}</h2><div className="candidate-list">{match.candidates.map(candidate => <button type="button" className="service-card" key={candidate.procedure.service_id} onClick={() => onCandidate(candidate)}><span><strong>{candidate.procedure.title}</strong><small>{candidate.procedure.short_description}</small></span><span aria-hidden="true">→</span></button>)}</div><button type="button" className="secondary compact" onClick={onChooseAnother}>{messages.chooseAnother}</button></section>}
       {match?.kind === 'none' && <section className="match-result" aria-labelledby="no-match-title"><h2 id="no-match-title">{messages.noMatchTitle}</h2><p>{messages.noMatchBody}</p><button type="button" className="secondary" onClick={onBrowse}>{messages.browseServices}</button></section>}
     </div>
   </section></main>

@@ -53,6 +53,7 @@ const clickText = async text => {
   if (!clicked) throw new Error(`Missing button: ${text}`)
 }
 const setLocale = async locale => evaluate(`(() => { const select = document.querySelector('#language-selector'); select.value = ${JSON.stringify(locale)}; select.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+const intentTimings = []
 
 await send('Page.enable')
 await send('Runtime.enable')
@@ -79,6 +80,34 @@ await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab' })
 const focus = await evaluate(`(() => { const element = document.activeElement; const style = getComputedStyle(element); return { tag: element.tagName, outline: style.outlineStyle, width: style.outlineWidth } })()`)
 if (focus.outline === 'none' || focus.width === '0px') throw new Error('Visible keyboard focus is missing')
 await screenshot('keyboard-focus-768')
+
+const localIntentJourney = async ({ locale, start, find, confirm, end, query, localText, widths, name }) => {
+  await setLocale(locale)
+  await waitFor(`document.documentElement.lang === ${JSON.stringify(locale)}`)
+  await clickText(start)
+  await waitFor(`Boolean(document.querySelector('textarea#service-query')) && document.querySelectorAll('.example-chips button').length === 2`)
+  await evaluate(`performance.clearResourceTimings()`)
+  await evaluate(`(() => { const input = document.querySelector('textarea#service-query'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(query)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+  const timing = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent.trim() === ${JSON.stringify(find)}); const started = performance.now(); button.click(); return performance.now() - started })()`)
+  intentTimings.push({ locale, milliseconds: timing })
+  await waitFor(`document.body.textContent.includes(${JSON.stringify(localText)}) && Boolean(document.querySelector('.match-result'))`)
+  if (await evaluate(`Boolean(document.querySelector('.trust-card'))`)) throw new Error(`Intent service opened without confirmation: ${locale}`)
+  if (await evaluate(`performance.getEntriesByType('resource').length !== 0`)) throw new Error(`Local intent caused a network request: ${locale}`)
+  for (const width of widths) {
+    await viewport(width, width < 700 ? 844 : 900)
+    await screenshot(`${name}-${width}`)
+  }
+  await clickText(confirm)
+  await waitFor(`Boolean(document.querySelector('.trust-card'))`)
+  await clickText(end)
+  await waitFor(`document.querySelector('h1')?.textContent === 'Sahayi'`)
+}
+
+await localIntentJourney({ locale: 'en', start: 'Start', find: 'Find my service', confirm: 'Yes, continue', end: 'End session', query: 'need aadhaar adress updation after moving', localText: 'Matched on this device.', widths: [360, 1280], name: 'intent-aadhaar-en' })
+await localIntentJourney({ locale: 'hi', start: 'शुरू करें', find: 'मेरी सेवा खोजें', confirm: 'हाँ, आगे बढ़ें', end: 'सत्र समाप्त करें', query: 'आधार का पत्ता अप्डेट करना है', localText: 'इस डिवाइस पर मिलान हुआ।', widths: [390], name: 'intent-aadhaar-hi' })
+await localIntentJourney({ locale: 'ml', start: 'തുടങ്ങുക', find: 'എന്റെ സേവനം കണ്ടെത്തുക', confirm: 'അതെ, തുടരുക', end: 'സെഷൻ അവസാനിപ്പിക്കുക', query: 'old age പെൻഷൻ kerala അപേക്ഷ', localText: 'ഈ ഉപകരണത്തിൽ പൊരുത്തപ്പെടുത്തി.', widths: [768], name: 'intent-pension-ml' })
+await setLocale('en')
+await waitFor(`document.documentElement.lang === 'en'`)
 
 await clickText('Start')
 await waitFor(`document.querySelector('h1')?.textContent === 'What do you need help with?'`)
@@ -149,4 +178,4 @@ await localizedDemo({ locale: 'hi', start: 'शुरू करें', browse: 
 await localizedDemo({ locale: 'ml', start: 'തുടങ്ങുക', browse: 'എല്ലാ സേവനങ്ങളും കാണുക', form: 'കൃത്രിമ ഡെമോ വർക്ക്‌ഷീറ്റ് തയ്യാറാക്കുക', demo: 'ഡെമോ സമർപ്പണവുമായി തുടരുക', end: 'സെഷൻ അവസാനിപ്പിക്കുക', width: 768, name: 'demo-disclosure-ml-768' })
 
 socket.close()
-process.stdout.write(JSON.stringify({ screenshots: 14, widths: [360, 390, 768, 1280], locales: ['en', 'hi', 'ml'], visibleFocus: focus, demoDisclosure: disclosure, currentDemoStep: currentStep, sessionCleared: true }, null, 2) + '\n')
+process.stdout.write(JSON.stringify({ screenshots: 18, widths: [360, 390, 768, 1280], locales: ['en', 'hi', 'ml'], visibleFocus: focus, intentTimings, localIntentNetworkRequests: 0, explicitIntentConfirmation: true, demoDisclosure: disclosure, currentDemoStep: currentStep, sessionCleared: true }, null, 2) + '\n')
