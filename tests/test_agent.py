@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 import sahayi_api.main as main_module
 from sahayi_api.agent import AgentRuntime, AssistantTurnRequest, RateLimiter, RequestBudget, _execute_tool, run_assistant_turn
-from sahayi_api.config import AGENT_MODEL, get_settings
+from sahayi_api.config import AGENT_MODEL, AGENT_PROVIDER, GROQ_BASE_URL, get_settings
 from sahayi_api.main import app
 from sahayi_api.procedures import default_pack_root, load_procedure_registry
 
@@ -28,7 +28,7 @@ class FakeResponses:
 
 
 def fake_runtime(replies: list[object]) -> tuple[AgentRuntime, FakeResponses]:
-    settings = replace(get_settings(), agent_enabled=True, openai_api_key="test-key", agent_request_budget=20)
+    settings = replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_request_budget=20)
     runtime = AgentRuntime(settings)
     responses = FakeResponses(replies)
     runtime.client = SimpleNamespace(responses=responses)
@@ -66,7 +66,7 @@ async def test_pii_is_blocked_before_provider_without_echo(value: str) -> None:
 
 @pytest.mark.anyio
 async def test_disabled_agent_falls_back_without_provider() -> None:
-    runtime = AgentRuntime(replace(get_settings(), agent_enabled=False, openai_api_key=None))
+    runtime = AgentRuntime(replace(get_settings(), agent_enabled=False, groq_api_key=None))
     result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.1")
     assert result.status == "unavailable"
     assert result.fallback is True
@@ -99,12 +99,11 @@ async def test_strict_tool_loop_uses_bounded_responses_settings_and_deterministi
     assert len(responses.calls) == 2
     for call in responses.calls:
         assert call["model"] == AGENT_MODEL
-        assert call["store"] is False
         assert call["stream"] is False
         assert call["parallel_tool_calls"] is False
-        assert call["reasoning"] == {"effort": "low"}
-        assert call["text"]["verbosity"] == "low"
-        assert call["text"]["format"]["strict"] is True
+        for unsupported in ("store", "previous_response_id", "truncation", "include", "safety_identifier", "prompt_cache_key", "prompt", "reasoning", "text"):
+            assert unsupported not in call
+        assert "single JSON object without Markdown" in call["instructions"]
         assert len(call["tools"]) == 7
         assert all(tool["strict"] is True for tool in call["tools"])
         readiness_tool = next(tool for tool in call["tools"] if tool["name"] == "evaluate_readiness")
@@ -142,6 +141,14 @@ def test_strict_readiness_tool_records_are_converted_and_duplicates_fail_closed(
     assert service_id is None
     assert status_id is None
     assert json.loads(output) == {"error": "Invalid tool request"}
+
+
+def test_tool_arguments_reject_missing_and_extra_fields() -> None:
+    registry = load_procedure_registry(default_pack_root())
+    for arguments in ({}, {"locale": "en", "unexpected": True}):
+        output, service_id, status_id = _execute_tool("list_supported_services", json.dumps(arguments), registry)
+        assert (service_id, status_id) == (None, None)
+        assert json.loads(output) == {"error": "Invalid tool request"}
 
 
 def test_simulated_status_tool_is_strict_and_returns_only_demo_status() -> None:
@@ -187,6 +194,17 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
     assert malformed.status == "fallback"
     assert "not-json" not in malformed.message
 
+    schema_invalid = json.dumps({
+        "guidance_message": "Do something",
+        "selection_state": "selected",
+        "service_id": "uidai-aadhaar-address-update",
+        "action_ids": "view-procedure",
+        "extra": True,
+    })
+    runtime, _ = fake_runtime([SimpleNamespace(output=[], output_text=schema_invalid)])
+    rejected = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.5")
+    assert rejected.status == "fallback"
+
 
 @pytest.mark.anyio
 async def test_agent_may_explain_only_the_current_validated_demo_status() -> None:
@@ -221,13 +239,67 @@ async def test_provider_timeout_is_generic_and_excessive_tool_loop_is_bounded() 
     assert "provider-secret-detail" not in timed_out.message
 
     call = SimpleNamespace(type="function_call", name="list_supported_services", arguments='{"locale":"en"}', call_id="call")
-    settings = replace(get_settings(), agent_enabled=True, openai_api_key="test-key", agent_max_tool_calls=1, agent_request_budget=10)
+    settings = replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_max_tool_calls=1, agent_request_budget=10)
     runtime = AgentRuntime(settings)
     responses = FakeResponses([SimpleNamespace(output=[call, call], output_text="")])
     runtime.client = SimpleNamespace(responses=responses)
     bounded = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.3")
     assert bounded.status == "fallback"
     assert len(responses.calls) == 1
+
+
+@pytest.mark.parametrize(("status_code", "expected"), [(401, "fallback"), (403, "fallback"), (429, "rate_limited")])
+@pytest.mark.anyio
+async def test_provider_http_errors_are_generic_without_retries(status_code: int, expected: str) -> None:
+    class ProviderError(Exception):
+        pass
+
+    error = ProviderError("provider-secret-detail")
+    error.status_code = status_code
+    runtime, responses = fake_runtime([error])
+    result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, f"error-{status_code}")
+    assert result.status == expected
+    assert "provider-secret-detail" not in result.message
+    assert len(responses.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_round_and_output_limits_are_applied_without_retry() -> None:
+    call = SimpleNamespace(type="function_call", name="list_supported_services", arguments='{"locale":"en"}', call_id="round-call")
+    runtime, responses = fake_runtime([SimpleNamespace(output=[call], output_text="")])
+    runtime.settings = replace(runtime.settings, agent_max_rounds=1, agent_max_output_tokens=333)
+    result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "round-limit")
+    assert result.status == "fallback"
+    assert len(responses.calls) == 1
+    assert responses.calls[0]["max_output_tokens"] == 333
+
+
+def test_groq_provider_selection_defaults_and_client_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("SAHAYI_AGENT_PROVIDER", "not-allowed")
+    monkeypatch.setenv("SAHAYI_AGENT_MODEL", "not-allowed")
+    settings = get_settings()
+    assert settings.agent_provider == AGENT_PROVIDER
+    assert settings.agent_model == AGENT_MODEL
+    assert AgentRuntime(replace(settings, agent_enabled=True)).available is False
+
+    captured: dict[str, object] = {}
+    sentinel = SimpleNamespace(responses=SimpleNamespace())
+
+    def fake_client(**kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("openai.AsyncOpenAI", fake_client)
+    runtime = AgentRuntime(replace(settings, agent_enabled=True, groq_api_key="test-key"))
+    assert runtime.available is True
+    assert runtime.get_client() is sentinel
+    assert captured == {
+        "api_key": "test-key",
+        "base_url": GROQ_BASE_URL,
+        "timeout": settings.agent_timeout_seconds,
+        "max_retries": 0,
+    }
 
 
 @pytest.mark.anyio
@@ -282,6 +354,8 @@ async def test_same_origin_assistant_endpoint_with_mocked_agent_enabled(monkeypa
             json={"locale": "en", "message": "Help with Aadhaar address update", "consent": True},
         )
     assert config.json()["agent_available"] is True
+    assert config.json()["agent_provider"] == AGENT_PROVIDER
+    assert config.json()["agent_model"] == AGENT_MODEL
     assert turn.status_code == 200
     assert turn.headers["cache-control"] == "no-store"
     assert turn.json()["selection"]["service_id"] == "uidai-aadhaar-address-update"

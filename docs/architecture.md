@@ -49,11 +49,13 @@ The server exposes versioned `/api/v1` endpoints for health/public configuration
 
 Readiness evaluates a bounded JSON AST rather than executable expressions. Checklists, worksheets, and simulated status are reconstructed from validated pack IDs and deterministic functions. “Readiness” is procedural guidance—not eligibility, approval, legal advice, submission, or government status.
 
-## Optional OpenAI boundary
+## Optional GroqCloud boundary
 
-`POST /api/v1/assistant/turn` is the only cloud-AI route. It is unavailable unless both `SAHAYI_AGENT_ENABLED=true` and a server-only `OPENAI_API_KEY` are present. The browser requires affirmative consent, and browser/backend gates reject common identifier shapes before a provider call.
+`POST /api/v1/assistant/turn` is the only cloud-AI route. It is unavailable unless `SAHAYI_AGENT_ENABLED=true`, the allowlisted provider/model are selected, and a server-only `GROQ_API_KEY` is present. The browser requires affirmative consent, and browser/backend gates reject common identifier shapes before a provider call. Public configuration exposes only provider, model, and effective availability—not the key or provider diagnostics.
 
-The server uses a bounded Responses API loop with a fixed allowlisted model, low reasoning, strict tools/structured output, `store: false`, no streaming/retry, short timeout, process-local concurrency/rate/request limits, and limited history/rounds/output. The model may guide phrasing and tool order, but the server rebuilds factual cards, actions, sources, fees, readiness results, worksheets, and simulated status from deterministic local functions. Provider errors and malformed output fail back to deterministic guidance. `store: false` is not a Zero Data Retention guarantee.
+The server uses Groq's OpenAI-compatible Responses API at the application-controlled `https://api.groq.com/openai/v1` base URL with the exact allowlisted `llama-3.3-70b-versatile` model. The loop has exactly seven strict local tools, no SDK retry, a short timeout, process-local concurrency/rate/request limits, and bounded history, rounds, tool calls, and output. It omits Groq-unsupported Responses fields, including `store`, and does not combine tool use with Structured Outputs. Instead, the prompt requires a small JSON object and Pydantic strictly validates the final text. Untrusted tool names and exact argument fields are revalidated before local execution.
+
+The model may guide phrasing and tool order, but the server rebuilds factual cards, actions, sources, fees, readiness results, worksheets, and simulated status from deterministic local functions. Timeouts, network/auth failures, invalid JSON/schema, unknown tools, exhausted budgets, and other provider errors fail back generically; provider HTTP 429 maps to the existing rate-limited state. Groq documents usage-metadata collection and owner-controlled Zero Data Retention in Console Data Controls, neither of which application code disables or guarantees. The selected model currently requires account/Enterprise access; no automatic model substitution is allowed.
 
 ## Procedure intelligence and simulation
 

@@ -145,7 +145,7 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
     const url = String(input)
     const parsed = new URL(url, 'http://test')
     if (parsed.pathname.endsWith('/health')) return response({ status: 'ok' })
-    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false, inactivity_timeout_seconds: options.inactivityTimeout ?? 300, inactivity_warning_seconds: options.inactivityWarning ?? 30 })
+    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false, agent_provider: 'groq', agent_model: 'llama-3.3-70b-versatile', inactivity_timeout_seconds: options.inactivityTimeout ?? 300, inactivity_warning_seconds: options.inactivityWarning ?? 30 })
     if (parsed.pathname.endsWith('/assistant/turn')) return response(options.agentReply ?? agentReply)
     if (parsed.pathname.endsWith('/demo-submission')) {
       const body = JSON.parse(String(init?.body)) as { scenario_id: DemoScenarioId }
@@ -508,7 +508,9 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Ask Sahayi AI' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
-    expect(screen.getByText(/does not claim Zero Data Retention/)).toBeInTheDocument()
+    expect(screen.getByText(/Groq collects usage metadata/)).toBeInTheDocument()
+    expect(screen.getByText(/owner-controlled Groq Console setting/)).toBeInTheDocument()
+    expect(screen.getByText(/up to four in-memory conversation turns may be sent to GroqCloud/)).toBeInTheDocument()
     expect(screen.queryByLabelText('General service question')).not.toBeInTheDocument()
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant/turn'))).toBe(false)
     fireEvent.click(screen.getByRole('checkbox', { name: /consent to this AI turn/ }))
@@ -528,6 +530,15 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.queryAllByText('Choose the verified Aadhaar path.')).toHaveLength(0)
   })
 
+  it('identifies GroqCloud and its account-controlled retention boundary in every locale', () => {
+    for (const locale of ['en', 'hi', 'ml'] as const) {
+      expect(UI_MESSAGES[locale].aiDisclosure).toContain('GroqCloud')
+      expect(UI_MESSAGES[locale].aiDataUse).toContain('GroqCloud')
+      expect(UI_MESSAGES[locale].aiNoZdr).toContain('Zero Data Retention')
+      expect(UI_MESSAGES[locale].aiNoZdr).toContain('Groq Console')
+    }
+  })
+
   it('uses the selected locale for the AI turn and clears conversation when language changes', async () => {
     const hindiReply: AssistantTurnResponse = { ...agentReply, locale: 'hi', message: 'सत्यापित प्रक्रिया चुनें।', disclaimer: 'AI मार्गदर्शन स्वीकृति नहीं है।' }
     const fetchMock = mockApi({ agentAvailable: true, agentReply: hindiReply })
@@ -544,6 +555,7 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
     expect(screen.queryAllByText('सत्यापित प्रक्रिया चुनें।')).toHaveLength(0)
     expect(screen.getByText(/Zero Data Retention/)).toBeInTheDocument()
+    expect(screen.getByText(/GroqCloud-ലേക്ക്/)).toBeInTheDocument()
   })
 
   it('blocks multilingual identifier-shaped AI input in the browser without a provider request', async () => {

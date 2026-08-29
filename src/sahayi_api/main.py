@@ -101,6 +101,8 @@ async def public_config() -> dict[str, str | bool | int]:
         "application_name": "Sahayi",
         "kiosk_mode": True,
         "agent_available": agent_runtime.available,
+        "agent_provider": settings.agent_provider,
+        "agent_model": settings.agent_model,
         "inactivity_timeout_seconds": settings.kiosk_inactivity_seconds,
         "inactivity_warning_seconds": warning,
     }

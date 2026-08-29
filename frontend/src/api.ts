@@ -5,6 +5,8 @@ export type PublicConfig = {
   application_name: string
   kiosk_mode: boolean
   agent_available: boolean
+  agent_provider: 'groq'
+  agent_model: string
   inactivity_timeout_seconds: number
   inactivity_warning_seconds: number
 }

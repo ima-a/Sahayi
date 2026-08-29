@@ -8,7 +8,7 @@ Architecture boundaries:
 
 - Browser-local inference combines deterministic pack phrases with a bundled character 2–5-gram Multinomial Naive Bayes classifier; raw finder text is not sent online.
 - FastAPI serves the React build and stateless deterministic Procedure Pack, readiness, checklist, synthetic worksheet, and demo status APIs from one same-origin container.
-- Optional OpenAI guidance is separately disclosed, consent-gated, unavailable without server configuration, and limited to strict local tools; AI never supplies authoritative facts or outcomes.
+- Optional GroqCloud guidance is separately disclosed, consent-gated, unavailable without server configuration, and limited to strict local tools; AI never supplies authoritative facts or outcomes.
 - Procedure Intelligence is an offline-first, one-shot, human-reviewed source comparison CLI, not a hosted or continuous monitor.
 - Citizen workflow state is memory-only and cleared by End Session/inactivity. No citizen database, cookies, browser storage, analytics, or telemetry exists.
 

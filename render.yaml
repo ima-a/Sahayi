@@ -9,7 +9,11 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     envVars:
-      - key: OPENAI_API_KEY
+      - key: GROQ_API_KEY
         sync: false
       - key: SAHAYI_AGENT_ENABLED
         value: "false"
+      - key: SAHAYI_AGENT_PROVIDER
+        value: groq
+      - key: SAHAYI_AGENT_MODEL
+        value: llama-3.3-70b-versatile

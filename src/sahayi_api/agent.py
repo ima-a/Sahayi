@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Protocol
 from pydantic import Field, StringConstraints, ValidationError
 
 from sahayi_api.assistance import build_personalized_checklist, prepare_synthetic_form_assistance
-from sahayi_api.config import AGENT_MODEL, Settings
+from sahayi_api.config import AGENT_PROVIDER, GROQ_BASE_URL, Settings
 from sahayi_api.privacy import conversation_contains_high_risk_pii
 from sahayi_api.procedures import (
     Identifier,
@@ -124,8 +124,69 @@ class AgentModelOutput(StrictModel):
     action_ids: Annotated[list[str], Field(max_length=8)]
 
 
+class ToolServiceListInput(StrictModel):
+    locale: SupportedLocale
+
+
+class ToolProcedureInput(StrictModel):
+    service_id: Identifier
+    locale: SupportedLocale
+
+
+class ToolReadinessAnswer(StrictModel):
+    question_id: Identifier
+    value: AnswerValue
+
+
+class ToolReadinessInput(ToolProcedureInput):
+    answers: Annotated[list[ToolReadinessAnswer], Field(max_length=30)]
+
+
+class ToolPersonaInput(ToolProcedureInput):
+    persona_id: Identifier | None
+
+
+class ToolStatusInput(ToolProcedureInput):
+    status_id: DemoStatusId
+
+
 class ResponsesClient(Protocol):
     responses: Any
+
+
+class AgentProvider(Protocol):
+    @property
+    def available(self) -> bool: ...
+
+    def get_client(self) -> ResponsesClient: ...
+
+
+class GroqProvider:
+    """Application-controlled Groq Responses API configuration."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self.client: ResponsesClient | None = None
+
+    @property
+    def available(self) -> bool:
+        return (
+            self.settings.agent_enabled
+            and self.settings.agent_provider == AGENT_PROVIDER
+            and bool(self.settings.groq_api_key)
+        )
+
+    def get_client(self) -> ResponsesClient:
+        if self.client is None:
+            from openai import AsyncOpenAI
+
+            self.client = AsyncOpenAI(
+                api_key=self.settings.groq_api_key,
+                base_url=GROQ_BASE_URL,
+                timeout=self.settings.agent_timeout_seconds,
+                max_retries=0,
+            )
+        return self.client
 
 
 class RateLimiter:
@@ -170,8 +231,9 @@ class RequestBudget:
 
 
 class AgentRuntime:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, provider: AgentProvider | None = None) -> None:
         self.settings = settings
+        self.provider = provider or GroqProvider(settings)
         self.rate_limiter = RateLimiter(settings.agent_rate_limit, settings.agent_rate_window_seconds)
         self.request_budget = RequestBudget(settings.agent_request_budget)
         self.semaphore = asyncio.Semaphore(settings.agent_concurrency)
@@ -179,17 +241,11 @@ class AgentRuntime:
 
     @property
     def available(self) -> bool:
-        return self.settings.agent_enabled and bool(self.settings.openai_api_key)
+        return self.provider.available
 
     def get_client(self) -> ResponsesClient:
         if self.client is None:
-            from openai import AsyncOpenAI
-
-            self.client = AsyncOpenAI(
-                api_key=self.settings.openai_api_key,
-                timeout=self.settings.agent_timeout_seconds,
-                max_retries=0,
-            )
+            self.client = self.provider.get_client()
         return self.client
 
 
@@ -286,8 +342,9 @@ async def run_assistant_turn(
     try:
         async with runtime.semaphore:
             return await _provider_turn(request, registry, runtime)
-    except (Exception, asyncio.TimeoutError):
-        return safe_response(request.locale, "fallback")
+    except Exception as error:
+        status = "rate_limited" if getattr(error, "status_code", None) == 429 else "fallback"
+        return safe_response(request.locale, status)
 
 
 async def _provider_turn(
@@ -311,23 +368,12 @@ async def _provider_turn(
         if not await runtime.request_budget.take():
             return safe_response(request.locale, "fallback")
         response = await client.responses.create(
-            model=AGENT_MODEL,
+            model=runtime.settings.agent_model,
             instructions=_instructions(request.locale, selected_id, request.demo_status_id),
             input=input_items,
             tools=_tool_definitions(registry),
             tool_choice="auto",
             parallel_tool_calls=False,
-            reasoning={"effort": "low"},
-            text={
-                "verbosity": "low",
-                "format": {
-                    "type": "json_schema",
-                    "name": "sahayi_agent_reply",
-                    "strict": True,
-                    "schema": AgentModelOutput.model_json_schema(),
-                },
-            },
-            store=False,
             stream=False,
             max_output_tokens=runtime.settings.agent_max_output_tokens,
         )
@@ -362,7 +408,9 @@ def _instructions(locale: SupportedLocale, service_id: str | None, demo_status_i
         "A simulated status is fictional and may be explained only through explain_simulated_status; never request or accept a real reference number. "
         "Use only the supplied strict functions for facts and use their exact service IDs. Ask for service clarification when needed. "
         "Do not request or repeat identifiers, contact details, addresses, OTPs, document contents, or files. "
-        "Return only the required structured output; action_ids may use only the documented action IDs. "
+        "Return a single JSON object without Markdown and with exactly these fields: "
+        "guidance_message (string), selection_state (none, clarification, or selected), "
+        "service_id (a supplied service ID or null), and action_ids (an array using only documented action IDs). "
         f"Locale: {locale}. Current validated service: {service_id or 'none'}. Current validated demo status: {demo_status_id or 'none'}."
     )
 
@@ -434,6 +482,19 @@ def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure
         values = json.loads(arguments)
         if not isinstance(values, dict):
             raise ValueError
+        input_models: dict[str, type[StrictModel]] = {
+            "list_supported_services": ToolServiceListInput,
+            "get_verified_procedure": ToolProcedureInput,
+            "get_readiness_questions": ToolReadinessInput,
+            "evaluate_readiness": ToolReadinessInput,
+            "build_personalized_checklist": ToolReadinessInput,
+            "prepare_synthetic_form_assistance": ToolPersonaInput,
+            "explain_simulated_status": ToolStatusInput,
+        }
+        input_model = input_models.get(name)
+        if input_model is None:
+            raise ValueError
+        values = input_model.model_validate(values).model_dump(mode="json")
         locale = values.get("locale")
         if locale not in {"en", "hi", "ml"}:
             raise ValueError

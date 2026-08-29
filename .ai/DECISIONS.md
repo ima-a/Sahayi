@@ -35,8 +35,8 @@
 | 2026-08-28 | Treat Hindi and Malayalam as machine-assisted prototype translations requiring native/legal review | Complete official translated equivalents were unavailable for every field; only validated canonical English content is translated and linked official wording prevails. |
 | 2026-08-28 | Keep translations static in validated packs and a typed UI catalogue | No runtime translation API, third-party policy translation, external font, storage, or network translation dependency enters the privacy/trust boundary. |
 | 2026-08-28 | Normalize relevant Unicode decimal digits before local identifier blocking | ASCII, Devanagari, and Malayalam identifier-shaped input receives the same browser-only protection without transmitting the value. |
-| 2026-08-28 | Use a small explicit Responses API loop with fixed GPT-5.6 Luna | Tool ordering can be agentic while strict local functions, structured output, low reasoning, no retry/streaming, and hard budgets retain control. |
-| 2026-08-28 | Keep AI optional, consent-gated, and disabled by default | Deterministic guidance must work without a key; cloud processing is separately disclosed and `store: false` is not claimed as Zero Data Retention. |
+| 2026-08-28 | Use a small explicit Responses API loop with a fixed model | Tool ordering can be agentic while strict local functions, validated output, no retry, and hard budgets retain control. |
+| 2026-08-28 | Keep AI optional, consent-gated, and disabled by default | Deterministic guidance must work without a key and cloud processing must be separately disclosed. |
 | 2026-08-28 | Reconstruct every factual card and action server-side | Model prose guides; validated pack IDs and local tool results remain the sole source for facts, sources, fees, outcomes, URLs, and actions. |
 | 2026-08-28 | Use process-local abuse controls only as prototype safeguards | An ephemeral salted client hash, stale cleanup, semaphore, rate window, and request budget limit cost without claiming distributed production protection. |
 | 2026-08-28 | Permit synthetic form preparation only | Bundled DEMO personas and blank private fields demonstrate preparation without citizen free text, official form filling, files, submission, or retention. |
@@ -48,6 +48,10 @@
 | 2026-08-29 | Ensemble local ML with the existing pack-phrase matcher behind PII and confirmation gates | Agreement and one-sided confidence may propose only allowlisted catalogue services; disagreement, unsupported, abstention and artifact failure fail safely without changing procedure facts or readiness decisions. |
 | 2026-08-29 | Train only on owned synthetic examples and reserve validation/test roles | Fixed balanced splits, canonical generation, digests, native-review markers, validation-only threshold tuning and candid synthetic metrics make limitations and retraining drift reviewable. |
 | 2026-08-29 | Prepare the submission as a dedicated release branch from the complete linear feature chain | Keeps candidate review and verification isolated while `main`, the deployment branch, and the public service remain unchanged until separate authorization. |
+| 2026-08-29 | Select GroqCloud with exact `llama-3.3-70b-versatile` and no automatic substitute | One allowlisted provider/model makes runtime behavior reviewable; current Enterprise access must be confirmed manually before enablement. |
+| 2026-08-29 | Use Groq's OpenAI-compatible Responses endpoint through a small provider adapter | Retains the pinned client while fixing provider, base URL, key, model, and availability in application-controlled configuration. |
+| 2026-08-29 | Validate final JSON locally instead of requesting provider Structured Outputs | Groq documents tool use and Structured Outputs as incompatible; exact Pydantic validation fails closed without weakening the seven-tool boundary. |
+| 2026-08-29 | Treat Groq Zero Data Retention as an owner-controlled external setting | Code cannot enable or guarantee the Groq Console setting, and Groq still documents usage-metadata collection. |
 
 ## Official HTTPX documentation basis
 
@@ -60,17 +64,17 @@ Retrieved 2026-08-29 from the official HTTPX site:
 
 These references support explicit timeout configuration, streamed bounded reads, disabled automatic redirects/manual validation, an explicit zero-retry transport, and offline transport mocks.
 
-## Official OpenAI documentation basis
+## Official Groq documentation basis
 
-Retrieved 2026-08-28, using only official OpenAI domains:
+Retrieved 2026-08-29, using only official Groq Console documentation:
 
-- [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
-- [Responses create reference](https://developers.openai.com/api/reference/cli/resources/responses/methods/create)
-- [Function calling](https://developers.openai.com/api/docs/guides/function-calling)
-- [Structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
-- [Python API library](https://developers.openai.com/api/reference/python)
-- [Latest model guidance](https://developers.openai.com/api/docs/guides/latest-model)
-- [Your data / retention controls](https://developers.openai.com/api/docs/guides/your-data)
-- [Production best practices](https://developers.openai.com/api/docs/guides/production-best-practices)
+- [Responses API](https://console.groq.com/docs/responses-api)
+- [OpenAI compatibility](https://console.groq.com/docs/openai)
+- [Tool use overview](https://console.groq.com/docs/tool-use/overview)
+- [Structured Outputs](https://console.groq.com/docs/structured-outputs)
+- [Rate limits](https://console.groq.com/docs/rate-limits)
+- [Your data](https://console.groq.com/docs/your-data)
+- [`llama-3.3-70b-versatile` model](https://console.groq.com/docs/model/llama-3.3-70b-versatile)
+- [Model deprecations](https://console.groq.com/docs/deprecations)
 
-The official Python library page requires Python 3.10+, documents `pip install openai`, async clients, configuration, and SemVer caveats but does not publish the current package number in-page. The compatible `openai==3.0.0` pin was therefore additionally resolution-checked without installation; no provider request was made.
+The official compatibility guide documents the fixed OpenAI-compatible base URL and `GROQ_API_KEY`. The Responses guide marks the API beta and lists unsupported request fields including `store`; the implementation omits them. The model page lists Tool Use and JSON Object Mode but not strict JSON Schema support, and the Structured Outputs page says tool use and Structured Outputs cannot be combined. Sahayi therefore prompts for JSON and performs strict Pydantic validation locally. The data page documents usage-metadata collection and an organization-owner Data Controls setting for Zero Data Retention; code makes no ZDR claim. The model page currently labels the exact selected model Enterprise, while the deprecations page records its free/developer-tier shutdown on 2026-08-16. No live or billable provider request was made.

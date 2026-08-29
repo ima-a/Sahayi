@@ -16,11 +16,11 @@ The synthetic worksheet leaves private fields blank. Demo submission/status acce
 
 ## Optional cloud processing
 
-The assistant is disabled unless a server flag and server-only OpenAI key are both configured. Before use, the UI explains that bounded text may be processed by OpenAI and requires affirmative consent. Browser and backend gates screen the current message and limited prior turns for common identifier shapes. The API does not accept files, arbitrary metadata, or real references.
+The assistant is disabled unless a server flag and server-only Groq key are both configured. Before use, the UI names GroqCloud, explains that a minimized identifier-screened message and up to four memory-only turns may be processed there, and requires affirmative consent. Browser and backend gates screen the current message and prior turns for common identifier shapes. The API does not accept files, arbitrary metadata, or real references.
 
-The provider request uses `store: false`, but this does not establish Zero Data Retention. Sahayi does not claim control over retention or logging by the browser, network, hosting platform, OpenAI, or any other external provider. Provider retention settings, access controls, spend limits, and applicable terms require owner review before enabling the feature.
+Groq documents that usage metadata is always collected and says inference customer data is not retained by default except for limited reliability/abuse purposes; an organization owner may separately enable Zero Data Retention in Groq Console Data Controls. Sahayi does not set, verify, or guarantee that account setting and does not claim control over retention or logging by the browser, network, hosting platform, or Groq. Account data controls, access controls, spend/rate limits, model permission, and applicable terms require owner review before enabling the feature.
 
-The OpenAI key, fixed model settings, internal prompts, raw provider output, provider IDs, and tool arguments remain server-side and are not returned through public configuration or assistant responses. Sahayi does not log answer bodies, raw agent prompts, provider output, or citizen messages.
+The Groq key, internal prompts, raw provider output, provider IDs, and tool arguments remain server-side and are not returned through public configuration or assistant responses. Public configuration may identify the selected provider/model and whether the feature is available. Sahayi does not log answer bodies, raw agent prompts, provider output, or citizen messages.
 
 ## Clearing and session end
 

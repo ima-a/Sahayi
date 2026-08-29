@@ -2,7 +2,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from sahayi_api.main import app
-from sahayi_api.config import get_settings
+from sahayi_api.config import AGENT_MODEL, AGENT_PROVIDER, get_settings
 
 
 @pytest.fixture
@@ -34,6 +34,8 @@ async def test_public_config_has_no_secret_configuration(client: AsyncClient) ->
         "application_name": "Sahayi",
         "kiosk_mode": True,
         "agent_available": False,
+        "agent_provider": AGENT_PROVIDER,
+        "agent_model": AGENT_MODEL,
         "inactivity_timeout_seconds": 300,
         "inactivity_warning_seconds": 30,
     }

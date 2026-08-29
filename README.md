@@ -36,7 +36,7 @@ flowchart LR
     UI -->|same-origin, no-store JSON| API[FastAPI]
     API --> P[Validated Procedure Packs]
     P --> R[Deterministic readiness, checklist, worksheet, simulation]
-    UI -. explicit consent + bounded text .-> A[Optional OpenAI assistant]
+    UI -. explicit consent + bounded text .-> A[Optional GroqCloud assistant]
     A -->|strict tool calls| R
     M[Offline one-shot source monitor] -. review metadata only .-> P
 ```
@@ -49,7 +49,7 @@ The production image builds React with Vite and serves the compiled files and `/
 | --- | --- | --- |
 | Local service finder, multilingual catalogue, procedures, readiness, checklist, End Session and inactivity clearing | Fully working and deterministic | Browser-local matching plus validated server-side rules; no AI decides facts or outcomes |
 | Procedure Pack provenance, version selection, freshness, fee-conflict display and schema validation | Fully working and deterministic | Active packs fail closed; reviewed facts remain source-linked |
-| Optional “Ask Sahayi AI” guidance | Consent-gated cloud feature; disabled without both flag and server key | OpenAI may guide tool order/prose, while Sahayi reconstructs facts and actions from deterministic results |
+| Optional “Ask Sahayi AI” guidance | Consent-gated GroqCloud feature; disabled without both flag and server key | Groq's selected model may guide tool order/prose, while Sahayi validates output and reconstructs facts/actions from deterministic results |
 | Form preparation and application/status journey | Synthetic/demo-only | Fixed fictional personas, blank private fields and obvious `DEMO-...` references; no government contact |
 | Live submission, real status, OTP/payment, DigiLocker, voice, certified translation and continuous monitoring | Planned or out of prototype scope | No integration or production claim |
 
@@ -69,7 +69,7 @@ Conflicting official claims are preserved independently with their sources. Saha
 
 Finder text, match results, language, readiness state, checklist, worksheet, demo status, consent, and conversation stay in React memory except for the bounded data deliberately sent in current API requests. Sahayi adds no cookies, browser storage, service worker, analytics, telemetry, citizen database, or answer/body logging. API responses use `Cache-Control: no-store`.
 
-The optional assistant requires affirmative consent and sends only a bounded, PII-screened request. Its server-only key, prompts, provider output, and tool arguments are not exposed to the browser. `store: false` is requested, but Sahayi makes no Zero Data Retention claim and cannot control browser, network, hosting, or provider retention outside its boundary. See [Privacy and safety](docs/privacy-boundary.md).
+The optional assistant requires affirmative consent and sends only a minimized, identifier-screened current message plus at most four memory-only turns. Its server-only key, prompts, provider output, and tool arguments are not exposed to the browser. Groq collects usage metadata; Zero Data Retention is an owner-controlled Groq Console setting that Sahayi code does not enable or guarantee. See [Privacy and safety](docs/privacy-boundary.md).
 
 ## Local development
 
@@ -146,9 +146,10 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 | `SAHAYI_DEV_FRONTEND_ORIGIN` | Exact permitted Vite development origin |
 | `VITE_API_BASE_URL` | Development-only frontend API base |
 | `SAHAYI_KIOSK_INACTIVITY_SECONDS`, `SAHAYI_KIOSK_WARNING_SECONDS` | Bounded public inactivity/warning durations |
-| `OPENAI_API_KEY` | Optional server-only secret; use a secret manager, never frontend code or Git |
+| `GROQ_API_KEY` | Optional server-only secret; use a secret manager, never frontend code or Git |
 | `SAHAYI_AGENT_ENABLED` | Explicit optional-agent feature flag; defaults to false |
-| `SAHAYI_AGENT_MODEL` | Fixed allowlisted model name |
+| `SAHAYI_AGENT_PROVIDER` | Fixed allowlisted provider; defaults/falls back to `groq` |
+| `SAHAYI_AGENT_MODEL` | Fixed allowlisted `llama-3.3-70b-versatile` model name |
 | `SAHAYI_AGENT_TIMEOUT_SECONDS`, `SAHAYI_AGENT_MAX_OUTPUT_TOKENS` | Bounded provider timeout/output controls |
 | `SAHAYI_AGENT_MAX_TOOL_CALLS`, `SAHAYI_AGENT_MAX_ROUNDS` | Bounded tool-loop controls |
 | `SAHAYI_AGENT_CONCURRENCY`, `SAHAYI_AGENT_REQUEST_BUDGET` | Process-local concurrency/request limits |
@@ -156,7 +157,7 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 
 ## Render deployment
 
-`render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `OPENAI_API_KEY` prompt (`sync: false`), and disabled agent flag. The current service still tracks the older `feat/sahayi-deployment` release. After this candidate is reviewed, promotion requires an explicit branch decision, a manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). This repository task does not deploy or alter the public service.
+`render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `GROQ_API_KEY` prompt (`sync: false`), the fixed Groq provider/model, and disabled agent flag. The current service still tracks the older `feat/sahayi-deployment` release. After this candidate is reviewed, promotion requires an explicit branch decision, a manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). This repository task does not deploy or alter the public service.
 
 ## Known limitations and disclaimers
 
@@ -167,10 +168,12 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 - Hindi/Malayalam dataset phrases and UI/procedure translations still need native-speaker and legal review; they are not certified translations.
 - The reviewed UIDAI sources disagree on the applicable update fee, so Sahayi shows the conflict. The Kerala pension amount is deliberately omitted.
 - Source monitoring is offline, one-shot, and human-reviewed—not continuous. There is no production, universal retention, or Zero Data Retention claim.
+- Groq currently documents `llama-3.3-70b-versatile` as an Enterprise model and records its free/developer-tier shutdown on 2026-08-16. Account access must be confirmed before enabling the exact selected model; this candidate made no live provider call.
+- Groq account/tier rate limits may be low or change over time. HTTP 429 and provider failures return generic deterministic fallback; Sahayi's in-process limits are demo safeguards, not a guarantee of cloud availability.
 
 ## Technology and official sources
 
-Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, a standard-library Naive Bayes trainer, and an optional OpenAI Responses API integration. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
+Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, a standard-library Naive Bayes trainer, and an optional Groq Responses API integration through its documented OpenAI-compatible endpoint. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
 
 Deeper documentation: [architecture](docs/architecture.md), [privacy and safety](docs/privacy-boundary.md), [Procedure Packs](procedure-packs/README.md), [on-device model](docs/intent-model-card.md), and [deployment](.ai/DEPLOYMENT.md).
 
