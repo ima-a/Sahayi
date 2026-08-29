@@ -149,7 +149,7 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 | `GROQ_API_KEY` | Optional server-only secret; use a secret manager, never frontend code or Git |
 | `SAHAYI_AGENT_ENABLED` | Explicit optional-agent feature flag; defaults to false |
 | `SAHAYI_AGENT_PROVIDER` | Fixed allowlisted provider; defaults/falls back to `groq` |
-| `SAHAYI_AGENT_MODEL` | Fixed allowlisted `llama-3.3-70b-versatile` model name |
+| `SAHAYI_AGENT_MODEL` | Fixed allowlisted `openai/gpt-oss-120b` Groq model name |
 | `SAHAYI_AGENT_TIMEOUT_SECONDS`, `SAHAYI_AGENT_MAX_OUTPUT_TOKENS` | Bounded provider timeout/output controls |
 | `SAHAYI_AGENT_MAX_TOOL_CALLS`, `SAHAYI_AGENT_MAX_ROUNDS` | Bounded tool-loop controls |
 | `SAHAYI_AGENT_CONCURRENCY`, `SAHAYI_AGENT_REQUEST_BUDGET` | Process-local concurrency/request limits |
@@ -158,6 +158,10 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 ## Render deployment
 
 `render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `GROQ_API_KEY` prompt (`sync: false`), the fixed Groq provider/model, and disabled agent flag. The current service still tracks the older `feat/sahayi-deployment` release. After this candidate is reviewed, promotion requires an explicit branch decision, a manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). This repository task does not deploy or alter the public service.
+
+The selected runtime model is `openai/gpt-oss-120b`. The `openai/` prefix is Groq's model namespace; it does not switch Sahayi to OpenAI. Sahayi still authenticates only with the server-side `GROQ_API_KEY` and calls Groq's fixed `https://api.groq.com/openai/v1` endpoint. Groq officially recommends this model as a replacement for the retired `llama-3.3-70b-versatile`; its current model and rate-limit pages show a non-preview model with free-plan availability, local tool use, JSON/JSON Schema support, and multilingual capability. These fit Sahayi's bounded local-tool design. Sahayi does not enable the model's built-in browser search, code execution, MCP/remote tools, or arbitrary functions, and it does not set optional reasoning or provider-specific parameters.
+
+Groq's current published free-plan row for this model is 30 requests/minute, 1,000 requests/day, 8,000 tokens/minute, and 200,000 tokens/day. These figures are indicative and can change; operators must use their Groq Console for the exact limits applied to their organization. Provider errors, including rate limits, continue to return deterministic Sahayi guidance. There is no automatic second-model fallback.
 
 ## Known limitations and disclaimers
 
@@ -168,8 +172,8 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 - Hindi/Malayalam dataset phrases and UI/procedure translations still need native-speaker and legal review; they are not certified translations.
 - The reviewed UIDAI sources disagree on the applicable update fee, so Sahayi shows the conflict. The Kerala pension amount is deliberately omitted.
 - Source monitoring is offline, one-shot, and human-reviewed—not continuous. There is no production, universal retention, or Zero Data Retention claim.
-- Groq currently documents `llama-3.3-70b-versatile` as an Enterprise model and records its free/developer-tier shutdown on 2026-08-16. Account access must be confirmed before enabling the exact selected model; this candidate made no live provider call.
-- Groq account/tier rate limits may be low or change over time. HTTP 429 and provider failures return generic deterministic fallback; Sahayi's in-process limits are demo safeguards, not a guarantee of cloud availability.
+- Groq records `llama-3.3-70b-versatile` as retired for free/developer-tier use on 2026-08-16 and recommends `openai/gpt-oss-120b` as a replacement. The retired name is historical migration context only; this candidate made no live provider call.
+- Groq account/tier rate limits may be low or change over time. The published free-plan figures above are indicative; exact organization limits belong in Groq Console. HTTP 429 and provider failures return generic deterministic fallback; Sahayi's in-process limits are demo safeguards, not a guarantee of cloud availability.
 
 ## Technology and official sources
 

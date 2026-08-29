@@ -16,4 +16,4 @@ services:
       - key: SAHAYI_AGENT_PROVIDER
         value: groq
       - key: SAHAYI_AGENT_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b

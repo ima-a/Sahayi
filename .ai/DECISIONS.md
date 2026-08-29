@@ -48,10 +48,11 @@
 | 2026-08-29 | Ensemble local ML with the existing pack-phrase matcher behind PII and confirmation gates | Agreement and one-sided confidence may propose only allowlisted catalogue services; disagreement, unsupported, abstention and artifact failure fail safely without changing procedure facts or readiness decisions. |
 | 2026-08-29 | Train only on owned synthetic examples and reserve validation/test roles | Fixed balanced splits, canonical generation, digests, native-review markers, validation-only threshold tuning and candid synthetic metrics make limitations and retraining drift reviewable. |
 | 2026-08-29 | Prepare the submission as a dedicated release branch from the complete linear feature chain | Keeps candidate review and verification isolated while `main`, the deployment branch, and the public service remain unchanged until separate authorization. |
-| 2026-08-29 | Select GroqCloud with exact `llama-3.3-70b-versatile` and no automatic substitute | One allowlisted provider/model makes runtime behavior reviewable; current Enterprise access must be confirmed manually before enablement. |
+| 2026-08-29 | Initially select GroqCloud with exact `llama-3.3-70b-versatile` and no automatic substitute (superseded below after its documented retirement) | Historical migration context: one allowlisted provider/model keeps runtime behavior reviewable. |
 | 2026-08-29 | Use Groq's OpenAI-compatible Responses endpoint through a small provider adapter | Retains the pinned client while fixing provider, base URL, key, model, and availability in application-controlled configuration. |
 | 2026-08-29 | Validate final JSON locally instead of requesting provider Structured Outputs | Groq documents tool use and Structured Outputs as incompatible; exact Pydantic validation fails closed without weakening the seven-tool boundary. |
 | 2026-08-29 | Treat Groq Zero Data Retention as an owner-controlled external setting | Code cannot enable or guarantee the Groq Console setting, and Groq still documents usage-metadata collection. |
+| 2026-08-29 | Replace the retired runtime model with sole allowlisted `openai/gpt-oss-120b` | Groq lists it as an official replacement and on the free plan; the non-preview model page documents local tool use, JSON/JSON Schema modes, and multilingual capability. Provider failure still returns deterministic Sahayi guidance, never another model. |
 
 ## Official HTTPX documentation basis
 
@@ -66,15 +67,12 @@ These references support explicit timeout configuration, streamed bounded reads,
 
 ## Official Groq documentation basis
 
-Retrieved 2026-08-29, using only official Groq Console documentation:
+Retrieved 2026-08-29 for the model correction, using only the official Groq Console documentation requested for this decision:
 
-- [Responses API](https://console.groq.com/docs/responses-api)
-- [OpenAI compatibility](https://console.groq.com/docs/openai)
-- [Tool use overview](https://console.groq.com/docs/tool-use/overview)
-- [Structured Outputs](https://console.groq.com/docs/structured-outputs)
-- [Rate limits](https://console.groq.com/docs/rate-limits)
-- [Your data](https://console.groq.com/docs/your-data)
-- [`llama-3.3-70b-versatile` model](https://console.groq.com/docs/model/llama-3.3-70b-versatile)
 - [Model deprecations](https://console.groq.com/docs/deprecations)
+- [`openai/gpt-oss-120b` model](https://console.groq.com/docs/model/openai/gpt-oss-120b)
+- [Rate limits](https://console.groq.com/docs/rate-limits)
+- [Responses API](https://console.groq.com/docs/responses-api)
+- [Tool use overview](https://console.groq.com/docs/tool-use/overview)
 
-The official compatibility guide documents the fixed OpenAI-compatible base URL and `GROQ_API_KEY`. The Responses guide marks the API beta and lists unsupported request fields including `store`; the implementation omits them. The model page lists Tool Use and JSON Object Mode but not strict JSON Schema support, and the Structured Outputs page says tool use and Structured Outputs cannot be combined. Sahayi therefore prompts for JSON and performs strict Pydantic validation locally. The data page documents usage-metadata collection and an organization-owner Data Controls setting for Zero Data Retention; code makes no ZDR claim. The model page currently labels the exact selected model Enterprise, while the deprecations page records its free/developer-tier shutdown on 2026-08-16. No live or billable provider request was made.
+The deprecations page records the free/developer-tier retirement of `llama-3.3-70b-versatile` on 2026-08-16 and names `openai/gpt-oss-120b` as an official replacement. That retired identifier is retained here only as historical migration documentation, never as active configuration. The selected model page presents the model without a preview label and documents Tool Use, JSON Object Mode, JSON Schema Mode, and multilingual use across 81+ languages. Its `openai/` prefix is Groq's model namespace: the Responses example still calls `https://api.groq.com/openai/v1/responses` with `GROQ_API_KEY`. The tool overview distinguishes local calls from built-in and MCP/remote tools; Sahayi keeps only its exact seven local functions and server-side Pydantic validation. The rate-limit page currently lists the model on the free plan at 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD. Those limits are indicative; the exact organization limits must be checked in Groq Console. No live or billable provider request was made.

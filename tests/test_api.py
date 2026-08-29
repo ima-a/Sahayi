@@ -39,6 +39,7 @@ async def test_public_config_has_no_secret_configuration(client: AsyncClient) ->
         "inactivity_timeout_seconds": 300,
         "inactivity_warning_seconds": 30,
     }
+    assert response.json()["agent_model"] == "openai/gpt-oss-120b"
     serialized = response.text.lower()
     for prohibited in ("secret", "token", "password", "api_key", "origin", "environment"):
         assert prohibited not in serialized

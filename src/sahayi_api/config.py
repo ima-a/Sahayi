@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 
 AGENT_PROVIDER = "groq"
-AGENT_MODEL = "llama-3.3-70b-versatile"
+AGENT_MODEL = "openai/gpt-oss-120b"
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 

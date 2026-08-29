@@ -145,7 +145,7 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
     const url = String(input)
     const parsed = new URL(url, 'http://test')
     if (parsed.pathname.endsWith('/health')) return response({ status: 'ok' })
-    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false, agent_provider: 'groq', agent_model: 'llama-3.3-70b-versatile', inactivity_timeout_seconds: options.inactivityTimeout ?? 300, inactivity_warning_seconds: options.inactivityWarning ?? 30 })
+    if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false, agent_provider: 'groq', agent_model: 'openai/gpt-oss-120b', inactivity_timeout_seconds: options.inactivityTimeout ?? 300, inactivity_warning_seconds: options.inactivityWarning ?? 30 })
     if (parsed.pathname.endsWith('/assistant/turn')) return response(options.agentReply ?? agentReply)
     if (parsed.pathname.endsWith('/demo-submission')) {
       const body = JSON.parse(String(init?.body)) as { scenario_id: DemoScenarioId }
