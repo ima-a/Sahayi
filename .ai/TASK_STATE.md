@@ -2,6 +2,14 @@
 
 Last updated: 2026-08-29
 
+## Production AI-guided turn correction
+
+The clean worktree was inspected on `feat/sahayi-deployment` at `b58bf93`; the named local and remote Groq-agent/release branches currently point to the same commit. The reported production public config was read as agent-enabled with provider `groq` and model `openai/gpt-oss-120b`. A single consented reproduction of the exact non-sensitive turn later returned a successful generic clarification, so the original intermittent upstream/parsing reason cannot be reconstructed from historical logs: all provider, timeout, incomplete/malformed response, JSON/schema, tool, and budget failures previously collapsed to one unlogged fallback.
+
+The correction adds safe server-only reason logging without citizen text, model output, tool arguments/results, client addresses, credentials, exception messages, or stack traces. Invalid provider/model configuration now disables availability rather than silently appearing valid, and surrounding whitespace is removed from the server-side key. A narrow pre-provider catalogue gate handles explicit cross-service matches and distinguishes the ambiguous address-change request inside Kerala pension between verified Aadhaar address update and pension-record-related help; it only offers loaded active service IDs and states that no separate verified pension-record address-change procedure exists. The frontend no longer renders the same latest assistant response from both transcript and structured-response state.
+
+Regression coverage now includes a successful normal turn, provider failure and safe diagnostics, incomplete/malformed provider response, final JSON/schema rejection, cross-service intent, ambiguous unqualified address change, explicit pension-record address scope, configuration validation, and single fallback rendering. Verification passed with 179 backend tests and 61 frontend tests, frontend lint, TypeScript, production build, intent-model integrity, both active Procedure Pack validations, and generated-schema drift. No Procedure Pack fact, persistence boundary, dependency, deployment, merge, commit, push, or external configuration was changed.
+
 ## Release candidate
 
 Active branch: `feat/sahayi-groq-agent`, created and initially pushed from exact clean synchronized release source `86ccd3a536ea7ef54194c26f814e5ecc90cd664c` after fetch and preflight. The verified ancestry remains linear through multilingual `25c22ca`, agentic assistance `49cade0`, procedure intelligence `89be9a83`, on-device intelligence `b22f86f3`, and release candidate `86ccd3a`. `main` and `feat/sahayi-deployment` remain unchanged at `05adbb60c54ff29f25c2657455bf502cdb274d0b`; `release/sahayi-submission-2026-08-29` and the public Render service at https://sahayi.onrender.com remain unchanged.

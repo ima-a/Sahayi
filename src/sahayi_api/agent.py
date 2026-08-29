@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 import secrets
 import time
+import unicodedata
 from collections import defaultdict, deque
 from typing import Annotated, Any, Literal, Protocol
 
@@ -29,6 +31,8 @@ from sahayi_api.procedures import (
 from sahayi_api.readiness import AnswerValue, ReadinessInputError, evaluate_readiness
 from sahayi_api.simulation import DemoStatusId, explain_simulated_status
 
+
+logger = logging.getLogger(__name__)
 
 CurrentMessage = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 PriorContent = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
@@ -172,6 +176,7 @@ class GroqProvider:
     def available(self) -> bool:
         return (
             self.settings.agent_enabled
+            and self.settings.agent_configuration_valid
             and self.settings.agent_provider == AGENT_PROVIDER
             and bool(self.settings.groq_api_key)
         )
@@ -264,6 +269,9 @@ _COPY = {
         "official": "Open official service",
         "requirements": "Verified requirements",
         "fee": "Fee information",
+        "switch": "This request appears to match a different verified Sahayi service. Choose it to switch without using facts from the currently selected service.",
+        "address_clarify": "Do you mean an Aadhaar address update, or help related to the address on your Kerala pension record? Sahayi has a verified Aadhaar address-update procedure, but no separate verified pension-record address-change procedure, so I will not assume either. Choose the relevant verified service.",
+        "pension_address_scope": "Sahayi's verified catalogue does not contain a separate pension-record address-change procedure. You can keep the Kerala pension service selected for its verified general guidance, but Sahayi will not invent address-change steps.",
     },
     "hi": {
         "blocked": "मैं इस संदेश का उपयोग नहीं कर सकता क्योंकि इसमें निजी पहचान जानकारी हो सकती है। पहचान, संपर्क, पता और दस्तावेज़ विवरण हटाकर फिर प्रयास करें।",
@@ -279,6 +287,9 @@ _COPY = {
         "official": "आधिकारिक सेवा खोलें",
         "requirements": "सत्यापित आवश्यकताएँ",
         "fee": "शुल्क जानकारी",
+        "switch": "यह अनुरोध किसी दूसरी सत्यापित Sahayi सेवा से मेल खाता है। वर्तमान सेवा के तथ्यों का उपयोग किए बिना उस सेवा पर जाने के लिए उसे चुनें।",
+        "address_clarify": "क्या आपका मतलब आधार का पता अपडेट करना है, या केरल पेंशन रिकॉर्ड के पते से जुड़ी मदद? Sahayi में आधार पता अपडेट की सत्यापित प्रक्रिया है, लेकिन पेंशन रिकॉर्ड का पता बदलने की अलग सत्यापित प्रक्रिया नहीं है; इसलिए मैं कोई अनुमान नहीं लगाऊँगा। संबंधित सत्यापित सेवा चुनें।",
+        "pension_address_scope": "Sahayi की सत्यापित सूची में पेंशन रिकॉर्ड का पता बदलने की अलग प्रक्रिया नहीं है। आप सत्यापित सामान्य मार्गदर्शन के लिए केरल पेंशन सेवा चुनी रख सकते हैं, लेकिन Sahayi पता बदलने के चरण नहीं गढ़ेगा।",
     },
     "ml": {
         "blocked": "ഈ സന്ദേശത്തിൽ വ്യക്തിയെ തിരിച്ചറിയുന്ന വിവരങ്ങൾ ഉണ്ടായേക്കാം; അതിനാൽ എനിക്ക് ഇത് ഉപയോഗിക്കാനാകില്ല. തിരിച്ചറിയൽ, ബന്ധപ്പെടൽ, വിലാസം, രേഖാ വിവരങ്ങൾ നീക്കി വീണ്ടും ശ്രമിക്കുക.",
@@ -294,6 +305,9 @@ _COPY = {
         "official": "ഔദ്യോഗിക സേവനം തുറക്കുക",
         "requirements": "പരിശോധിച്ച ആവശ്യകതകൾ",
         "fee": "ഫീസ് വിവരം",
+        "switch": "ഈ അഭ്യർത്ഥന മറ്റൊരു പരിശോധിച്ച Sahayi സേവനവുമായി പൊരുത്തപ്പെടുന്നതായി തോന്നുന്നു. നിലവിൽ തിരഞ്ഞെടുത്ത സേവനത്തിലെ വസ്തുതകൾ ഉപയോഗിക്കാതെ മാറാൻ ആ സേവനം തിരഞ്ഞെടുക്കുക.",
+        "address_clarify": "ആധാർ വിലാസം പുതുക്കലാണോ, അതോ കേരള പെൻഷൻ രേഖയിലെ വിലാസവുമായി ബന്ധപ്പെട്ട സഹായമാണോ ഉദ്ദേശിക്കുന്നത്? Sahayiയിൽ പരിശോധിച്ച ആധാർ വിലാസ-പുതുക്കൽ നടപടിയുണ്ട്, പക്ഷേ പെൻഷൻ രേഖയിലെ വിലാസം മാറ്റാൻ പ്രത്യേകം പരിശോധിച്ച നടപടിയില്ല; അതിനാൽ ഞാൻ ഒന്നും അനുമാനിക്കില്ല. ബന്ധപ്പെട്ട പരിശോധിച്ച സേവനം തിരഞ്ഞെടുക്കുക.",
+        "pension_address_scope": "Sahayiയുടെ പരിശോധിച്ച പട്ടികയിൽ പെൻഷൻ രേഖയിലെ വിലാസം മാറ്റാനുള്ള പ്രത്യേക നടപടിയില്ല. പരിശോധിച്ച പൊതുവായ മാർഗനിർദേശത്തിനായി കേരള പെൻഷൻ സേവനം തിരഞ്ഞെടുത്ത നിലയിൽ തുടരാം, എന്നാൽ Sahayi വിലാസമാറ്റ നടപടികൾ സൃഷ്ടിക്കില്ല.",
     },
 }
 
@@ -324,6 +338,116 @@ def safe_response(
     )
 
 
+def _log_failure(
+    reason: str,
+    runtime: AgentRuntime,
+    *,
+    error: Exception | None = None,
+    response_status: object = None,
+    round_number: int | None = None,
+    tool_calls: int | None = None,
+) -> None:
+    """Log only operational metadata; never log prompts, output, arguments, IPs, or keys."""
+    raw_status_code = getattr(error, "status_code", None)
+    safe_status_code = raw_status_code if isinstance(raw_status_code, int) else None
+    safe_response_status = response_status if response_status in {"completed", "failed", "in_progress", "incomplete"} else None
+    logger.warning(
+        "assistant_turn_failed reason=%s provider=%s model=%s status_code=%s exception_type=%s response_status=%s round=%s tool_calls=%s",
+        reason,
+        runtime.settings.agent_provider,
+        runtime.settings.agent_model,
+        safe_status_code,
+        type(error).__name__ if error is not None else None,
+        safe_response_status,
+        round_number,
+        tool_calls,
+    )
+
+
+def _service_choice(loaded: LoadedProcedure, locale: SupportedLocale) -> ServiceChoice:
+    return ServiceChoice(
+        service_id=loaded.pack.service_id,
+        title=localized_text(loaded.pack, locale, "title", loaded.pack.title["en"]),
+    )
+
+
+def _catalogue_clarification(
+    locale: SupportedLocale,
+    registry: dict[str, LoadedProcedure],
+    service_ids: list[str],
+    message_key: Literal["switch", "address_clarify", "pension_address_scope"],
+) -> AssistantTurnResponse:
+    choices = [_service_choice(registry[service_id], locale) for service_id in service_ids if service_id in registry]
+    return AssistantTurnResponse(
+        status="ok",
+        locale=locale,
+        message=_COPY[locale][message_key],
+        selection=SelectionState(state="clarification", service_id=None, choices=choices),
+        fact_cards=[],
+        sources=[],
+        actions=[],
+        tool_trace=[],
+        disclaimer=_COPY[locale]["disclaimer"],
+        fallback=False,
+    )
+
+
+def _normalise_intent(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.sub(r"[^\w]+", " ", normalized, flags=re.UNICODE).split())
+
+
+_ADDRESS_TERMS = ("address", "पता", "വിലാസ")
+_CHANGE_TERMS = ("change", "update", "correct", "बदल", "अपडेट", "सुधार", "മാറ്റ", "പുതുക്ക", "തിരുത്ത")
+_AADHAAR_TERMS = ("aadhaar", "aadhar", "आधार", "ആധാർ", "ആധാര്")
+_PENSION_TERMS = ("pension", "sevana", "पेंशन", "पेन्शन", "പെൻഷൻ", "പെന്‍ഷന്")
+
+
+def _catalogue_route(
+    request: AssistantTurnRequest,
+    registry: dict[str, LoadedProcedure],
+) -> AssistantTurnResponse | None:
+    """Handle only catalogue-backed cross-service signals before calling the provider."""
+    if request.service_id is None:
+        return None
+    normalized = _normalise_intent(request.message)
+    address_change = any(term in normalized for term in _ADDRESS_TERMS) and any(term in normalized for term in _CHANGE_TERMS)
+    aadhaar_id = "uidai-aadhaar-address-update"
+    pension_id = "kerala-ign-oap"
+    has_aadhaar_qualifier = any(term in normalized for term in _AADHAAR_TERMS)
+    has_pension_qualifier = any(term in normalized for term in _PENSION_TERMS)
+
+    if (
+        request.service_id == pension_id
+        and address_change
+        and not has_aadhaar_qualifier
+        and not has_pension_qualifier
+        and aadhaar_id in registry
+        and pension_id in registry
+    ):
+        return _catalogue_clarification(request.locale, registry, [aadhaar_id, pension_id], "address_clarify")
+    if address_change and has_aadhaar_qualifier and has_pension_qualifier and aadhaar_id in registry and pension_id in registry:
+        return _catalogue_clarification(request.locale, registry, [aadhaar_id, pension_id], "address_clarify")
+    if address_change and has_pension_qualifier and pension_id in registry:
+        return _catalogue_clarification(request.locale, registry, [pension_id], "pension_address_scope")
+
+    candidates: list[str] = []
+    for service_id, loaded in registry.items():
+        if service_id == request.service_id:
+            continue
+        phrases = summarize_procedure(loaded, locale=request.locale).intent_phrases
+        if any(_normalise_intent(phrase) in normalized for phrase in phrases if _normalise_intent(phrase)):
+            candidates.append(service_id)
+    if address_change and has_aadhaar_qualifier and aadhaar_id in registry and aadhaar_id != request.service_id:
+        candidates.append(aadhaar_id)
+    candidates = list(dict.fromkeys(candidates))
+    if len(candidates) == 1:
+        return _catalogue_clarification(request.locale, registry, candidates, "switch")
+    if len(candidates) > 1:
+        return _catalogue_clarification(request.locale, registry, candidates, "switch")
+    return None
+
+
 async def run_assistant_turn(
     request: AssistantTurnRequest,
     registry: dict[str, LoadedProcedure],
@@ -334,17 +458,28 @@ async def run_assistant_turn(
     if conversation_contains_high_risk_pii(request.message, history_text):
         return safe_response(request.locale, "blocked")
     if not runtime.available:
+        if not runtime.settings.agent_enabled:
+            reason = "agent_disabled"
+        elif not runtime.settings.agent_configuration_valid:
+            reason = "invalid_provider_or_model_configuration"
+        else:
+            reason = "missing_provider_credential"
+        _log_failure(reason, runtime)
         return safe_response(request.locale, "unavailable")
+    catalogue_response = _catalogue_route(request, registry)
+    if catalogue_response is not None:
+        return catalogue_response
     key = runtime.rate_limiter.client_key(client_address)
     if not await runtime.rate_limiter.allow(key):
+        _log_failure("client_rate_limit", runtime)
         return safe_response(request.locale, "rate_limited")
 
     try:
         async with runtime.semaphore:
             return await _provider_turn(request, registry, runtime)
     except Exception as error:
-        status = "rate_limited" if getattr(error, "status_code", None) == 429 else "fallback"
-        return safe_response(request.locale, status)
+        _log_failure("internal_turn_processing_error", runtime, error=error)
+        return safe_response(request.locale, "fallback")
 
 
 async def _provider_turn(
@@ -364,40 +499,77 @@ async def _provider_turn(
     selected_id = request.service_id
     explained_status_id: DemoStatusId | None = None
 
-    for _ in range(runtime.settings.agent_max_rounds):
+    for round_index in range(runtime.settings.agent_max_rounds):
+        round_number = round_index + 1
         if not await runtime.request_budget.take():
+            _log_failure("process_request_budget_exhausted", runtime, round_number=round_number, tool_calls=tool_calls)
             return safe_response(request.locale, "fallback")
-        response = await client.responses.create(
-            model=runtime.settings.agent_model,
-            instructions=_instructions(request.locale, selected_id, request.demo_status_id),
-            input=input_items,
-            tools=_tool_definitions(registry),
-            tool_choice="auto",
-            parallel_tool_calls=False,
-            stream=False,
-            max_output_tokens=runtime.settings.agent_max_output_tokens,
-        )
-        calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
+        try:
+            response = await client.responses.create(
+                model=runtime.settings.agent_model,
+                instructions=_instructions(request.locale, selected_id, request.demo_status_id),
+                input=input_items,
+                tools=_tool_definitions(registry),
+                tool_choice="auto",
+                parallel_tool_calls=False,
+                stream=False,
+                max_output_tokens=runtime.settings.agent_max_output_tokens,
+            )
+        except Exception as error:
+            _log_failure("provider_api_error", runtime, error=error, round_number=round_number, tool_calls=tool_calls)
+            status = "rate_limited" if getattr(error, "status_code", None) == 429 else "fallback"
+            return safe_response(request.locale, status)
+        response_status = getattr(response, "status", None)
+        if response_status not in {None, "completed"}:
+            _log_failure("provider_response_not_completed", runtime, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+            return safe_response(request.locale, "fallback")
+        output = getattr(response, "output", None)
+        if not isinstance(output, list):
+            _log_failure("malformed_provider_response", runtime, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+            return safe_response(request.locale, "fallback")
+        calls = [item for item in output if getattr(item, "type", None) == "function_call"]
         if not calls:
-            parsed = AgentModelOutput.model_validate_json(response.output_text)
+            output_text = getattr(response, "output_text", None)
+            if not isinstance(output_text, str) or not output_text.strip():
+                _log_failure("missing_model_output_text", runtime, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
+            try:
+                parsed = AgentModelOutput.model_validate_json(output_text)
+            except ValidationError as error:
+                error_types = {item["type"] for item in error.errors(include_url=False)}
+                reason = "model_output_invalid_json" if "json_invalid" in error_types else "model_output_schema_invalid"
+                _log_failure(reason, runtime, error=error, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
             if parsed.service_id in registry:
                 selected_id = parsed.service_id
             return _assemble_response(request.locale, registry, parsed, selected_id, trace, explained_status_id)
 
-        input_items.extend(response.output)
+        input_items.extend(output)
         for call in calls:
             tool_calls += 1
-            if tool_calls > runtime.settings.agent_max_tool_calls or call.name not in TOOL_NAMES:
+            if tool_calls > runtime.settings.agent_max_tool_calls:
+                _log_failure("tool_call_budget_exhausted", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
-            output, used_service, used_status = _execute_tool(call.name, call.arguments, registry)
+            if getattr(call, "name", None) not in TOOL_NAMES:
+                _log_failure("unknown_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
+            if not isinstance(getattr(call, "arguments", None), str) or not isinstance(getattr(call, "call_id", None), str):
+                _log_failure("malformed_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
+            tool_output, used_service, used_status = _execute_tool(call.name, call.arguments, registry)
+            if tool_output == '{"error": "Invalid tool request"}':
+                _log_failure("tool_argument_validation_failed", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
             if call.name == "explain_simulated_status" and used_status != request.demo_status_id:
+                _log_failure("demo_status_tool_scope_mismatch", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
             if used_service is not None:
                 selected_id = used_service
             if used_status is not None:
                 explained_status_id = used_status
             trace.append(call.name)
-            input_items.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
+            input_items.append({"type": "function_call_output", "call_id": call.call_id, "output": tool_output})
+    _log_failure("tool_round_budget_exhausted", runtime, round_number=runtime.settings.agent_max_rounds, tool_calls=tool_calls)
     return safe_response(request.locale, "fallback")
 
 
@@ -410,7 +582,8 @@ def _instructions(locale: SupportedLocale, service_id: str | None, demo_status_i
         "Do not request or repeat identifiers, contact details, addresses, OTPs, document contents, or files. "
         "Return a single JSON object without Markdown and with exactly these fields: "
         "guidance_message (string), selection_state (none, clarification, or selected), "
-        "service_id (a supplied service ID or null), and action_ids (an array using only documented action IDs). "
+        "service_id (a supplied service ID or null), and action_ids (an array using only: "
+        "view-procedure, start-readiness, build-checklist, prepare-synthetic-form, or open-official-service). "
         f"Locale: {locale}. Current validated service: {service_id or 'none'}. Current validated demo status: {demo_status_id or 'none'}."
     )
 
@@ -527,7 +700,7 @@ def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure
 
 
 def _clarification_response(locale: SupportedLocale, registry: dict[str, LoadedProcedure], trace: list[str]) -> AssistantTurnResponse:
-    choices = [ServiceChoice(service_id=loaded.pack.service_id, title=localized_text(loaded.pack, locale, "title", loaded.pack.title["en"])) for loaded in registry.values()]
+    choices = [_service_choice(loaded, locale) for loaded in registry.values()]
     return AssistantTurnResponse(
         status="ok",
         locale=locale,
@@ -551,7 +724,10 @@ def _assemble_response(
     explained_status_id: DemoStatusId | None = None,
 ) -> AssistantTurnResponse:
     if _UNSAFE_MODEL_PROSE.search(model_output.guidance_message):
+        logger.warning("assistant_turn_failed reason=unsafe_model_prose")
         return safe_response(locale, "fallback")
+    if model_output.service_id is not None and model_output.service_id not in registry:
+        return _clarification_response(locale, registry, trace)
     if model_output.selection_state == "clarification" or service_id not in registry:
         return _clarification_response(locale, registry, trace)
     loaded = registry[service_id]

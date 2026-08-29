@@ -516,7 +516,7 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /consent to this AI turn/ }))
     fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'How do I update my Aadhaar address?' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
-    expect((await screen.findAllByText('Choose the verified Aadhaar path.')).length).toBe(2)
+    expect((await screen.findAllByText('Choose the verified Aadhaar path.')).length).toBe(1)
     expect(screen.getByText(/Checked verified procedures/)).toBeInTheDocument()
     const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
     const body = JSON.parse(String(call[1]?.body))
@@ -549,7 +549,7 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.change(screen.getByLabelText('सामान्य सेवा प्रश्न'), { target: { value: 'आधार पता अपडेट में मदद' } })
     fireEvent.click(screen.getByRole('button', { name: 'AI को भेजें' }))
-    expect((await screen.findAllByText('सत्यापित प्रक्रिया चुनें।')).length).toBe(2)
+    expect((await screen.findAllByText('सत्यापित प्रक्रिया चुनें।')).length).toBe(1)
     const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
     expect(JSON.parse(String(call[1]?.body)).locale).toBe('hi')
     fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
@@ -568,6 +568,31 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
     expect(screen.getByRole('alert')).toHaveTextContent('remove personal identifiers')
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/assistant/turn'))).toBe(false)
+  })
+
+  it('renders a provider fallback response only once', async () => {
+    const fallbackMessage = 'I could not complete the AI-guided turn. The verified procedure catalogue and deterministic checks remain available.'
+    mockApi({
+      agentAvailable: true,
+      agentReply: {
+        ...agentReply,
+        status: 'fallback',
+        message: fallbackMessage,
+        selection: { state: 'none', service_id: null, choices: [] },
+        fact_cards: [],
+        sources: [],
+        actions: [],
+        tool_trace: [],
+        fallback: true,
+      },
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ask Sahayi AI' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Sahayi AI' }))
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'Help with this service' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    expect(await screen.findAllByText(fallbackMessage)).toHaveLength(1)
   })
 
   it('renders printable deterministic checklist and synthetic worksheet without private prefill', async () => {

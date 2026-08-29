@@ -1,5 +1,7 @@
 # Current frontend API
 
+The assistant may answer an explicit cross-service match or the ambiguous unqualified address-change request inside the Kerala pension journey before provider invocation. Such a response uses `status: "ok"` with `selection.state: "clarification"`; every offered service comes from the active verified registry, and no separate pension-record address-change procedure is implied. The frontend renders the latest structured response once rather than duplicating the same assistant text from its bounded in-memory transcript.
+
 `GET /api/v1/health` returns `{"status":"ok"}`. `GET /api/v1/public-config` returns application name, kiosk mode, AI availability, fixed `agent_provider`/`agent_model`, and bounded effective `inactivity_timeout_seconds`/`inactivity_warning_seconds`. Availability is true only when the server feature flag, allowlisted provider/model, and secret are present. No key, credential detail, provider error/diagnostic, or citizen state is public. Both return JSON with `Cache-Control: no-store`.
 
 The catalogue, procedure detail, and readiness endpoints accept optional `locale=en|hi|ml`; omission remains backward-compatible English. Any other value returns generic `422 {"error":"Invalid request"}`. Localized responses include `locale` and `translation` metadata (`canonical_locale`, method, review status, and disclaimer). English is canonical verified content. Hindi and Malayalam are machine-assisted prototypes requiring native review; linked official wording prevails.

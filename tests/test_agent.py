@@ -115,6 +115,83 @@ async def test_strict_tool_loop_uses_bounded_responses_settings_and_deterministi
 
 
 @pytest.mark.anyio
+async def test_successful_normal_ai_turn_for_selected_service() -> None:
+    final_output = {
+        "guidance_message": "I can help with the verified Kerala pension procedure.",
+        "selection_state": "selected",
+        "service_id": "kerala-ign-oap",
+        "action_ids": ["view-procedure"],
+    }
+    runtime, responses = fake_runtime([SimpleNamespace(status="completed", output=[], output_text=json.dumps(final_output))])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="What documents are covered by this pension procedure?",
+        service_id="kerala-ign-oap",
+        consent=True,
+    )
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "normal-turn")
+    assert result.status == "ok"
+    assert result.selection.service_id == "kerala-ign-oap"
+    assert responses.calls and responses.calls[0]["model"] == AGENT_MODEL
+
+
+@pytest.mark.anyio
+async def test_cross_service_intent_offers_only_verified_catalogue_switch_without_provider() -> None:
+    runtime, responses = fake_runtime([])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="I need to update my Aadhaar address",
+        service_id="kerala-ign-oap",
+        consent=True,
+    )
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "cross-service")
+    assert result.status == "ok"
+    assert result.selection.state == "clarification"
+    assert [choice.service_id for choice in result.selection.choices] == ["uidai-aadhaar-address-update"]
+    assert result.fact_cards == []
+    assert responses.calls == []
+
+
+@pytest.mark.anyio
+async def test_ambiguous_address_change_inside_pension_distinguishes_both_catalogue_paths() -> None:
+    runtime, responses = fake_runtime([])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="i need to change the address",
+        service_id="kerala-ign-oap",
+        consent=True,
+    )
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "ambiguous-address")
+    assert result.status == "ok"
+    assert result.selection.state == "clarification"
+    assert [choice.service_id for choice in result.selection.choices] == [
+        "uidai-aadhaar-address-update",
+        "kerala-ign-oap",
+    ]
+    assert "Aadhaar address update" in result.message
+    assert "pension record" in result.message
+    assert "no separate verified pension-record address-change procedure" in result.message
+    assert responses.calls == []
+
+
+@pytest.mark.anyio
+async def test_pension_record_address_request_does_not_invent_an_unverified_procedure() -> None:
+    runtime, responses = fake_runtime([])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="I need to change the address on my pension record",
+        service_id="kerala-ign-oap",
+        consent=True,
+    )
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "pension-address")
+    assert result.status == "ok"
+    assert [choice.service_id for choice in result.selection.choices] == ["kerala-ign-oap"]
+    assert "does not contain a separate pension-record address-change procedure" in result.message
+    assert result.fact_cards == []
+    assert responses.calls == []
+
+
+@pytest.mark.anyio
 async def test_invalid_service_requests_clarification_without_provider() -> None:
     runtime, responses = fake_runtime([])
     turn = AssistantTurnRequest(locale="en", message="Help with a service", service_id="not-supported", consent=True)
@@ -207,6 +284,35 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
 
 
 @pytest.mark.anyio
+async def test_schema_failure_logs_only_safe_reason_metadata(caplog: pytest.LogCaptureFixture) -> None:
+    unsafe_output = '{"guidance_message":"private model detail","action_ids":"wrong"}'
+    runtime, _ = fake_runtime([SimpleNamespace(status="completed", output=[], output_text=unsafe_output)])
+    with caplog.at_level("WARNING", logger="sahayi_api.agent"):
+        result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "schema-failure")
+    assert result.status == "fallback"
+    assert "reason=model_output_schema_invalid" in caplog.text
+    assert "private model detail" not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_incomplete_and_malformed_provider_responses_are_logged_separately(caplog: pytest.LogCaptureFixture) -> None:
+    runtime, _ = fake_runtime([SimpleNamespace(status="incomplete", output=[], output_text="private partial output")])
+    with caplog.at_level("WARNING", logger="sahayi_api.agent"):
+        incomplete = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "incomplete-response")
+    assert incomplete.status == "fallback"
+    assert "reason=provider_response_not_completed" in caplog.text
+    assert "private partial output" not in caplog.text
+
+    caplog.clear()
+    runtime, _ = fake_runtime([SimpleNamespace(status="completed", output=None, output_text="private malformed output")])
+    with caplog.at_level("WARNING", logger="sahayi_api.agent"):
+        malformed = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "malformed-response")
+    assert malformed.status == "fallback"
+    assert "reason=malformed_provider_response" in caplog.text
+    assert "private malformed output" not in caplog.text
+
+
+@pytest.mark.anyio
 async def test_agent_may_explain_only_the_current_validated_demo_status() -> None:
     call = SimpleNamespace(
         type="function_call",
@@ -232,11 +338,15 @@ async def test_agent_may_explain_only_the_current_validated_demo_status() -> Non
 
 
 @pytest.mark.anyio
-async def test_provider_timeout_is_generic_and_excessive_tool_loop_is_bounded() -> None:
+async def test_provider_timeout_is_generic_and_excessive_tool_loop_is_bounded(caplog: pytest.LogCaptureFixture) -> None:
     runtime, _ = fake_runtime([TimeoutError("provider-secret-detail")])
-    timed_out = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.1")
+    with caplog.at_level("WARNING", logger="sahayi_api.agent"):
+        timed_out = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.1")
     assert timed_out.status == "fallback"
     assert "provider-secret-detail" not in timed_out.message
+    assert "reason=provider_api_error" in caplog.text
+    assert "exception_type=TimeoutError" in caplog.text
+    assert "provider-secret-detail" not in caplog.text
 
     call = SimpleNamespace(type="function_call", name="list_supported_services", arguments='{"locale":"en"}', call_id="call")
     settings = replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_max_tool_calls=1, agent_request_budget=10)
@@ -291,7 +401,7 @@ def test_groq_provider_selection_defaults_and_client_configuration(monkeypatch: 
         return sentinel
 
     monkeypatch.setattr("openai.AsyncOpenAI", fake_client)
-    runtime = AgentRuntime(replace(settings, agent_enabled=True, groq_api_key="test-key"))
+    runtime = AgentRuntime(replace(settings, agent_enabled=True, agent_configuration_valid=True, groq_api_key="test-key"))
     assert runtime.available is True
     assert runtime.get_client() is sentinel
     assert captured == {
@@ -300,6 +410,23 @@ def test_groq_provider_selection_defaults_and_client_configuration(monkeypatch: 
         "timeout": settings.agent_timeout_seconds,
         "max_retries": 0,
     }
+
+
+def test_provider_key_is_trimmed_and_invalid_provider_or_model_disables_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SAHAYI_AGENT_ENABLED", "true")
+    monkeypatch.setenv("GROQ_API_KEY", "  test-key-with-whitespace  ")
+    monkeypatch.setenv("SAHAYI_AGENT_PROVIDER", AGENT_PROVIDER)
+    monkeypatch.setenv("SAHAYI_AGENT_MODEL", AGENT_MODEL)
+    settings = get_settings()
+    assert settings.groq_api_key == "test-key-with-whitespace"
+    assert settings.agent_configuration_valid is True
+    assert AgentRuntime(settings).available is True
+
+    monkeypatch.setenv("SAHAYI_AGENT_MODEL", "not-allowed")
+    invalid = get_settings()
+    assert invalid.agent_model == AGENT_MODEL
+    assert invalid.agent_configuration_valid is False
+    assert AgentRuntime(invalid).available is False
 
 
 @pytest.mark.anyio

@@ -529,6 +529,7 @@ function AssistantGuide({ messages, language, available, consent, input, history
   onConsent: (value: boolean) => void; onInput: (value: string) => void; onSubmit: () => void; onChooseService: (serviceId: string) => void; onAction: (actionId: string, serviceId: string | null) => void; onBack: () => void; onStartOver: () => void
 }) {
   const responseTarget = useRef<HTMLDivElement>(null)
+  const visibleHistory = response && history.at(-1)?.role === 'assistant' && history.at(-1)?.content === response.message ? history.slice(0, -1) : history
   useEffect(() => { if (response || error || piiWarning) responseTarget.current?.focus() }, [response, error, piiWarning])
   return <main className="kiosk-shell"><section className="content-card agent-page" aria-labelledby="agent-title">{language}
     <nav className="page-actions" aria-label={messages.agentNavigation}><button className="secondary compact" type="button" onClick={onBack}>{messages.back}</button><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
@@ -542,7 +543,7 @@ function AssistantGuide({ messages, language, available, consent, input, history
       <textarea id="agent-message" maxLength={500} rows={4} value={input} aria-describedby="agent-message-help" onChange={event => onInput(event.target.value)} />
       <button type="submit" disabled={loading || !input.trim()}>{loading ? messages.sending : messages.send}</button>
     </form>}
-    {history.length > 0 && <section className="conversation" aria-labelledby="conversation-title"><h2 id="conversation-title">{messages.aiConversation}</h2>{history.map((message, index) => <p className={`message ${message.role}`} key={`${message.role}-${index}`}>{message.content}</p>)}</section>}
+    {visibleHistory.length > 0 && <section className="conversation" aria-labelledby="conversation-title"><h2 id="conversation-title">{messages.aiConversation}</h2>{visibleHistory.map((message, index) => <p className={`message ${message.role}`} key={`${message.role}-${index}`}>{message.content}</p>)}</section>}
     <div ref={responseTarget} tabIndex={-1} aria-live="polite">
       {(error || piiWarning) && <p className="inline-error" role="alert">{piiWarning ? messages.piiWarning : messages.aiError}</p>}
       {response && <section className="agent-response"><p>{response.message}</p>

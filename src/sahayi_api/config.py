@@ -40,6 +40,7 @@ class Settings:
     agent_enabled: bool
     agent_provider: str
     agent_model: str
+    agent_configuration_valid: bool
     groq_api_key: str | None
     agent_timeout_seconds: float
     agent_max_output_tokens: int
@@ -55,6 +56,7 @@ def get_settings() -> Settings:
     origin = os.getenv("SAHAYI_DEV_FRONTEND_ORIGIN", "http://127.0.0.1:5173")
     configured_provider = os.getenv("SAHAYI_AGENT_PROVIDER", AGENT_PROVIDER).strip().lower()
     configured_model = os.getenv("SAHAYI_AGENT_MODEL", AGENT_MODEL).strip()
+    configured_key = os.getenv("GROQ_API_KEY")
     return Settings(
         dev_frontend_origin=origin.rstrip("/"),
         kiosk_inactivity_seconds=_integer("SAHAYI_KIOSK_INACTIVITY_SECONDS", 300, 60, 1800),
@@ -62,7 +64,8 @@ def get_settings() -> Settings:
         agent_enabled=_boolean("SAHAYI_AGENT_ENABLED", False),
         agent_provider=configured_provider if configured_provider == AGENT_PROVIDER else AGENT_PROVIDER,
         agent_model=configured_model if configured_model == AGENT_MODEL else AGENT_MODEL,
-        groq_api_key=os.getenv("GROQ_API_KEY") or None,
+        agent_configuration_valid=configured_provider == AGENT_PROVIDER and configured_model == AGENT_MODEL,
+        groq_api_key=configured_key.strip() if configured_key and configured_key.strip() else None,
         agent_timeout_seconds=_float("SAHAYI_AGENT_TIMEOUT_SECONDS", 8.0, 2.0, 20.0),
         agent_max_output_tokens=_integer("SAHAYI_AGENT_MAX_OUTPUT_TOKENS", 700, 256, 1200),
         agent_max_tool_calls=_integer("SAHAYI_AGENT_MAX_TOOL_CALLS", 6, 1, 8),
