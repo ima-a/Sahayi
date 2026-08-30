@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { UI_MESSAGES } from './i18n'
-import type { AssistantTurnResponse, DemoJourneyResponse, DemoScenarioId, DemoStatusId, PersonalizedChecklist, ProcedureDetail, ProcedureSummary, ReadinessResponse, SyntheticFormAssistance } from './api'
+import type { AssistantTurnResponse, ConversationTurnResponse, DemoJourneyResponse, DemoScenarioId, DemoStatusId, PersonalizedChecklist, ProcedureDetail, ProcedureSummary, PublicJourneyState, ReadinessResponse, SyntheticFormAssistance } from './api'
 
 const englishTranslation = {
   locale: 'en' as const,
@@ -136,6 +136,49 @@ const formFixture: SyntheticFormAssistance = {
   official_handoff_url: detail.official_handoff_url, pack_version: '1.4.0', pack_digest: 'd'.repeat(64),
 }
 
+const emptyJourneyState = (): PublicJourneyState => ({
+  service_id: null,
+  candidate_service_ids: [],
+  confirmed: false,
+  answers: {},
+  current_question_id: null,
+  document_evidence: [],
+})
+
+const graphTurn = ({
+  state,
+  procedure = null,
+  readiness = null,
+  checklist = null,
+  preparation = null,
+  message = 'Continue one step at a time.',
+}: {
+  state: PublicJourneyState
+  procedure?: ProcedureSummary | null
+  readiness?: ReadinessResponse | null
+  checklist?: PersonalizedChecklist | null
+  preparation?: SyntheticFormAssistance | null
+  message?: string
+}): ConversationTurnResponse => ({
+  status: 'ok',
+  locale: 'en',
+  assistant_message: message,
+  next_action: readiness?.complete ? 'official_handoff' : readiness?.next_question ? 'ask_user' : 'confirm_service',
+  progress_text: readiness ? `${readiness.progress.answered} of ${readiness.progress.total}` : null,
+  actions: [],
+  active_procedure: procedure,
+  current_question: readiness?.next_question ?? null,
+  readiness,
+  checklist,
+  preparation,
+  document_helper_available: readiness?.next_question?.question_id === 'accepted-poa-ready',
+  accepted_document_evidence: state.document_evidence,
+  contextual_sources: readiness?.sources ?? [],
+  official_handoff_url: readiness?.official_handoff_url ?? null,
+  state,
+  diagnostic_category: 'none',
+})
+
 const demoSequences: Record<DemoScenarioId, DemoStatusId[]> = {
   'normal-completion': ['preparation-completed', 'demo-submitted', 'simulated-review', 'demo-completed'],
   'action-required': ['preparation-completed', 'demo-submitted', 'simulated-review', 'action-required', 'demo-completed'],
@@ -159,6 +202,69 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
     const parsed = new URL(url, 'http://test')
     if (parsed.pathname.endsWith('/health')) return response({ status: 'ok' })
     if (parsed.pathname.endsWith('/public-config')) return response({ application_name: 'Sahayi', kiosk_mode: true, agent_available: options.agentAvailable ?? false, agent_provider: 'groq', agent_model: 'openai/gpt-oss-120b', inactivity_timeout_seconds: options.inactivityTimeout ?? 300, inactivity_warning_seconds: options.inactivityWarning ?? 30 })
+    if (parsed.pathname.endsWith('/conversation/turn')) {
+      if (options.failReadiness) return Promise.reject(new Error('offline'))
+      const body = JSON.parse(String(init?.body)) as {
+        event_type: 'start' | 'confirm_service' | 'answer' | 'document_evidence'
+        confirmed_service_id?: string
+        local_candidates?: Array<{ service_id: string }>
+        answer?: { question_id: string; value: boolean | number | string }
+        document_evidence?: { document_id: string; appears_relevant: boolean; citizen_confirmed: true }
+        state?: PublicJourneyState
+      }
+      if (body.event_type === 'start') {
+        const candidateIds = body.local_candidates?.map(candidate => candidate.service_id) ?? []
+        return response(graphTurn({
+          state: { ...emptyJourneyState(), candidate_service_ids: candidateIds },
+          procedure: null,
+          message: 'Please confirm the service before continuing.',
+        }))
+      }
+      const serviceId = body.confirmed_service_id ?? body.state?.service_id ?? summary.service_id
+      const activeSummary = serviceId === pensionSummary.service_id ? pensionSummary : summary
+      if (body.event_type === 'confirm_service') {
+        const initial = options.readinessInitial ?? readinessStep(serviceId === pensionSummary.service_id ? pensionSensitiveQuestion : mobileQuestion, 0, 1)
+        return response(graphTurn({
+          state: { ...emptyJourneyState(), service_id: serviceId, confirmed: true, current_question_id: initial.next_question?.question_id ?? null },
+          procedure: activeSummary,
+          readiness: initial,
+          message: initial.next_question?.prompt,
+        }))
+      }
+      if (body.event_type === 'document_evidence') {
+        const evidence = body.document_evidence ? [...(body.state?.document_evidence ?? []), body.document_evidence] : body.state?.document_evidence ?? []
+        const current = readinessStep(poaQuestion, Object.keys(body.state?.answers ?? {}).length, 3)
+        return response(graphTurn({
+          state: { ...(body.state ?? emptyJourneyState()), document_evidence: evidence },
+          procedure: activeSummary,
+          readiness: current,
+          message: current.next_question?.prompt,
+        }))
+      }
+      const answers = { ...(body.state?.answers ?? {}), ...(body.answer ? { [body.answer.question_id]: body.answer.value } : {}) }
+      let next: ReadinessResponse
+      if (body.answer?.question_id === pensionSensitiveQuestion.question_id) {
+        next = { ...completeReadiness, evaluation_status: 'alternative_path', outcome: { ...completeReadiness.outcome!, outcome_id: 'use-alternative-channel', status: 'alternative_path', title: 'Use an alternative official channel' } }
+      } else if (answers['mobile-auth-access'] === true && !answers['address-update-route']) next = readinessStep(routeQuestion, 1, 2)
+      else if (answers['address-update-route'] === 'own-document' && !('accepted-poa-ready' in answers)) next = readinessStep(poaQuestion, 2, 3)
+      else if (answers['accepted-poa-ready'] === true) next = completeReadiness
+      else next = { ...completeReadiness, evaluation_status: 'alternative_path', outcome: { ...completeReadiness.outcome!, outcome_id: 'use-alternative-channel', status: 'alternative_path', title: 'Use an alternative official channel' } }
+      const nextState: PublicJourneyState = {
+        ...(body.state ?? emptyJourneyState()),
+        service_id: serviceId,
+        confirmed: true,
+        answers,
+        current_question_id: next.next_question?.question_id ?? null,
+      }
+      return response(graphTurn({
+        state: nextState,
+        procedure: activeSummary,
+        readiness: next,
+        checklist: next.complete ? checklistFixture : null,
+        preparation: next.complete ? formFixture : null,
+        message: next.next_question?.prompt ?? 'Your preparation is ready.',
+      }))
+    }
     if (parsed.pathname.endsWith('/assistant/turn')) return response(options.agentReply ?? agentReply)
     if (parsed.pathname.endsWith('/demo-submission')) {
       const body = JSON.parse(String(init?.body)) as { scenario_id: DemoScenarioId }
@@ -195,7 +301,7 @@ async function openCatalogue() {
   await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'Start' }))
   await screen.findByRole('heading', { name: 'What do you need help with?' })
-  fireEvent.click(screen.getByRole('button', { name: 'Browse all services' }))
+  fireEvent.click(screen.getAllByRole('button', { name: 'Browse all services' }).at(-1)!)
   await screen.findByRole('heading', { name: 'Supported services' })
 }
 
@@ -220,7 +326,6 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Sahayi' })).toBeInTheDocument()
     expect(screen.getByText('Government services, explained around what you need.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'What do you need help with?' })).toBeInTheDocument()
     expect(screen.getByText('Need help?')).toBeInTheDocument()
     expect(screen.getByText('Checking service availability…')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
@@ -233,6 +338,17 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getByRole('button', { name: /Update your Aadhaar address online/ })).toBeInTheDocument()
     expect(screen.getByText(/Official UIDAI guidance/)).toBeInTheDocument()
     expect(screen.getByText('Fee needs confirmation')).toBeInTheDocument()
+  })
+
+  it('opens the conversation directly without a service-card wall', async () => {
+    mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(await screen.findByRole('heading', { name: 'What do you need help with?' })).toBeInTheDocument()
+    expect(document.querySelectorAll('.service-card')).toHaveLength(0)
+    expect(document.querySelector('.citizen-progress')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'What do you need help with?' })).toHaveFocus()
   })
 
   it('offers exactly three accessible languages, updates document language, and keeps the choice in memory across Start Over', async () => {
@@ -517,8 +633,26 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getByText('Ready for the demonstrated path.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Open the official service/ })).toHaveAttribute('href', detail.official_handoff_url)
     expect(screen.getByRole('heading', { name: 'What do you need help with?' })).toBeInTheDocument()
-    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/checklist?locale=en'))).toBe(true)
-    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/synthetic-form-assistance?locale=en'))).toBe(true)
+    expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/conversation/turn'))).toBe(true)
+    expect(fetchMock.mock.calls.some(call => String(call[0]).includes('/checklist'))).toBe(false)
+    expect(fetchMock.mock.calls.some(call => String(call[0]).includes('/synthetic-form-assistance'))).toBe(false)
+  })
+
+  it('routes the Kerala pension request and asks only its next pack-owned question', async () => {
+    const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'My mother is 67 and I want to know if she can get pension.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(new RegExp(pensionSummary.title))).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, continue' }))
+    expect(await screen.findByText(pensionSensitiveQuestion.prompt)).toBeInTheDocument()
+    expect(screen.queryByText(mobileQuestion.prompt)).not.toBeInTheDocument()
+    const graphCalls = fetchMock.mock.calls.filter(call => String(call[0]).endsWith('/conversation/turn'))
+    expect(graphCalls).toHaveLength(2)
+    expect(JSON.parse(String(graphCalls[1][1]?.body)).confirmed_service_id).toBe(pensionSummary.service_id)
+    expect(document.body).not.toHaveTextContent(/eligible|approved/i)
   })
 
   it('clears the unified conversation and active task with Start Over and End session', async () => {
@@ -547,7 +681,7 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.change(input, { target: { value: 'old age pension Kerala' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Yes, continue' }))
-    await screen.findByText(mobileQuestion.prompt)
+    await screen.findByText(pensionSensitiveQuestion.prompt)
     fireEvent.change(input, { target: { value: 'I need to change the address' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/address linked to Aadhaar/)).toHaveTextContent('Sahayi will not assume either')
@@ -560,20 +694,22 @@ describe('Sahayi verified procedure flow', () => {
   })
 
   it('supports both example services, ambiguous/no-match fallback, and local PII warning', async () => {
-    mockApi({ procedures: [summary, pensionSummary], procedure: pensionDetail })
+    const fetchMock = mockApi({ procedures: [summary, pensionSummary], procedure: pensionDetail })
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'old age pension Kerala' }))
+    const query = await screen.findByLabelText('Tell us what service you need')
+    fireEvent.change(query, { target: { value: 'old age pension Kerala' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(new RegExp(pensionSummary.title))).toBeInTheDocument()
-    const query = screen.getByLabelText('Tell us what service you need')
     fireEvent.change(query, { target: { value: '1234 5678 9012' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(screen.getByRole('alert')).toHaveTextContent('remove personal identifiers')
-    fireEvent.change(query, { target: { value: 'something unsupported' } })
+    const beforeUnsupported = fetchMock.mock.calls.length
+    fireEvent.change(query, { target: { value: 'I need to change my name in Aadhaar' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/We do not yet have a verified procedure for that request/)).toBeInTheDocument()
+    expect(fetchMock.mock.calls).toHaveLength(beforeUnsupported)
     fireEvent.click(screen.getAllByRole('button', { name: 'Browse all services' }).at(-1)!)
     expect(await screen.findByRole('heading', { name: 'Supported services' })).toBeInTheDocument()
   })
@@ -584,12 +720,11 @@ describe('Sahayi verified procedure flow', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
     const query = await screen.findByLabelText('Tell us what service you need')
-    await screen.findByRole('button', { name: 'change Aadhaar address' })
     const beforeInference = fetchMock.mock.calls.length
     fireEvent.change(query, { target: { value: 'need aadhaar adress updation after moving' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/Matched on this device/)).toBeInTheDocument()
-    expect(screen.getByText(/This request has not been sent online/)).toHaveTextContent('Sahayi needs you to confirm.')
+    expect(screen.getByText(/This request has not been sent online/)).toHaveTextContent('Matched on this device')
     expect(fetchMock.mock.calls).toHaveLength(beforeInference)
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
     expect(await screen.findByLabelText('बताएँ कि आपको कौन-सी सेवा चाहिए')).toHaveValue('')
@@ -656,7 +791,8 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
     await waitFor(() => expect(screen.getByRole('button', { name: 'शुरू करें' })).toBeEnabled())
-    fireEvent.click(screen.getByRole('button', { name: 'सभी सेवाएँ देखें' }))
+    fireEvent.click(screen.getByRole('button', { name: 'शुरू करें' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'सभी सेवाएँ देखें' }))
     fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Ask Sahayi AI' }))
     fireEvent.click(screen.getByRole('checkbox'))

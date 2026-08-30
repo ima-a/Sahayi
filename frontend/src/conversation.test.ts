@@ -20,4 +20,8 @@ describe('conversation routing', () => {
     expect(routeCitizenRequest('1234 5678 9012', [aadhaar, pension], null)).toEqual({ kind: 'pii' })
     expect(routeCitizenRequest('change Aadhaar address', [aadhaar, pension], pension.service_id)).toMatchObject({ kind: 'result', reply: 'matched', result: { kind: 'confident', candidate: { procedure: { service_id: aadhaar.service_id } } } })
   })
+
+  it('fails closed for an unsupported Aadhaar name change', () => {
+    expect(routeCitizenRequest('I need to change my name in Aadhaar', [aadhaar, pension], null)).toMatchObject({ kind: 'result', reply: 'unsupported', result: { kind: 'none' } })
+  })
 })

@@ -174,6 +174,41 @@ export type AssistantTurnResponse = {
   disclaimer: string
   fallback: boolean
 }
+export type ConfirmedDocumentEvidence = { document_id: string; appears_relevant: boolean; citizen_confirmed: true }
+export type PublicJourneyState = {
+  service_id: string | null
+  candidate_service_ids: string[]
+  confirmed: boolean
+  answers: Record<string, ReadinessAnswer>
+  current_question_id: string | null
+  document_evidence: ConfirmedDocumentEvidence[]
+}
+export type ConversationUiAction = {
+  action_id: 'confirm_service' | 'choose_service' | 'answer' | 'attach_document' | 'open_official_service' | 'browse_services'
+  label: string
+  service_id: string | null
+  question_id: string | null
+  value: ReadinessAnswer | null
+}
+export type ConversationTurnResponse = {
+  status: 'ok' | 'blocked' | 'unsupported' | 'unavailable' | 'error'
+  locale: Locale
+  assistant_message: string
+  next_action: 'confirm_service' | 'choose_service' | 'ask_user' | 'prepared' | 'official_handoff' | 'unsupported' | 'blocked' | 'error'
+  progress_text: string | null
+  actions: ConversationUiAction[]
+  active_procedure: ProcedureSummary | null
+  current_question: ReadinessQuestion | null
+  readiness: ReadinessResponse | null
+  checklist: PersonalizedChecklist | null
+  preparation: SyntheticFormAssistance | null
+  document_helper_available: boolean
+  accepted_document_evidence: ConfirmedDocumentEvidence[]
+  contextual_sources: ProcedureSource[]
+  official_handoff_url: string | null
+  state: PublicJourneyState
+  diagnostic_category: 'none' | 'pii_blocked' | 'invalid_state' | 'provider_unavailable' | 'provider_failure' | 'budget_exhausted'
+}
 export type DemoScenarioId = 'normal-completion' | 'action-required'
 export type DemoStatusId = 'preparation-completed' | 'demo-submitted' | 'simulated-review' | 'action-required' | 'demo-completed'
 export type DemoStatusItem = {
@@ -240,3 +275,14 @@ export const assistantTurn = (body: {
   demo_status_id: DemoStatusId | null
   consent: true
 }, signal?: AbortSignal) => postJson<AssistantTurnResponse>('/assistant/turn', body, signal)
+export const conversationTurn = (body: {
+  locale: Locale
+  event_type: 'start' | 'confirm_service' | 'answer' | 'document_evidence' | 'cloud_clarification'
+  local_candidates?: Array<{ service_id: string; confidence: number }>
+  confirmed_service_id?: string
+  answer?: { question_id: string; value: ReadinessAnswer }
+  document_evidence?: ConfirmedDocumentEvidence
+  message?: string
+  consent?: boolean
+  state?: PublicJourneyState
+}, signal?: AbortSignal) => postJson<ConversationTurnResponse>('/conversation/turn', body, signal)

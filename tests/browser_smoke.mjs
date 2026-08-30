@@ -31,8 +31,8 @@ const evaluate = async expression => {
   return result.result.value
 }
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
-const waitFor = async expression => {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+const waitFor = async (expression, attempts = 80) => {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (await evaluate(expression)) return
     await delay(100)
   }
@@ -93,7 +93,7 @@ const localIntentJourney = async ({ locale, start, find, confirm, end, query, lo
   await setLocale(locale)
   await waitFor(`document.documentElement.lang === ${JSON.stringify(locale)}`)
   await clickText(start)
-  await waitFor(`Boolean(document.querySelector('textarea#service-query')) && document.querySelectorAll('.example-chips button').length === 2`)
+  await waitFor(`Boolean(document.querySelector('textarea#service-query')) && document.querySelectorAll('.service-card').length === 0 && !document.querySelector('.citizen-progress')`)
   await evaluate(`performance.clearResourceTimings()`)
   await evaluate(`(() => { const input = document.querySelector('textarea#service-query'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(query)}); input.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
   const timing = await evaluate(`(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent.trim() === ${JSON.stringify(find)}); const started = performance.now(); button.click(); return performance.now() - started })()`)
@@ -120,6 +120,7 @@ await waitFor(`document.documentElement.lang === 'en'`)
 
 await clickText('Start')
 await waitFor(`document.querySelector('h1')?.textContent === 'What do you need help with?'`)
+await waitFor(`document.body.textContent.includes('Voice is optional.') && document.body.textContent.includes('You can always type instead.')`)
 const voiceFallback = await evaluate(`document.body.textContent.includes('Voice is optional.') && document.body.textContent.includes('You can always type instead.')`)
 if (!voiceFallback) throw new Error('Voice disclosure and text fallback are missing')
 await evaluate(`(() => { const input = document.querySelector('textarea#service-query'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; setter.call(input, 'I need to change my Aadhaar address'); input.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
@@ -131,6 +132,50 @@ await clickText('Yes')
 await waitFor(`document.body.textContent.includes('Which official address-update route do you intend to use?')`)
 await clickText('My own accepted proof of address')
 await waitFor(`document.body.textContent.includes("Do you have a proof-of-address document that appears in UIDAI's accepted-document guidance")`)
+const initialOcrAssets = await evaluate(`performance.getEntriesByType('resource').filter(item => item.name.includes('/ocr/') || item.name.includes('documentOcr-')).length`)
+if (initialOcrAssets !== 0) throw new Error('OCR loaded before explicit citizen action')
+await clickText('Check a document on this device')
+await waitFor(`Boolean(document.querySelector('.document-helper input[type="file"]'))`)
+await evaluate(`(() => {
+  const original = window.fetch.bind(window)
+  window.__sahayiRecordedFetches = []
+  window.fetch = (input, init) => {
+    window.__sahayiRecordedFetches.push({ url: String(input), body: typeof init?.body === 'string' ? init.body : '' })
+    return original(input, init)
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = 1400
+  canvas.height = 260
+  const context = canvas.getContext('2d')
+  context.fillStyle = 'white'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.fillStyle = 'black'
+  context.font = '52px sans-serif'
+  context.fillText('Valid proof of address', 50, 100)
+  context.fillText('Accepted proof address guidance', 50, 190)
+  return new Promise(resolve => canvas.toBlob(blob => {
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([blob], 'synthetic-local.png', { type: 'image/png' }))
+    const input = document.querySelector('.document-helper input[type="file"]')
+    input.files = transfer.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    canvas.width = 1
+    canvas.height = 1
+    resolve(true)
+  }, 'image/png'))
+})()`)
+await waitFor(`document.body.textContent.includes('appears to contain information relevant')`, 800)
+if (await evaluate(`document.body.textContent.includes('synthetic-local.png')`)) throw new Error('Document filename was rendered')
+const ocrApiCallsBeforeConfirm = await evaluate(`window.__sahayiRecordedFetches.filter(item => item.url.includes('/api/')).length`)
+if (ocrApiCallsBeforeConfirm !== 0) throw new Error('Local OCR sent a backend request before confirmation')
+const remoteOcrAssets = await evaluate(`performance.getEntriesByType('resource').filter(item => (item.name.includes('/ocr/') || item.name.includes('documentOcr-')) && !item.name.startsWith(location.origin)).map(item => item.name)`)
+if (remoteOcrAssets.length) throw new Error('OCR loaded a cross-origin runtime asset')
+await clickText('Confirm this clue')
+await waitFor(`document.body.textContent.includes('Confirmed as an unverified preparation clue.')`)
+const ocrRequestBodies = await evaluate(`window.__sahayiRecordedFetches.filter(item => item.url.includes('/api/')).map(item => item.body)`)
+if (ocrRequestBodies.length !== 1 || ocrRequestBodies.some(body => body.includes('Valid proof') || body.includes('synthetic-local') || !body.includes('document_evidence'))) throw new Error('Confirmed OCR evidence crossed the bounded API contract')
+await viewport(360, 800)
+await screenshot('ocr-helper-en-360')
 await clickText('Yes')
 await waitFor(`Boolean(document.querySelector('.conversation-result')) && Boolean(document.querySelector('.prepared-guidance')) && Boolean(document.querySelector('.official-ready a'))`)
 await evaluate(`(() => { const details = document.querySelector('.prepared-guidance'); details.open = true; details.scrollIntoView({ block: 'start' }); return true })()`)
@@ -180,6 +225,8 @@ await waitFor(`document.querySelector('h1')?.textContent === 'Sahayi' && documen
 if (await evaluate(`document.body.textContent.includes('DEMO-UIDAI-ACTION')`)) throw new Error('End session retained the demo reference')
 await screenshot('session-cleared-en-768')
 
+await clickText('Start')
+await waitFor(`Boolean(document.querySelector('textarea#service-query'))`)
 await clickText('Browse all services')
 await waitFor(`document.querySelectorAll('.service-card').length === 2`)
 await evaluate(`document.querySelector('.service-card').click()`)
@@ -188,10 +235,11 @@ await clickText('Ask Sahayi AI')
 await waitFor(`document.querySelector('h1')?.textContent === 'Ask Sahayi AI'`)
 await viewport(768, 900)
 const disabledConsent = await evaluate(`document.querySelector('.consent-choice input')?.disabled === true`)
-if (!disabledConsent) throw new Error('Disabled-agent consent state is not exposed')
+const publicConfig = await evaluate(`fetch('/api/v1/public-config').then(response => response.json())`)
+if (publicConfig.agent_available === disabledConsent) throw new Error('Agent consent state does not match public configuration')
 const groqDisclosure = await evaluate(`document.body.textContent.includes('GroqCloud') && document.body.textContent.includes('Groq collects usage metadata') && document.body.textContent.includes('owner-controlled Groq Console setting')`)
 if (!groqDisclosure) throw new Error('English GroqCloud disclosure is incomplete')
-await screenshot('agent-disabled-en-768')
+await screenshot(`agent-${publicConfig.agent_available ? 'enabled' : 'disabled'}-en-768`)
 await setLocale('hi')
 await waitFor(`document.body.textContent.includes('GroqCloud') && document.body.textContent.includes('Groq Console')`)
 await viewport(390, 844)
@@ -227,4 +275,4 @@ await localizedDemo({ locale: 'hi', start: 'शुरू करें', browse: 
 await localizedDemo({ locale: 'ml', start: 'തുടങ്ങുക', browse: 'എല്ലാ സേവനങ്ങളും കാണുക', form: 'കൃത്രിമ ഡെമോ വർക്ക്‌ഷീറ്റ് തയ്യാറാക്കുക', demo: 'ഡെമോ സമർപ്പണവുമായി തുടരുക', end: 'സെഷൻ അവസാനിപ്പിക്കുക', width: 768, name: 'demo-disclosure-ml-768' })
 
 socket.close()
-process.stdout.write(JSON.stringify({ screenshots: 22, widths: [360, 390, 768, 1280], locales: ['en', 'hi', 'ml'], visibleFocus: focus, intentTimings, localIntentNetworkRequests: 0, explicitIntentConfirmation: true, automaticPreparation: true, groqDisclosure: true, demoDisclosure: disclosure, currentDemoStep: currentStep, sessionCleared: true }, null, 2) + '\n')
+process.stdout.write(JSON.stringify({ screenshots: 23, widths: [360, 390, 768, 1280], locales: ['en', 'hi', 'ml'], visibleFocus: focus, intentTimings, localIntentNetworkRequests: 0, explicitIntentConfirmation: true, automaticPreparation: true, ocrLazyLoaded: true, ocrSameOrigin: true, ocrBackendRequestsBeforeConfirmation: 0, ocrConfirmedEvidenceOnly: true, agentAvailable: publicConfig.agent_available, groqDisclosure: true, demoDisclosure: disclosure, currentDemoStep: currentStep, sessionCleared: true }, null, 2) + '\n')

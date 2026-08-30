@@ -22,6 +22,8 @@
 !frontend/public/**
 !frontend/src/
 !frontend/src/**
+!frontend/tools/
+!frontend/tools/**
 
 !intent-model/
 !intent-model/artifacts/
