@@ -4,15 +4,19 @@ Sahayi minimizes citizen data by separating local service discovery, determinist
 
 ## What remains in browser memory
 
-The raw service-search query, primary conversation history, and local inference result never leave the browser. Language, selection, readiness answers/history, checklist, worksheet/persona, synthetic demo reference/status, optional-agent consent and conversation, voice transcript, and navigation state live in React memory. The browser orchestrator sends only allowlisted service IDs and bounded closed-choice answers to deterministic APIs. Sahayi does not add cookies, `localStorage`, `sessionStorage`, IndexedDB, Cache API, a service worker, analytics, telemetry, or browser-persisted citizen state.
+The raw service-search query, primary conversation history, local inference result, chosen document bytes, filename, raw OCR text, temporary PDF/image canvases, and unconfirmed document conclusion never leave the browser. Language, selection, public graph state, readiness answers/history, checklist, worksheet/persona, synthetic demo reference/status, optional-agent consent and conversation, voice transcript, and navigation state live in React memory. The browser sends only allowlisted service IDs, bounded closed-choice answers, and an explicitly citizen-confirmed `{document_id, appears_relevant, citizen_confirmed:true}` clue to deterministic APIs. Sahayi does not add cookies, `localStorage`, `sessionStorage`, IndexedDB, Cache API, a service worker, analytics, telemetry, or browser-persisted citizen state. Tesseract's internal data caching is disabled; self-hosted static OCR assets may use ordinary HTTP cache behavior.
 
 The local finder blocks obvious Aadhaar-, Indian-phone-, email-, and numbered-address-shaped values before matching. This is a warning gate, not a guarantee that every personal detail can be recognized. Citizens are instructed not to enter identifiers or private details.
 
 Voice input is an explicit browser enhancement and never auto-starts. Browser recognition may use browser/vendor processing and is not guaranteed to be on-device; Sahayi does not persist or log audio or transcripts. Transcripts pass through the same identifier gate before deterministic or optional cloud processing. Unsupported browsers retain the full text path. Navigation, locale changes, unmount, Start Over, End session, and inactivity clearing stop recognition and speech synthesis.
 
+Document assistance is also explicit and optional. MIME and magic bytes must agree for JPEG, PNG, WebP, or PDF; file, pixel, page, single-job, per-page, and total-time limits fail closed. PDF pages are rendered locally to temporary canvases and OCR runs in a browser Web Worker using same-origin pinned code and trained data. Identifier-shaped OCR values are redacted before deterministic matching. Low-confidence text stays unknown, results require citizen confirmation, and the UI never calls the result genuine, valid, accepted, or government-approved. Cancel, replacement, completion, navigation, locale change, Start Over, End session, inactivity, error, and unmount terminate/clear local resources.
+
 ## What reaches FastAPI
 
-Deterministic routes receive only the current locale, allowlisted service/persona/scenario/status IDs, and bounded closed-choice readiness answers. They do not accept names, addresses, account numbers, documents, exact financial values, arbitrary form text, OTPs, payment data, or real application references. Requests are validated, processed without a durable session, and not logged by Sahayi. API responses use `Cache-Control: no-store`.
+Deterministic routes receive only the current locale, allowlisted service/persona/scenario/status IDs, bounded closed-choice readiness answers, and optional confirmed allowlisted document evidence. They do not accept names, addresses, account numbers, file bytes, filenames, raw OCR text, exact financial values, arbitrary form text, OTPs, payment data, or real application references. The strict conversation-turn request rejects unknown fields and permits arbitrary message text only for an affirmative-consent cloud-clarification event after identifier screening. Requests are validated, processed without a durable session, and not logged by Sahayi. API responses use `Cache-Control: no-store`.
+
+The server graph is recompiled/invoked as a bounded stateless transition for each request. It has no checkpointer, store, database, persistent thread, LangSmith tracing, or telemetry. Every carried service/question/answer/document ID is treated as untrusted and recomputed against the active Procedure Pack.
 
 The synthetic worksheet leaves private fields blank. Demo submission/status accepts only predefined fictional values and obvious `DEMO-...` references. No government endpoint is contacted.
 
@@ -26,7 +30,7 @@ The Groq key, internal prompts, raw provider output, provider IDs, and tool argu
 
 ## Clearing and session end
 
-**End session** aborts tracked requests, invalidates late responses, revokes tracked object URLs, clears every in-memory citizen workflow state, and returns to the localized welcome screen. The same clearing operation runs after the bounded inactivity warning expires; restoring a hidden tab recomputes elapsed time. Language changes and Start Over also clear relevant state.
+**End session** aborts tracked requests and OCR workers, invalidates late responses, clears file inputs, byte buffers, canvases, PDF tasks, OCR conclusions, any tracked object URLs, and every in-memory citizen workflow state, then returns to the localized welcome screen. The same clearing operation runs after the bounded inactivity warning expires; restoring a hidden tab recomputes elapsed time. Language changes and Start Over also clear relevant state.
 
 This confirmation covers Sahayi's own in-memory state only. It does not promise erasure from browser/network/provider infrastructure outside Sahayi's control.
 
@@ -41,6 +45,6 @@ Durable repository data is limited to source code, static UI copy, versioned Pro
 - Conflicting official facts remain visible and source-linked rather than silently resolved.
 - Hindi and Malayalam are machine-assisted prototypes pending native/legal review.
 - Only synthetic model evaluation and demo personas are included; no real-world accuracy or production claim is made.
-- Real submission/status, government authentication, OTP/payment, file upload, analytics, and telemetry are absent. Voice remains browser-dependent prototype assistance, not certified pronunciation or complete accessibility coverage.
+- Real submission/status, government authentication, OTP/payment, server file upload, analytics, and telemetry are absent. Local OCR is printed-text preparation assistance, not authenticity verification, and can be wrong. Voice remains browser-dependent prototype assistance, not certified pronunciation or complete accessibility coverage.
 
 Any future collection, persistence, third-party integration, or telemetry requires an explicit privacy design, retention decision, threat review, and user approval before implementation.

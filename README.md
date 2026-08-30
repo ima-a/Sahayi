@@ -1,10 +1,10 @@
 # Sahayi
 
-Sahayi is a privacy-first multilingual text-and-touch public-service guide prototype with optional voice assistance. It identifies supported verified procedures, asks relevant questions, creates a personalised checklist, prepares synthetic form information and guides citizens to official channels.
+Sahayi is a privacy-first multilingual conversation prototype for a small verified catalogue of public-service procedures. It uses bounded workflow orchestration to ask the next relevant question, applies deterministic Procedure Pack rules, can optionally inspect supported documents locally on the citizen's device, prepares guidance, and hands the citizen to verified official channels.
 
 **Public demo:** [https://sahayi.onrender.com](https://sahayi.onrender.com)
 
-The public URL still serves the older deployed release. It will be updated only after this release candidate passes hosted verification; preparing this branch does not deploy it.
+The public URL is updated only through the verified test/deployment-branch and hosted-release process described below.
 
 ## Why Sahayi
 
@@ -23,20 +23,23 @@ English is the canonical verified guidance. Hindi and Malayalam are machine-assi
 2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. Finder text is not sent online.
 3. Confirm the proposed verified service. Ambiguous address requests inside the pension task are clarified using only catalogue entries.
 4. Stay in the same conversation while Sahayi asks the next bounded readiness question and shows only relevant suggested responses.
-5. When readiness completes, Sahayi automatically derives the deterministic checklist and synthetic preparation worksheet and presents the verified official handoff. Citizens do not select separate readiness, checklist, or form modes in the primary journey.
-6. Detailed provenance and synthetic demo views remain secondary. The optional GroqCloud assistant remains separately disclosed and consent-gated when configured; it is not required for the deterministic conversation.
-7. Select **Start Over** or **End session** at any time; inactivity expiry uses the same in-memory clearing boundary.
+5. At a relevant document question, optionally choose a JPEG, PNG, WebP, or PDF for browser-local printed-text OCR. The file and OCR text never leave the browser; only a citizen-confirmed, allowlisted clue may reach the stateless graph.
+6. When readiness completes, Sahayi automatically derives the deterministic checklist and synthetic preparation worksheet and presents the verified official handoff. Citizens do not select separate readiness, checklist, or form modes in the primary journey.
+7. Detailed provenance and synthetic demo views remain secondary. The optional GroqCloud assistant remains separately disclosed and consent-gated when configured; it is not required for the deterministic conversation.
+8. Select **Start Over** or **End session** at any time; navigation, language change, cancellation, replacement, errors, unmount, and inactivity also terminate active document work and clear ephemeral content.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     C[Citizen browser] --> L[Local phrase matcher + Naive Bayes model]
-    L -->|confirmed service ID only| UI[Browser-memory conversation orchestrator]
-    UI -->|same-origin, no-store JSON| API[FastAPI]
+    C -->|explicit file choice| OCR[Local Tesseract.js + PDF.js worker]
+    L -->|candidate IDs only| G[Bounded stateless LangGraph]
+    OCR -->|confirmed allowlisted clue only| G
+    G -->|same-origin, no-store JSON| API[FastAPI]
     API --> P[Validated Procedure Packs]
     P --> R[Deterministic readiness, checklist, worksheet, simulation]
-    UI -. explicit consent + bounded text .-> A[Optional GroqCloud assistant]
+    G -. explicit consent + bounded screened text .-> A[Optional GroqCloud assistant]
     A -->|strict tool calls| R
     M[Offline-first one-shot source monitor] -. quarantined review metadata only .-> P
 ```
@@ -47,7 +50,8 @@ The production image builds React with Vite and serves the compiled files and `/
 
 | Area | Status | Boundary |
 | --- | --- | --- |
-| Unified conversation, local service finder, multilingual catalogue, automatic readiness/checklist/preparation/handoff, End Session and inactivity clearing | Fully working and deterministic | Browser-local orchestration plus validated server-side rules; no AI decides facts or outcomes |
+| Unified conversation, local service finder, bounded LangGraph, automatic readiness/checklist/preparation/handoff, End Session and inactivity clearing | Fully working and deterministic | Stateless graph plus validated server-side rules; no AI decides facts or outcomes |
+| Optional local document helper | Browser-local progressive enhancement for printed JPEG/PNG/WebP and up to three PDF pages | Tesseract.js/PDF.js assets are pinned and self-hosted; OCR is uncertain and is not authenticity or government validation |
 | Procedure Pack provenance, version selection, freshness, fee-conflict display and schema validation | Fully working and deterministic | Active packs fail closed; reviewed facts remain source-linked |
 | Optional “Ask Sahayi AI” guidance | Consent-gated GroqCloud feature; disabled without both flag and server key | Groq's selected model may guide tool order/prose, while Sahayi validates output and reconstructs facts/actions from deterministic results |
 | Voice input and read-aloud | Progressive browser enhancement | Explicit start only; browser/vendor recognition may not be on-device; transcript is memory-only and text remains complete fallback |
@@ -68,7 +72,9 @@ Conflicting official claims are preserved independently with their sources. Saha
 
 ## Privacy and safety boundary
 
-Finder text, match results, language, readiness state, checklist, worksheet, demo status, consent, and conversation stay in React memory except for the bounded data deliberately sent in current API requests. Sahayi adds no cookies, browser storage, service worker, analytics, telemetry, citizen database, or answer/body logging. API responses use `Cache-Control: no-store`.
+Finder text, match results, language, public graph state, readiness state, checklist, worksheet, demo status, consent, and conversation stay in React memory except for the bounded data deliberately sent in current API requests. Document files, filenames, raw OCR text, identifier-shaped OCR values, canvases, and worker state remain local and ephemeral. Static OCR runtime assets may use ordinary HTTP caching; citizen-derived content is not placed in cookies, local/session storage, IndexedDB, Cache Storage, service workers, filesystem APIs, logs, or server state. API responses use `Cache-Control: no-store`.
+
+The graph uses one typed state machine with safety/consent, intent clarification, procedure routing, document evidence, interview/readiness, parallel checklist/preparation, explanation, and official-handoff nodes. It has no checkpointer, store, thread persistence, database, LangSmith tracing, or telemetry. Browser-carried state is revalidated against the current active Procedure Pack on every turn.
 
 The optional assistant requires affirmative consent and sends only a minimized, identifier-screened current message plus at most four memory-only turns. Its server-only key, prompts, provider output, and tool arguments are not exposed to the browser. Groq collects usage metadata; Zero Data Retention is an owner-controlled Groq Console setting that Sahayi code does not enable or guarantee. Browser recognition may use browser/vendor processing and is not guaranteed to remain on-device; Sahayi never persists audio or transcripts. See [Privacy and safety](docs/privacy-boundary.md).
 
@@ -110,6 +116,7 @@ cd frontend
 npm run lint
 npm run typecheck
 npm test
+npm run ocr:check
 npm run build
 cd ..
 
@@ -158,7 +165,7 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 
 ## Render deployment
 
-`render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `GROQ_API_KEY` prompt (`sync: false`), the fixed Groq provider/model, and disabled agent flag. The current service still tracks the older `feat/sahayi-deployment` release. After this candidate is reviewed, promotion requires an explicit branch decision, a manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md). This repository task does not deploy or alter the public service.
+`render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `GROQ_API_KEY` prompt (`sync: false`), the fixed Groq provider/model, and disabled agent flag. Promotion requires an exact tested deployment-branch commit, one manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md).
 
 The selected runtime model is `openai/gpt-oss-120b`. The `openai/` prefix is Groq's model namespace; it does not switch Sahayi to OpenAI. Sahayi still authenticates only with the server-side `GROQ_API_KEY` and calls Groq's fixed `https://api.groq.com/openai/v1` endpoint. Groq officially recommends this model as a replacement for the retired `llama-3.3-70b-versatile`; its current model and rate-limit pages show a non-preview model with free-plan availability, local tool use, JSON/JSON Schema support, and multilingual capability. These fit Sahayi's bounded local-tool design. Sahayi does not enable the model's built-in browser search, code execution, MCP/remote tools, or arbitrary functions, and it does not set optional reasoning or provider-specific parameters.
 
@@ -174,12 +181,13 @@ Groq's current published free-plan row for this model is 30 requests/minute, 1,0
 - The reviewed UIDAI sources disagree on the applicable update fee, so Sahayi shows the conflict. The Kerala pension amount is deliberately omitted.
 - Source monitoring consists of bounded one-shot checks, optionally scheduled daily, with human review and no automatic activation. It is not continuous fact updating. There is no production, universal retention, or Zero Data Retention claim.
 - Voice availability and pronunciation depend on the browser and installed voices; pronunciation and complete accessibility coverage are not certified.
+- Local OCR supports bounded printed text and can be slow or wrong, especially for handwriting or poor scans. It is optional preparation assistance—not document authenticity, acceptance, eligibility, or government verification.
 - Groq records `llama-3.3-70b-versatile` as retired for free/developer-tier use on 2026-08-16 and recommends `openai/gpt-oss-120b` as a replacement. The retired name is historical migration context only; this candidate made no live provider call.
 - Groq account/tier rate limits may be low or change over time. The published free-plan figures above are indicative; exact organization limits belong in Groq Console. HTTP 429 and provider failures return generic deterministic fallback; Sahayi's in-process limits are demo safeguards, not a guarantee of cloud availability.
 
 ## Technology and official sources
 
-Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, a standard-library Naive Bayes trainer, and an optional Groq Responses API integration through its documented OpenAI-compatible endpoint. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
+Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, LangGraph, Tesseract.js, PDF.js, a standard-library Naive Bayes trainer, and an optional Groq Responses API integration through its documented OpenAI-compatible endpoint. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
 
 Deeper documentation: [architecture](docs/architecture.md), [privacy and safety](docs/privacy-boundary.md), [Procedure Packs](procedure-packs/README.md), [on-device model](docs/intent-model-card.md), and [deployment](.ai/DEPLOYMENT.md).
 

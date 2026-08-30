@@ -6,11 +6,12 @@ Sahayi is a same-origin React/TypeScript and FastAPI application with four delib
 flowchart TB
     subgraph Browser[Citizen browser — ephemeral memory]
       UI[React multilingual conversation-first journey]
-      Orchestrator[Deterministic conversation orchestrator]
       Voice[Optional browser voice and read-aloud]
+      OCR[Optional local Tesseract.js and PDF.js]
       Gate[Identifier-shape gate]
       Match[Procedure phrases + bundled MNB classifier]
-      Voice --> UI --> Orchestrator --> Gate --> Match
+      Voice --> UI --> Gate --> Match
+      UI --> OCR
     end
 
     subgraph Server[FastAPI — stateless deterministic API]
@@ -18,12 +19,17 @@ flowchart TB
       Readiness[Readiness and checklist engine]
       Demo[Synthetic worksheet and status]
       Agent[Optional consent-gated agent loop]
+      Graph[Typed bounded LangGraph]
     end
 
     Packs[Versioned validated Procedure Packs] --> Catalogue
     Packs --> Readiness
     Packs --> Demo
-    Match -->|confirmed allowlisted service ID| Catalogue
+    Match -->|candidate IDs, then confirmation| Graph
+    OCR -->|confirmed allowlisted evidence only| Graph
+    Graph --> Catalogue
+    Graph --> Readiness
+    Graph --> Demo
     UI -->|same-origin bounded requests| Catalogue
     UI --> Readiness
     UI --> Demo
@@ -43,13 +49,23 @@ The service finder receives the narrow active catalogue in the selected locale, 
 
 The model is imported at build time and embedded in the compiled frontend. Inference is synchronous TypeScript with bounded input/features and no model request, browser LLM, WebGPU, WASM, or generation. Agreement, one-sided confidence, disagreement, unsupported, abstention, and invalid-artifact cases follow explicit confirmation/fallback rules. Only an active catalogue ID can be proposed, and every proposal requires confirmation.
 
-The browser orchestrator is a small deterministic composition layer, not a chatbot authority. It turns a confirmed catalogue ID into procedure detail, starts readiness automatically, renders the current pack question as suggested responses, submits the bounded answer map, derives checklist and synthetic preparation in parallel on completion, and exposes only the pack-owned handoff URL. Within a Kerala pension task it also handles the narrow unqualified-address clarification using only the two loaded catalogue entries; it never creates a pension-record address procedure.
+The browser keeps only the active public journey state in React memory. `POST /api/v1/conversation/turn` runs one compiled typed LangGraph as a bounded next-action machine: safety/consent, intent clarification, verified-procedure routing, confirmed document evidence, interview/readiness, parallel checklist and preparation, explanation, and official handoff. The graph has a 12-step recursion budget, at most one optional provider call, no retries, and explicit terminal/awaiting-user responses. It has no checkpointer, store, Agent Server, durable interrupts, database, server thread, LangSmith tracing, or telemetry.
+
+Procedure Packs remain the authority. Every browser-carried service ID, candidate, answer, question ID, option, and document ID is untrusted and revalidated against the active registry; readiness is recomputed from the complete bounded answer map. Independent deterministic checklist and synthetic preparation nodes fan out only after readiness completes. The graph emits only a pack-owned official URL. Within a Kerala pension task, the browser handles the narrow unqualified-address clarification using only the two loaded catalogue entries and never creates a pension-record address procedure.
+
+## Browser-local document assistance
+
+The helper opens only after an explicit citizen action and lazy-loads pinned Tesseract.js 7.0.0 and PDF.js 6.3.289 code. The worker, all required WASM/core variants, and English/Hindi/Malayalam trained data are copied with verified SHA-256 checksums and served from the application origin. Tesseract caching is disabled so citizen-derived OCR state is not placed in IndexedDB; static runtime files may still use normal HTTP caching.
+
+Accepted files are JPEG, PNG, WebP, and PDF only, with both declared MIME and magic-byte validation. Limits are 10 MiB per file, 20 megapixels per decoded image/page, three PDF pages, one active job, 30 seconds per OCR page, and 75 seconds total. PDF.js renders permitted pages to temporary canvases before Tesseract receives them. Encrypted, malformed, mismatched, unsupported, and over-limit inputs fail closed with a manual answer fallback.
+
+Raw files, filenames, OCR text, and identifier-shaped values are never rendered in full, logged, sent to FastAPI/Groq, or persisted. A deterministic allowlist derived from the active pack can produce only a low-confidence unknown or a possible relevant document ID; the citizen must confirm or reject it. The backend accepts only `{document_id, appears_relevant, citizen_confirmed:true}` and still treats it as unverified input. Workers, file inputs, byte buffers, canvases, PDF tasks, and conclusions are cleared or terminated on completion, cancel, replacement, locale/navigation change, Start Over, End Session, inactivity, error, and unmount.
 
 ## Deterministic backend
 
 FastAPI loads Procedure Pack v1 JSON through strict Pydantic models. Exactly one active version per service is allowed; missing packs, duplicate active versions, invalid rules/translations/references, or unsafe budgets fail closed. Canonical pack digests provide reproducible traceability, not signature-based authenticity.
 
-The server exposes versioned `/api/v1` endpoints for health/public configuration, catalogue/detail, readiness, checklists, synthetic form assistance, synthetic submission/status, and the optional assistant. Procedure/readiness APIs are stateless, accept only bounded schema-validated values, and return `Cache-Control: no-store`. Stable facts, rules, options, source URLs, and outcomes are language invariant; locale selects reviewed static text only.
+The server exposes versioned `/api/v1` endpoints for health/public configuration, catalogue/detail, readiness, checklists, synthetic form assistance, synthetic submission/status, the stateless conversation turn, and the optional assistant. Procedure/readiness/orchestration APIs are stateless, accept only bounded schema-validated values, and return `Cache-Control: no-store`. Stable facts, rules, options, source URLs, and outcomes are language invariant; locale selects reviewed static text only.
 
 Readiness evaluates a bounded JSON AST rather than executable expressions. Checklists, worksheets, and simulated status are reconstructed from validated pack IDs and deterministic functions. “Readiness” is procedural guidance—not eligibility, approval, legal advice, submission, or government status.
 
