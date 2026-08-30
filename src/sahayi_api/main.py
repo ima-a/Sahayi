@@ -35,6 +35,7 @@ from sahayi_api.readiness import (
     ReadinessInputError,
     evaluate_readiness,
 )
+from sahayi_api.orchestration import ConversationTurnRequest, ConversationTurnResponse, run_conversation_turn
 from sahayi_api.simulation import (
     DemoJourneyResponse,
     DemoStatusRequest,
@@ -218,6 +219,14 @@ async def assistant_turn(request: Request, turn: AssistantTurnRequest) -> Assist
         return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
     address = request.client.host if request.client is not None else "unknown"
     return await run_assistant_turn(turn, procedure_registry, agent_runtime, address)
+
+
+@app.post("/api/v1/conversation/turn", response_model=ConversationTurnResponse)
+async def conversation_turn(request: Request, turn: ConversationTurnRequest) -> ConversationTurnResponse | JSONResponse:
+    if procedure_registry is None:
+        return JSONResponse({"error": "Procedure guidance is unavailable"}, status_code=503)
+    address = request.client.host if request.client is not None else "unknown"
+    return await run_conversation_turn(turn, procedure_registry, agent_runtime, address)
 
 
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
