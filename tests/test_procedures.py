@@ -107,6 +107,13 @@ def test_monitoring_version_bumps_preserve_all_canonical_facts(previous: Path, c
         data.pop("status")
         for source in data["sources"]:
             source.pop("monitoring", None)
+        for field in data["assistance"]["preparation_fields"]:
+            for key in (
+                "question_id", "question", "why_needed", "input_type", "required", "validation",
+                "supported_value_sources", "may_appear_on_sheet", "confirmation_required", "editable",
+                "choices", "readiness_question_id", "document_ids",
+            ):
+                field.pop(key, None)
         return data
 
     assert canonical(previous) == canonical(current)
@@ -130,7 +137,7 @@ def test_unknown_fields_and_html_are_rejected() -> None:
 
 def test_identifier_shaped_synthetic_demo_values_are_rejected() -> None:
     data = pack_data()
-    data["assistance"]["fields"][0]["demo_value"] = {
+    data["assistance"]["preparation_fields"][0]["demo_value"] = {
         "en": "1234 5678 9012",
         "hi": "१२३४ ५६७८ ९०१२",
         "ml": "൧൨൩൪ ൫൬൭൮ ൯൦൧൨",
@@ -335,7 +342,7 @@ def test_pack_digest_is_deterministic() -> None:
     reordered_json = json.dumps(pack_data(), sort_keys=True)
     reordered = ProcedurePack.model_validate_json(reordered_json)
     assert pack_digest(original) == pack_digest(reordered)
-    assert pack_digest(original) == "595a62902a6145c82f02b9fbe361e7d8db5e34dea8d48e7e030aac7e43222bad"
+    assert pack_digest(original) == "c2ab0efb18104cff431ed717b4f3b5e89db0b8935369fddfbe2cdd8bc9ee7805"
     assert pack_digest(original) != "ddafaa94d2dd25ff39e1f4cd9e9153461f8627eae4ffd8b6a85ec979b20c4251"
 
 
@@ -403,7 +410,7 @@ async def test_detail_endpoint_returns_procedure_and_provenance(client: AsyncCli
     assert payload["fee"]["resolution_guidance"].endswith("Confirm the fee on the official portal before payment.")
     assert payload["attention_required"] is True
     assert payload["official_handoff_url"] == "https://myaadhaar.uidai.gov.in/"
-    assert payload["pack_digest"] == "595a62902a6145c82f02b9fbe361e7d8db5e34dea8d48e7e030aac7e43222bad"
+    assert payload["pack_digest"] == "c2ab0efb18104cff431ed717b4f3b5e89db0b8935369fddfbe2cdd8bc9ee7805"
     assert payload["provenance"]["fee"] == ["uidai-enrolment-update-faq", "uidai-my-aadhaar-services"]
     assert all(source["url"].startswith("https://") for source in payload["sources"])
 

@@ -518,7 +518,7 @@
       "ml": "ആധാർ വിലാസ പുതുക്കൽ തയ്യാറെടുപ്പ് വർക്ക്‌ഷീറ്റ്"
     },
     "form_source_ids": [],
-    "fields": [
+    "preparation_fields": [
       {
         "field_id": "update-route",
         "label": { "en": "Planned update route", "hi": "नियोजित अपडेट मार्ग", "ml": "ആസൂത്രണം ചെയ്ത പുതുക്കൽ മാർഗം" },

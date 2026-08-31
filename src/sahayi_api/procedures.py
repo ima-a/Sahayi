@@ -158,6 +158,29 @@ class FormFieldStatus(StrEnum):
     PREPARATION_ONLY = "preparation_only"
 
 
+class PreparationInputType(StrEnum):
+    TEXT = "text"
+    TEXTAREA = "textarea"
+    SINGLE_CHOICE = "single_choice"
+    READINESS_VALUE = "readiness_value"
+    DOCUMENT_CLUE = "document_clue"
+    NOT_COLLECTED = "not_collected"
+
+
+class PreparationValidationKind(StrEnum):
+    NON_EMPTY_TEXT = "non_empty_text"
+    SINGLE_CHOICE = "single_choice"
+    STRUCTURAL = "structural"
+    NOT_COLLECTED = "not_collected"
+
+
+class PreparationValueSource(StrEnum):
+    CITIZEN_CONFIRMED_LOCAL_ANSWER = "citizen_confirmed_local_answer"
+    CITIZEN_CONFIRMED_LOCAL_OCR = "citizen_confirmed_local_ocr_suggestion"
+    DETERMINISTIC_DERIVED = "deterministic_derived_value"
+    SYNTHETIC_DEMO = "bundled_synthetic_demonstration_profile"
+
+
 class Jurisdiction(StrictModel):
     level: JurisdictionLevel
     name: ShortText
@@ -271,6 +294,34 @@ class CitedFact(StrictModel):
     source_ids: SourceIds
 
 
+class PreparationChoice(StrictModel):
+    option_id: Identifier
+    label: LocalizedText
+
+    @field_validator("label")
+    @classmethod
+    def require_complete_locales(cls, value: dict[str, str]) -> dict[str, str]:
+        _validate_localized_text(value)
+        if set(value) != set(SUPPORTED_LOCALES):
+            raise ValueError("preparation choices must contain exactly en, hi, and ml")
+        return value
+
+
+class PreparationValidationRule(StrictModel):
+    kind: PreparationValidationKind
+    minimum_length: Annotated[int, Field(ge=1, le=400)] | None = None
+    maximum_length: Annotated[int, Field(ge=1, le=400)] | None = None
+
+    @model_validator(mode="after")
+    def validate_lengths(self) -> PreparationValidationRule:
+        if self.kind is PreparationValidationKind.NON_EMPTY_TEXT:
+            if self.minimum_length is None or self.maximum_length is None or self.minimum_length > self.maximum_length:
+                raise ValueError("text validation requires an ordered minimum and maximum length")
+        elif self.minimum_length is not None or self.maximum_length is not None:
+            raise ValueError("only text validation may define length bounds")
+        return self
+
+
 class FormAssistanceField(StrictModel):
     field_id: Identifier
     label: LocalizedText
@@ -279,8 +330,21 @@ class FormAssistanceField(StrictModel):
     handling: FormFieldHandling
     status: FormFieldStatus
     source_ids: SourceIds
+    question_id: Identifier | None = None
+    question: LocalizedText | None = None
+    why_needed: LocalizedText | None = None
+    input_type: PreparationInputType | None = None
+    required: bool | None = None
+    validation: PreparationValidationRule | None = None
+    supported_value_sources: Annotated[list[PreparationValueSource], Field(default_factory=list, max_length=4)]
+    may_appear_on_sheet: bool | None = None
+    confirmation_required: bool | None = None
+    editable: bool | None = None
+    choices: Annotated[list[PreparationChoice], Field(default_factory=list, max_length=12)]
+    readiness_question_id: Identifier | None = None
+    document_ids: Annotated[list[Identifier], Field(default_factory=list, max_length=8)]
 
-    @field_validator("label", "explanation", "demo_value")
+    @field_validator("label", "explanation", "demo_value", "question", "why_needed")
     @classmethod
     def require_complete_locales(cls, value: dict[str, str] | None) -> dict[str, str] | None:
         if value is None:
@@ -298,7 +362,32 @@ class FormAssistanceField(StrictModel):
             raise ValueError("private and uncollected fields must not contain demo values")
         if self.demo_value is not None and any(contains_high_risk_pii(value) for value in self.demo_value.values()):
             raise ValueError("fictional demo values must not contain identifier-shaped data")
+        if self.input_type is PreparationInputType.SINGLE_CHOICE and not self.choices:
+            raise ValueError("single-choice preparation fields require choices")
+        if self.input_type is not None and self.input_type is not PreparationInputType.SINGLE_CHOICE and self.choices:
+            raise ValueError("only single-choice preparation fields may define choices")
+        if self.input_type is PreparationInputType.READINESS_VALUE and self.readiness_question_id is None:
+            raise ValueError("readiness-derived preparation fields require a readiness question")
+        if self.input_type is not None and self.input_type is not PreparationInputType.READINESS_VALUE and self.readiness_question_id is not None:
+            raise ValueError("only readiness-derived fields may reference a readiness question")
+        if self.input_type is PreparationInputType.DOCUMENT_CLUE and not self.document_ids:
+            raise ValueError("document-clue preparation fields require document IDs")
+        if self.input_type is not None and self.input_type is not PreparationInputType.DOCUMENT_CLUE and self.document_ids:
+            raise ValueError("only document-clue fields may reference document IDs")
         return self
+
+    def has_complete_preparation_contract(self) -> bool:
+        return all(value is not None for value in (
+            self.question_id,
+            self.question,
+            self.why_needed,
+            self.input_type,
+            self.required,
+            self.validation,
+            self.may_appear_on_sheet,
+            self.confirmation_required,
+            self.editable,
+        )) and (bool(self.supported_value_sources) or self.input_type is PreparationInputType.NOT_COLLECTED)
 
 
 class SyntheticPersona(StrictModel):
@@ -321,7 +410,7 @@ class AssistanceDefinition(StrictModel):
     form_mode: FormAssistanceMode
     title: LocalizedText
     form_source_ids: Annotated[list[SourceId], Field(default_factory=list, max_length=4)]
-    fields: Annotated[list[FormAssistanceField], Field(min_length=1, max_length=30)]
+    preparation_fields: Annotated[list[FormAssistanceField], Field(min_length=1, max_length=30)]
     personas: Annotated[list[SyntheticPersona], Field(min_length=1, max_length=8)]
 
     @field_validator("title")
@@ -334,10 +423,11 @@ class AssistanceDefinition(StrictModel):
 
     @model_validator(mode="after")
     def validate_definition(self) -> AssistanceDefinition:
-        _require_unique([field.field_id for field in self.fields], "form assistance field IDs")
+        _require_unique([field.field_id for field in self.preparation_fields], "form assistance field IDs")
+        _require_unique([field.question_id for field in self.preparation_fields if field.question_id is not None], "preparation question IDs")
         _require_unique([persona.persona_id for persona in self.personas], "synthetic persona IDs")
-        known_fields = {field.field_id for field in self.fields}
-        demo_fields = {field.field_id for field in self.fields if field.handling is FormFieldHandling.FICTIONAL_DEMO}
+        known_fields = {field.field_id for field in self.preparation_fields}
+        demo_fields = {field.field_id for field in self.preparation_fields if field.handling is FormFieldHandling.FICTIONAL_DEMO}
         for persona in self.personas:
             if not set(persona.field_ids) <= known_fields:
                 raise ValueError("synthetic persona references an unknown form field")
@@ -728,9 +818,17 @@ class ProcedurePack(StrictModel):
             references.extend(item.source_ids)
         if self.assistance is not None:
             references.extend(self.assistance.form_source_ids)
-            for field in self.assistance.fields:
+            for field in self.assistance.preparation_fields:
                 references.extend(field.source_ids)
+            if self.status is LifecycleStatus.ACTIVE and any(not field.has_complete_preparation_contract() for field in self.assistance.preparation_fields):
+                raise ValueError("active pack preparation fields require the complete preparation contract")
             questions = {question.question_id: question for question in self.readiness.questions}
+            documents = {document.document_id for document in self.required_documents}
+            for field in self.assistance.preparation_fields:
+                if field.readiness_question_id is not None and field.readiness_question_id not in questions:
+                    raise ValueError("preparation field references an unknown readiness question")
+                if not set(field.document_ids) <= documents:
+                    raise ValueError("preparation field references an unknown document")
             for persona in self.assistance.personas:
                 if not set(persona.readiness_answers) <= questions.keys():
                     raise ValueError("synthetic persona references an unknown readiness question")
@@ -748,7 +846,7 @@ class ProcedurePack(StrictModel):
                 sources_by_id = {source.source_id: source for source in self.sources}
                 if any(sources_by_id[source_id].source_type is not SourceType.PDF for source_id in self.assistance.form_source_ids):
                     raise ValueError("official form worksheet sources must be PDF sources")
-                if any(field.status is not FormFieldStatus.VERIFIED_OFFICIAL_FORM for field in self.assistance.fields):
+                if any(field.status is not FormFieldStatus.VERIFIED_OFFICIAL_FORM for field in self.assistance.preparation_fields):
                     raise ValueError("official form worksheet fields must be verified against the official form")
             elif self.assistance.form_source_ids:
                 raise ValueError("preparation worksheets must not claim an official form source")

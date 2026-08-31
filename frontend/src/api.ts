@@ -153,6 +153,21 @@ export type SyntheticFormAssistance = {
     handling: 'fictional_demo' | 'citizen_private' | 'not_collected'
     status: 'verified_official_form' | 'preparation_only'
     source_ids: string[]
+    question_id: string | null
+    question: string | null
+    why_needed: string | null
+    input_type: 'text' | 'textarea' | 'single_choice' | 'readiness_value' | 'document_clue' | 'not_collected' | null
+    required: boolean | null
+    validation_kind: 'non_empty_text' | 'single_choice' | 'structural' | 'not_collected' | null
+    minimum_length: number | null
+    maximum_length: number | null
+    supported_value_sources: Array<'citizen_confirmed_local_answer' | 'citizen_confirmed_local_ocr_suggestion' | 'deterministic_derived_value' | 'bundled_synthetic_demonstration_profile'>
+    may_appear_on_sheet: boolean | null
+    confirmation_required: boolean | null
+    editable: boolean | null
+    choices: Array<{ option_id: string; label: string }>
+    readiness_question_id: string | null
+    document_ids: string[]
   }>
   sources: ProcedureSource[]
   watermark: string
@@ -182,6 +197,8 @@ export type PublicJourneyState = {
   answers: Record<string, ReadinessAnswer>
   current_question_id: string | null
   document_evidence: ConfirmedDocumentEvidence[]
+  completed_field_ids: string[]
+  current_preparation_question_id: string | null
 }
 export type ConversationUiAction = {
   action_id: 'confirm_service' | 'choose_service' | 'answer' | 'attach_document' | 'open_official_service' | 'browse_services'
@@ -199,9 +216,13 @@ export type ConversationTurnResponse = {
   actions: ConversationUiAction[]
   active_procedure: ProcedureSummary | null
   current_question: ReadinessQuestion | null
+  current_preparation_question: SyntheticFormAssistance['fields'][number] | null
   readiness: ReadinessResponse | null
   checklist: PersonalizedChecklist | null
   preparation: SyntheticFormAssistance | null
+  prepared_field_count: number
+  preparation_field_count: number
+  missing_required_field_ids: string[]
   document_helper_available: boolean
   accepted_document_evidence: ConfirmedDocumentEvidence[]
   contextual_sources: ProcedureSource[]
@@ -277,11 +298,12 @@ export const assistantTurn = (body: {
 }, signal?: AbortSignal) => postJson<AssistantTurnResponse>('/assistant/turn', body, signal)
 export const conversationTurn = (body: {
   locale: Locale
-  event_type: 'start' | 'confirm_service' | 'answer' | 'document_evidence' | 'cloud_clarification'
+  event_type: 'start' | 'confirm_service' | 'answer' | 'field_completed' | 'document_evidence' | 'cloud_clarification'
   local_candidates?: Array<{ service_id: string; confidence: number }>
   confirmed_service_id?: string
   answer?: { question_id: string; value: ReadinessAnswer }
   document_evidence?: ConfirmedDocumentEvidence
+  completed_field_id?: string
   message?: string
   consent?: boolean
   state?: PublicJourneyState

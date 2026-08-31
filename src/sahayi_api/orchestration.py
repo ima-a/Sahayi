@@ -7,12 +7,13 @@ from langgraph.errors import GraphRecursionError
 from pydantic import Field, HttpUrl, StringConstraints, model_validator
 
 from sahayi_api.agent import AgentRuntime, AssistantTurnRequest, AssistantTurnResponse, run_assistant_turn
-from sahayi_api.assistance import PersonalizedChecklist, SyntheticFormAssistance, build_personalized_checklist, prepare_synthetic_form_assistance
+from sahayi_api.assistance import PersonalizedChecklist, SyntheticFormAssistance, SyntheticFormFieldResponse, build_personalized_checklist, localize_preparation_field, prepare_synthetic_form_assistance
 from sahayi_api.privacy import contains_high_risk_pii
 from sahayi_api.procedures import (
     Identifier,
     LoadedProcedure,
     ProcedureSummary,
+    PreparationInputType,
     SourceRecord,
     ShortText,
     StrictModel,
@@ -52,15 +53,18 @@ class PublicJourneyState(StrictModel):
     answers: Annotated[dict[Identifier, AnswerValue], Field(default_factory=dict, max_length=30)]
     current_question_id: Identifier | None = None
     document_evidence: Annotated[list[ConfirmedDocumentEvidence], Field(default_factory=list, max_length=MAX_DOCUMENT_EVIDENCE)]
+    completed_field_ids: Annotated[list[Identifier], Field(default_factory=list, max_length=30)]
+    current_preparation_question_id: Identifier | None = None
 
 
 class ConversationTurnRequest(StrictModel):
     locale: SupportedLocale
-    event_type: Literal["start", "confirm_service", "answer", "document_evidence", "cloud_clarification"]
+    event_type: Literal["start", "confirm_service", "answer", "field_completed", "document_evidence", "cloud_clarification"]
     local_candidates: Annotated[list[LocalIntentCandidate], Field(default_factory=list, max_length=MAX_LOCAL_CANDIDATES)]
     confirmed_service_id: Identifier | None = None
     answer: AnswerEvent | None = None
     document_evidence: ConfirmedDocumentEvidence | None = None
+    completed_field_id: Identifier | None = None
     message: CloudMessage | None = None
     consent: bool = False
     state: PublicJourneyState = Field(default_factory=PublicJourneyState)
@@ -80,10 +84,14 @@ class ConversationTurnRequest(StrictModel):
             raise ValueError("Answer event requires an answer")
         if self.event_type == "document_evidence" and self.document_evidence is None:
             raise ValueError("Document event requires evidence")
+        if self.event_type == "field_completed" and self.completed_field_id is None:
+            raise ValueError("Field completion requires a field ID")
         if self.event_type != "answer" and self.answer is not None:
             raise ValueError("Unexpected answer")
         if self.event_type != "document_evidence" and self.document_evidence is not None:
             raise ValueError("Unexpected document evidence")
+        if self.event_type != "field_completed" and self.completed_field_id is not None:
+            raise ValueError("Unexpected completed field")
         return self
 
 
@@ -104,9 +112,13 @@ class ConversationTurnResponse(StrictModel):
     actions: Annotated[list[SafeUiAction], Field(max_length=12)]
     active_procedure: ProcedureSummary | None
     current_question: ReadinessQuestionResponse | None
+    current_preparation_question: SyntheticFormFieldResponse | None
     readiness: ReadinessEvaluationResponse | None
     checklist: PersonalizedChecklist | None
     preparation: SyntheticFormAssistance | None
+    prepared_field_count: int
+    preparation_field_count: int
+    missing_required_field_ids: list[Identifier]
     document_helper_available: bool
     accepted_document_evidence: Annotated[list[ConfirmedDocumentEvidence], Field(max_length=MAX_DOCUMENT_EVIDENCE)]
     contextual_sources: Annotated[list[SourceRecord], Field(max_length=20)]
@@ -125,8 +137,12 @@ class GraphState(TypedDict):
     actions: list[SafeUiAction]
     active_procedure: ProcedureSummary | None
     readiness: ReadinessEvaluationResponse | None
+    current_preparation_question: SyntheticFormFieldResponse | None
     checklist: PersonalizedChecklist | None
     preparation: SyntheticFormAssistance | None
+    prepared_field_count: int
+    preparation_field_count: int
+    missing_required_field_ids: list[Identifier]
     document_helper_available: bool
     contextual_sources: list[SourceRecord]
     official_handoff_url: HttpUrl | None
@@ -195,8 +211,12 @@ def _base_state(turn: ConversationTurnRequest) -> GraphState:
         "actions": [],
         "active_procedure": None,
         "readiness": None,
+        "current_preparation_question": None,
         "checklist": None,
         "preparation": None,
+        "prepared_field_count": 0,
+        "preparation_field_count": 0,
+        "missing_required_field_ids": [],
         "document_helper_available": False,
         "contextual_sources": [],
         "official_handoff_url": None,
@@ -295,6 +315,17 @@ def build_conversation_graph(
         turn = state["request"]
         public = state["public_state"].model_copy(deep=True)
         loaded = registry[public.service_id or ""]
+        definition = loaded.pack.assistance
+        if definition is None:
+            return _invalid_state(turn.locale)
+        fields = definition.preparation_fields
+        collectable = {
+            field.field_id: field
+            for field in fields
+            if field.input_type in {PreparationInputType.TEXT, PreparationInputType.TEXTAREA, PreparationInputType.SINGLE_CHOICE, PreparationInputType.DOCUMENT_CLUE}
+        }
+        if len(public.completed_field_ids) != len(set(public.completed_field_ids)) or not set(public.completed_field_ids) <= collectable.keys():
+            return _invalid_state(turn.locale)
         try:
             before = evaluate_readiness(loaded, public.answers, locale=turn.locale)
             if public.current_question_id is not None:
@@ -323,6 +354,50 @@ def build_conversation_graph(
                 "document_helper_available": helper,
                 "contextual_sources": result.sources,
             }
+
+        derived_ids = {
+            field.field_id
+            for field in fields
+            if field.input_type is PreparationInputType.READINESS_VALUE and field.readiness_question_id in public.answers
+        }
+        completed_ids = set(public.completed_field_ids) | derived_ids
+        if turn.completed_field_id is not None:
+            previous = next((field for field in fields if field.question_id == public.current_preparation_question_id), None)
+            if previous is None or previous.field_id != turn.completed_field_id or turn.completed_field_id not in collectable:
+                return _invalid_state(turn.locale)
+            completed_ids.add(turn.completed_field_id)
+            public.completed_field_ids = sorted(completed_ids & collectable.keys())
+
+        applicable_fields = [
+            field
+            for field in fields
+            if field.input_type is not PreparationInputType.NOT_COLLECTED
+            and (
+                field.input_type is not PreparationInputType.READINESS_VALUE
+                or field.readiness_question_id in public.answers
+            )
+        ]
+        required_fields = [field for field in applicable_fields if field.required is True]
+        missing = [field for field in required_fields if field.field_id not in completed_ids]
+        next_field = next((field for field in missing if field.field_id in collectable), None)
+        public.current_preparation_question_id = next_field.question_id if next_field is not None else None
+        prepared_count = len([field for field in applicable_fields if field.field_id in completed_ids])
+        preparation_count = len(applicable_fields)
+        if next_field is not None:
+            question = localize_preparation_field(next_field, turn.locale)
+            return {
+                "public_state": public,
+                "readiness": result,
+                "current_preparation_question": question,
+                "assistant_message": question.question or question.label,
+                "next_action": "ask_user",
+                "actions": [],
+                "document_helper_available": next_field.input_type is PreparationInputType.DOCUMENT_CLUE,
+                "contextual_sources": result.sources,
+                "prepared_field_count": prepared_count,
+                "preparation_field_count": preparation_count,
+                "missing_required_field_ids": [field.field_id for field in missing],
+            }
         return {
             "public_state": public,
             "readiness": result,
@@ -331,6 +406,9 @@ def build_conversation_graph(
             "actions": [],
             "progress_text": _COPY[turn.locale]["preparing"],
             "contextual_sources": result.sources,
+            "prepared_field_count": prepared_count,
+            "preparation_field_count": preparation_count,
+            "missing_required_field_ids": [],
         }
 
     def checklist(state: GraphState) -> dict:
@@ -343,9 +421,11 @@ def build_conversation_graph(
         public = state["public_state"]
         turn = state["request"]
         loaded = registry[public.service_id or ""]
-        return {"preparation": prepare_synthetic_form_assistance(loaded, locale=turn.locale)}
+        return {"preparation": prepare_synthetic_form_assistance(loaded, locale=turn.locale, include_demo_values=False)}
 
     def explanation(state: GraphState) -> dict:
+        if state["current_preparation_question"] is not None:
+            return {}
         if state["readiness"] is not None and state["readiness"].complete:
             return {"assistant_message": _COPY[state["request"].locale]["prepared"]}
         return {}
@@ -379,7 +459,7 @@ def build_conversation_graph(
     builder.add_edge("document_evidence", "interview_readiness")
     builder.add_conditional_edges("interview_readiness", _after_interview)
     builder.add_edge(["checklist", "preparation"], "explanation")
-    builder.add_conditional_edges("explanation", lambda state: "official_handoff" if state["readiness"] and state["readiness"].complete else END)
+    builder.add_conditional_edges("explanation", lambda state: "official_handoff" if state["readiness"] and state["readiness"].complete and state["current_preparation_question"] is None else END)
     builder.add_edge("official_handoff", END)
     return builder.compile()
 
@@ -425,9 +505,13 @@ async def run_conversation_turn(
         actions=state["actions"],
         active_procedure=state["active_procedure"],
         current_question=readiness.next_question if readiness else None,
+        current_preparation_question=state["current_preparation_question"],
         readiness=readiness,
         checklist=state["checklist"],
         preparation=state["preparation"],
+        prepared_field_count=state["prepared_field_count"],
+        preparation_field_count=state["preparation_field_count"],
+        missing_required_field_ids=state["missing_required_field_ids"],
         document_helper_available=state["document_helper_available"],
         accepted_document_evidence=public.document_evidence,
         contextual_sources=state["contextual_sources"],
@@ -507,9 +591,9 @@ def _after_intent(state: GraphState):
 def _after_interview(state: GraphState):
     if state["status"] != "ok":
         return END
-    if state["readiness"] is not None and state["readiness"].complete:
+    if state["readiness"] is not None:
         return ["checklist", "preparation"]
-    return "explanation"
+    return END
 
 
 def _question_actions(readiness: ReadinessEvaluationResponse) -> list[SafeUiAction]:

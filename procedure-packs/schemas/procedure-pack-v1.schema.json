@@ -3,15 +3,6 @@
     "AssistanceDefinition": {
       "additionalProperties": false,
       "properties": {
-        "fields": {
-          "items": {
-            "$ref": "#/$defs/FormAssistanceField"
-          },
-          "maxItems": 30,
-          "minItems": 1,
-          "title": "Fields",
-          "type": "array"
-        },
         "form_mode": {
           "$ref": "#/$defs/FormAssistanceMode"
         },
@@ -34,6 +25,15 @@
           "title": "Personas",
           "type": "array"
         },
+        "preparation_fields": {
+          "items": {
+            "$ref": "#/$defs/FormAssistanceField"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Preparation Fields",
+          "type": "array"
+        },
         "title": {
           "additionalProperties": {
             "maxLength": 240,
@@ -49,7 +49,7 @@
       "required": [
         "form_mode",
         "title",
-        "fields",
+        "preparation_fields",
         "personas"
       ],
       "title": "AssistanceDefinition",
@@ -286,6 +286,26 @@
     "FormAssistanceField": {
       "additionalProperties": false,
       "properties": {
+        "choices": {
+          "items": {
+            "$ref": "#/$defs/PreparationChoice"
+          },
+          "maxItems": 12,
+          "title": "Choices",
+          "type": "array"
+        },
+        "confirmation_required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirmation Required"
+        },
         "demo_value": {
           "anyOf": [
             {
@@ -304,6 +324,28 @@
           ],
           "default": null,
           "title": "Demo Value"
+        },
+        "document_ids": {
+          "items": {
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Document Ids",
+          "type": "array"
+        },
+        "editable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Editable"
         },
         "explanation": {
           "additionalProperties": {
@@ -325,6 +367,17 @@
         "handling": {
           "$ref": "#/$defs/FormFieldHandling"
         },
+        "input_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparationInputType"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "label": {
           "additionalProperties": {
             "maxLength": 240,
@@ -335,6 +388,77 @@
           "minProperties": 1,
           "title": "Label",
           "type": "object"
+        },
+        "may_appear_on_sheet": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "May Appear On Sheet"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxProperties": 12,
+              "minProperties": 1,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        },
+        "question_id": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question Id"
+        },
+        "readiness_question_id": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Readiness Question Id"
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required"
         },
         "source_ids": {
           "items": {
@@ -349,6 +473,44 @@
         },
         "status": {
           "$ref": "#/$defs/FormFieldStatus"
+        },
+        "supported_value_sources": {
+          "items": {
+            "$ref": "#/$defs/PreparationValueSource"
+          },
+          "maxItems": 4,
+          "title": "Supported Value Sources",
+          "type": "array"
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreparationValidationRule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "why_needed": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxProperties": 12,
+              "minProperties": 1,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Why Needed"
         }
       },
       "required": [
@@ -538,6 +700,107 @@
       ],
       "title": "PackLocalization",
       "type": "object"
+    },
+    "PreparationChoice": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "additionalProperties": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxProperties": 12,
+          "minProperties": 1,
+          "title": "Label",
+          "type": "object"
+        },
+        "option_id": {
+          "maxLength": 80,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "title": "Option Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "option_id",
+        "label"
+      ],
+      "title": "PreparationChoice",
+      "type": "object"
+    },
+    "PreparationInputType": {
+      "enum": [
+        "text",
+        "textarea",
+        "single_choice",
+        "readiness_value",
+        "document_clue",
+        "not_collected"
+      ],
+      "title": "PreparationInputType",
+      "type": "string"
+    },
+    "PreparationValidationKind": {
+      "enum": [
+        "non_empty_text",
+        "single_choice",
+        "structural",
+        "not_collected"
+      ],
+      "title": "PreparationValidationKind",
+      "type": "string"
+    },
+    "PreparationValidationRule": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/PreparationValidationKind"
+        },
+        "maximum_length": {
+          "anyOf": [
+            {
+              "maximum": 400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum Length"
+        },
+        "minimum_length": {
+          "anyOf": [
+            {
+              "maximum": 400,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum Length"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "PreparationValidationRule",
+      "type": "object"
+    },
+    "PreparationValueSource": {
+      "enum": [
+        "citizen_confirmed_local_answer",
+        "citizen_confirmed_local_ocr_suggestion",
+        "deterministic_derived_value",
+        "bundled_synthetic_demonstration_profile"
+      ],
+      "title": "PreparationValueSource",
+      "type": "string"
     },
     "ProcedureStep": {
       "additionalProperties": false,

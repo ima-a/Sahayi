@@ -29,7 +29,7 @@ def test_active_assistance_metadata_is_strict_sourced_and_versioned() -> None:
     assert aadhaar.pack.assistance.form_source_ids == []
     assert kerala.pack.assistance.form_mode == "official_form_worksheet"
     assert kerala.pack.assistance.form_source_ids == ["kerala-ign-oap-application-form"]
-    assert all(field.source_ids for loaded in registry.values() for field in loaded.pack.assistance.fields)
+    assert all(field.source_ids for loaded in registry.values() for field in loaded.pack.assistance.preparation_fields)
 
 
 @pytest.mark.parametrize("locale", ["en", "hi", "ml"])

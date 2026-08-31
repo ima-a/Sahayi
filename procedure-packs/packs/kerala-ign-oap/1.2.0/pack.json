@@ -120,7 +120,7 @@
       "ml": "കേരള പെൻഷൻ ഔദ്യോഗിക-ഫോം തയ്യാറെടുപ്പ് വർക്ക്‌ഷീറ്റ്"
     },
     "form_source_ids": ["kerala-ign-oap-application-form"],
-    "fields": [
+    "preparation_fields": [
       {
         "field_id": "applicant-name",
         "label": { "en": "Applicant name (English and Malayalam)", "hi": "आवेदक का नाम (अंग्रेज़ी और मलयालम)", "ml": "അപേക്ഷകന്റെ പേര് (ഇംഗ്ലീഷിലും മലയാളത്തിലും)" },

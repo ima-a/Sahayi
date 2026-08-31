@@ -10,9 +10,33 @@ import './App.css'
 type Availability = 'loading' | 'available' | 'unavailable'
 type Screen = 'welcome' | 'intake' | 'catalogue' | 'detail' | 'readiness' | 'assistant' | 'checklist' | 'form' | 'demo'
 type ConversationMessage = { role: 'user' | 'assistant'; content: string }
+type PreparedValue = {
+  value: string
+  source: 'citizen_confirmed_local_answer' | 'citizen_confirmed_local_ocr_suggestion' | 'deterministic_derived_value' | 'bundled_synthetic_demonstration_profile'
+  confirmed: boolean
+  valid: boolean
+  lastUpdate: number
+  editable: boolean
+}
 
 const dateLocales: Record<Locale, string> = { en: 'en-IN', hi: 'hi-IN', ml: 'ml-IN' }
 const formatDate = (value: string, locale: Locale) => new Date(`${value.slice(0, 10)}T00:00:00Z`).toLocaleDateString(dateLocales[locale], { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+function derivePreparedValues(assistance: SyntheticFormAssistance, labels: Record<string, string>, current: Record<string, PreparedValue>): Record<string, PreparedValue> {
+  const next = { ...current }
+  assistance.fields.forEach(field => {
+    if (field.input_type !== 'readiness_value' || !field.readiness_question_id || !labels[field.readiness_question_id]) return
+    next[field.field_id] = {
+      value: labels[field.readiness_question_id],
+      source: 'deterministic_derived_value',
+      confirmed: true,
+      valid: true,
+      lastUpdate: (next[field.field_id]?.lastUpdate ?? 0) + 1,
+      editable: false,
+    }
+  })
+  return next
+}
 
 function LanguageControls({ locale, onChange, messages }: { locale: Locale; onChange: (locale: Locale) => void; messages: Messages }) {
   return <div className="language-controls">
@@ -78,6 +102,8 @@ function App() {
   const [agentPiiWarning, setAgentPiiWarning] = useState(false)
   const [checklist, setChecklist] = useState<PersonalizedChecklist | null>(null)
   const [formAssistance, setFormAssistance] = useState<SyntheticFormAssistance | null>(null)
+  const [preparedValues, setPreparedValues] = useState<Record<string, PreparedValue>>({})
+  const [readinessLabels, setReadinessLabels] = useState<Record<string, string>>({})
   const [formStep, setFormStep] = useState(0)
   const [assistanceLoading, setAssistanceLoading] = useState(false)
   const [assistanceError, setAssistanceError] = useState(false)
@@ -122,7 +148,7 @@ function App() {
     stopVoice()
     setQuery(''); setJourneyGoal(''); setConversationHistory([]); setConversationResponse(null); setMatch(null); setPiiWarning(false)
     setAgentConsent(false); setAgentInput(''); setAgentHistory([]); setAgentResponse(null); setAgentLoading(false); setAgentError(false); setAgentPiiWarning(false)
-    setChecklist(null); setFormAssistance(null); setFormStep(0); setAssistanceLoading(false); setAssistanceError(false)
+    setChecklist(null); setFormAssistance(null); setPreparedValues({}); setReadinessLabels({}); setFormStep(0); setAssistanceLoading(false); setAssistanceError(false)
     setDemo(null); setDemoLoading(false); setDemoError(false); setInactivityWarning(false); setSessionNotice(notice)
     lastInteraction.current = Date.now()
   }, [stopVoice])
@@ -192,6 +218,8 @@ function App() {
     setAgentError(false)
     setAgentPiiWarning(false)
     setFormStep(0)
+    setPreparedValues({})
+    setReadinessLabels({})
     if ((screen === 'checklist' || screen === 'intake') && checklist) {
       setChecklist(null)
       setAssistanceLoading(true)
@@ -239,6 +267,7 @@ function App() {
     setPiiWarning(false)
     setDetail(null)
     setDetailError(false)
+    setPreparedValues({}); setReadinessLabels({})
     request(signal => getProcedure(serviceId, locale, signal)).then(setDetail).catch(error => { if (!isAbort(error)) setDetailError(true) })
   }
 
@@ -256,7 +285,7 @@ function App() {
 
   const startConversationProcedure = async (serviceId: string) => {
     setMatch(null); setPiiWarning(false); setDetailError(false); setReadinessError(false); setReadinessLoading(true)
-    setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setChecklist(null); setFormAssistance(null); setFormStep(0)
+    setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setChecklist(null); setFormAssistance(null); setPreparedValues({}); setReadinessLabels({}); setFormStep(0)
     try {
       const [selected, proposal] = await Promise.all([
         request(signal => getProcedure(serviceId, locale, signal)),
@@ -266,6 +295,7 @@ function App() {
       const result = await request(signal => conversationTurn({ locale, event_type: 'confirm_service', confirmed_service_id: serviceId, state: proposal.state }, signal))
       setConversationResponse(result); setReadiness(result.readiness); setReadinessAnswers(result.state.answers)
       setChecklist(result.checklist); setFormAssistance(result.preparation)
+      setConversationHistory(history => [...history, { role: 'assistant', content: messages.preparationDisclosure }])
     } catch (error) {
       if (!isAbort(error)) { setReadinessError(true); setConversationHistory(history => [...history, { role: 'assistant', content: messages.readinessUnavailable }]) }
     } finally { setReadinessLoading(false) }
@@ -274,6 +304,7 @@ function App() {
   const answerConversationReadiness = async (answer: ReadinessAnswer, label: string) => {
     if (!conversationResponse || !readiness?.next_question || readinessLoading) return
     const question = readiness.next_question
+    const nextLabels = { ...readinessLabels, [question.question_id]: label }
     setConversationHistory(history => [...history, { role: 'assistant', content: question.prompt }, { role: 'user', content: label }])
     setReadinessLoading(true); setReadinessError(false)
     try {
@@ -286,15 +317,69 @@ function App() {
       setReadinessHistory(history => [...history, readinessAnswers]); setConversationResponse(result)
       setReadinessAnswers(result.state.answers); setReadiness(result.readiness)
       setChecklist(result.checklist); setFormAssistance(result.preparation)
+      setReadinessLabels(nextLabels)
+      if (result.preparation) setPreparedValues(values => derivePreparedValues(result.preparation!, nextLabels, values))
     } catch (error) {
       if (!isAbort(error)) { setReadinessError(true); setConversationHistory(history => [...history, { role: 'assistant', content: messages.continueError }]) }
     } finally { setReadinessLoading(false) }
   }
 
-  const confirmDocumentEvidence = async (evidence: ConfirmedDocumentEvidence) => {
+  const confirmDocumentEvidence = async (evidence: ConfirmedDocumentEvidence, clueValue: string) => {
     if (!conversationResponse) return
-    const result = await request(signal => conversationTurn({ locale, event_type: 'document_evidence', document_evidence: evidence, state: conversationResponse.state }, signal))
-    setConversationResponse(result); setReadiness(result.readiness); setReadinessAnswers(result.state.answers)
+    const mapped = formAssistance?.fields.find(field => field.document_ids.includes(evidence.document_id))
+    const nextValues = mapped ? {
+      ...preparedValues,
+      [mapped.field_id]: { value: clueValue, source: 'citizen_confirmed_local_ocr_suggestion' as const, confirmed: true, valid: true, lastUpdate: (preparedValues[mapped.field_id]?.lastUpdate ?? 0) + 1, editable: true },
+    } : preparedValues
+    const nextState = { ...conversationResponse.state, completed_field_ids: Object.keys(nextValues).filter(fieldId => formAssistance?.fields.some(field => field.field_id === fieldId && field.input_type !== 'readiness_value')) }
+    const result = await request(signal => conversationTurn({ locale, event_type: 'document_evidence', document_evidence: evidence, state: nextState }, signal))
+    setPreparedValues(nextValues); setConversationResponse(result); setReadiness(result.readiness); setReadinessAnswers(result.state.answers)
+    setChecklist(result.checklist); setFormAssistance(result.preparation)
+  }
+
+  const answerPreparationField = async (fieldId: string, value: string, displayValue = value) => {
+    if (!conversationResponse?.current_preparation_question || readinessLoading) return
+    const field = conversationResponse.current_preparation_question
+    const trimmed = value.trim()
+    const valid = field.field_id === fieldId && (field.validation_kind === 'single_choice'
+      ? field.choices.some(choice => choice.option_id === value)
+      : trimmed.length >= (field.minimum_length ?? 1) && trimmed.length <= (field.maximum_length ?? 400))
+    if (!valid) return
+    const nextValues = {
+      ...preparedValues,
+      [fieldId]: { value: displayValue.trim(), source: 'citizen_confirmed_local_answer' as const, confirmed: true, valid: true, lastUpdate: (preparedValues[fieldId]?.lastUpdate ?? 0) + 1, editable: field.editable !== false },
+    }
+    const nextState = { ...conversationResponse.state, completed_field_ids: [...new Set([...conversationResponse.state.completed_field_ids, fieldId])].sort() }
+    setConversationHistory(history => [...history, { role: 'assistant', content: field.question ?? field.label }, { role: 'user', content: displayValue.trim() }])
+    setPreparedValues(nextValues); setReadinessLoading(true); setReadinessError(false)
+    try {
+      const result = await request(signal => conversationTurn({ locale, event_type: 'field_completed', completed_field_id: fieldId, state: nextState }, signal))
+      setConversationResponse(result); setReadiness(result.readiness); setChecklist(result.checklist); setFormAssistance(result.preparation)
+      if (result.preparation) setPreparedValues(values => derivePreparedValues(result.preparation!, readinessLabels, values))
+    } catch (error) {
+      if (!isAbort(error)) setReadinessError(true)
+    } finally { setReadinessLoading(false) }
+  }
+
+  const editPreparedValue = (fieldId: string, value: string) => {
+    const field = formAssistance?.fields.find(item => item.field_id === fieldId)
+    if (!field || field.editable === false || field.input_type === 'readiness_value') return
+    const trimmed = value.trim()
+    const choice = field.input_type === 'single_choice'
+      ? field.choices.find(item => item.label === trimmed || item.option_id === trimmed)
+      : null
+    if (field.input_type === 'single_choice' ? !choice : trimmed.length < (field.minimum_length ?? 1) || trimmed.length > (field.maximum_length ?? 400)) return
+    setPreparedValues(values => ({
+      ...values,
+      [fieldId]: {
+        ...values[fieldId],
+        value: choice?.label ?? trimmed,
+        source: 'citizen_confirmed_local_answer',
+        valid: true,
+        confirmed: true,
+        lastUpdate: (values[fieldId]?.lastUpdate ?? 0) + 1,
+      },
+    }))
   }
 
   const openAssistant = () => {
@@ -503,6 +588,7 @@ function App() {
     onCandidate={candidate => setMatch({ kind: 'confident', candidate, source: 'deterministic' })}
     voiceState={voice.inputState} voiceSupported={voice.inputSupported} onVoiceStart={() => voice.startInput(value => { if (detectHighRiskPii(value)) { setQuery(''); setPiiWarning(true) } else { setQuery(value); setPiiWarning(false) }; setMatch(null) })} onVoiceStop={() => voice.stopInput()}
     onConfirm={startConversationProcedure} onAnswer={answerConversationReadiness} onViewDetails={() => detail && selectProcedure(detail.service_id, journeyGoal || detail.title)}
+    preparedValues={preparedValues} onFieldAnswer={answerPreparationField} onEditPreparedValue={editPreparedValue}
     onDocumentEvidence={confirmDocumentEvidence}
     onChooseAnother={() => { setMatch(null); setQuery('') }} onStartOver={startOver} />)
 
@@ -538,20 +624,28 @@ function App() {
   </section></main>
 }
 
-function ConversationAssistant({ locale, messages, language, procedures, error, query, match, piiWarning, history, procedure, readiness, checklist, formAssistance, turn, loading, assistanceLoading, readinessError, assistanceError, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onQueryChange, onFind, onBrowse, onCandidate, onConfirm, onAnswer, onDocumentEvidence, onViewDetails, onChooseAnother, onStartOver }: {
+function ConversationAssistant({ locale, messages, language, procedures, error, query, match, piiWarning, history, procedure, readiness, checklist, formAssistance, preparedValues, turn, loading, assistanceLoading, readinessError, assistanceError, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onQueryChange, onFind, onBrowse, onCandidate, onConfirm, onAnswer, onFieldAnswer, onEditPreparedValue, onDocumentEvidence, onViewDetails, onChooseAnother, onStartOver }: {
   locale: Locale; messages: Messages; language: React.ReactNode; procedures: ProcedureSummary[] | null; error: boolean; query: string; match: MatchResult | null; piiWarning: boolean
   history: ConversationMessage[]; procedure: ProcedureDetail | null; readiness: ReadinessResponse | null; checklist: PersonalizedChecklist | null; formAssistance: SyntheticFormAssistance | null
+  preparedValues: Record<string, PreparedValue>
   turn: ConversationTurnResponse | null
   loading: boolean; assistanceLoading: boolean; readinessError: boolean; assistanceError: boolean
   voiceState: VoiceInputState; voiceSupported: boolean; onVoiceStart: () => void; onVoiceStop: () => void
-  onQueryChange: (value: string) => void; onFind: () => void; onBrowse: () => void; onCandidate: (candidate: Candidate) => void; onConfirm: (serviceId: string) => void; onAnswer: (answer: ReadinessAnswer, label: string) => void; onDocumentEvidence: (evidence: ConfirmedDocumentEvidence) => Promise<void>; onViewDetails: () => void; onChooseAnother: () => void; onStartOver: () => void
+  onQueryChange: (value: string) => void; onFind: () => void; onBrowse: () => void; onCandidate: (candidate: Candidate) => void; onConfirm: (serviceId: string) => void; onAnswer: (answer: ReadinessAnswer, label: string) => void
+  onFieldAnswer: (fieldId: string, value: string, displayValue?: string) => void; onEditPreparedValue: (fieldId: string, value: string) => void
+  onDocumentEvidence: (evidence: ConfirmedDocumentEvidence, clueValue: string) => Promise<void>; onViewDetails: () => void; onChooseAnother: () => void; onStartOver: () => void
 }) {
   const focusTarget = useRef<HTMLHeadingElement>(null)
   const resultTarget = useRef<HTMLDivElement>(null)
   const [integerAnswer, setIntegerAnswer] = useState('')
+  const [fieldAnswer, setFieldAnswer] = useState('')
+  const [fieldValidationError, setFieldValidationError] = useState(false)
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
   useEffect(() => { focusTarget.current?.focus() }, [])
   useEffect(() => { if (match || piiWarning || readiness) resultTarget.current?.focus() }, [match, piiWarning, readiness])
   const question = readiness?.next_question
+  const preparationQuestion = turn?.current_preparation_question
   const preparationReady = Boolean(checklist || formAssistance)
   const answerButtons = question?.answer_type === 'boolean'
     ? [{ value: true as ReadinessAnswer, label: messages.yes }, { value: false as ReadinessAnswer, label: messages.no }]
@@ -580,17 +674,49 @@ function ConversationAssistant({ locale, messages, language, procedures, error, 
         {question.answer_type === 'integer' && <form className="integer-response" onSubmit={event => { event.preventDefault(); if (integerAnswer !== '') { onAnswer(Number(integerAnswer), integerAnswer); setIntegerAnswer('') } }}><label htmlFor="conversation-number">{messages.number}</label><input id="conversation-number" type="number" min={question.minimum ?? undefined} max={question.maximum ?? undefined} value={integerAnswer} onChange={event => setIntegerAnswer(event.target.value)} /><button type="submit" disabled={integerAnswer === ''}>{messages.continue}</button></form>}
         {turn?.document_helper_available && procedure && <DocumentHelper key={`${locale}-${question.question_id}`} locale={locale} documents={procedure.required_documents} onConfirm={onDocumentEvidence} />}
       </section>}
-      {readiness?.complete && readiness.outcome && <section className="conversation-result"><p className="message assistant">{turn?.assistant_message}</p><h2>{readiness.outcome.title}</h2><p>{readiness.outcome.explanation}</p><p className="result-disclaimer">{readiness.disclaimer}</p></section>}
+      {preparationQuestion && !loading && <section className="conversation-question" aria-label={preparationQuestion.question ?? preparationQuestion.label}>
+        <p className="message assistant">{preparationQuestion.question ?? preparationQuestion.label}</p>
+        {preparationQuestion.why_needed && <p className="question-help">{preparationQuestion.why_needed}</p>}
+        {preparationQuestion.input_type === 'single_choice' ? <div className="suggested-responses">{preparationQuestion.choices.map(choice => <button type="button" key={choice.option_id} onClick={() => onFieldAnswer(preparationQuestion.field_id, choice.option_id, choice.label)}>{choice.label}</button>)}</div>
+          : <form className="local-field-response" onSubmit={event => {
+            event.preventDefault()
+            const trimmed = fieldAnswer.trim()
+            if (trimmed.length < (preparationQuestion.minimum_length ?? 1) || trimmed.length > (preparationQuestion.maximum_length ?? 400)) { setFieldValidationError(true); return }
+            setFieldValidationError(false); onFieldAnswer(preparationQuestion.field_id, fieldAnswer); setFieldAnswer('')
+          }}>
+            <label htmlFor="preparation-value">{preparationQuestion.label}</label>
+            {preparationQuestion.input_type === 'textarea' || preparationQuestion.input_type === 'document_clue'
+              ? <textarea id="preparation-value" rows={3} minLength={preparationQuestion.minimum_length ?? undefined} maxLength={preparationQuestion.maximum_length ?? undefined} value={fieldAnswer} onChange={event => { setFieldAnswer(event.target.value); setFieldValidationError(false) }} />
+              : <input id="preparation-value" type="text" minLength={preparationQuestion.minimum_length ?? undefined} maxLength={preparationQuestion.maximum_length ?? undefined} value={fieldAnswer} onChange={event => { setFieldAnswer(event.target.value); setFieldValidationError(false) }} />}
+            {fieldValidationError && <p className="inline-error" role="alert">{messages.invalidPreparationValue}</p>}
+            <button type="submit" disabled={!fieldAnswer.trim()}>{messages.confirmAndContinue}</button>
+          </form>}
+        {preparationQuestion.input_type === 'document_clue' && procedure && <DocumentHelper key={`${locale}-${preparationQuestion.question_id}`} locale={locale} documents={procedure.required_documents.filter(document => preparationQuestion.document_ids.includes(document.document_id))} onConfirm={onDocumentEvidence} />}
+      </section>}
+      {readiness?.complete && readiness.outcome && <section className="conversation-result"><h2>{readiness.outcome.title}</h2><p>{readiness.outcome.explanation}</p><p className="result-disclaimer">{readiness.disclaimer}</p></section>}
       {assistanceLoading && <p className="activity">{messages.checkingVerified}</p>}
       {assistanceError && <p className="inline-error" role="alert">{messages.continueError}</p>}
-      {preparationReady && <details className="prepared-guidance"><summary>{messages.howPrepared}</summary>
+      {preparationReady && <details className="prepared-guidance"><summary>{messages.reviewPreparedInformation}</summary>
         {checklist && <><h2>{messages.checklistTitle}</h2><p>{checklist.result.text}</p><ul>{checklist.ready.map(item => <li key={item.item_id}>{item.text}</li>)}{checklist.documents.map(item => <li key={item.document_id}><strong>{item.name}:</strong> {item.guidance}</li>)}{checklist.confirm.map(item => <li key={item.item_id}>{item.text}</li>)}</ul></>}
-        {formAssistance && <><p className="watermark">{formAssistance.watermark}</p><h2>{formAssistance.title}</h2><p>{formAssistance.privacy_notice}</p></>}
+        {formAssistance && <section className="prepared-sheet printable"><p className="watermark">{formAssistance.watermark}</p><h2>{formAssistance.title}</h2><p>{formAssistance.privacy_notice}</p>
+          <p className="question-progress">{formatMessage(messages.detailsPrepared, { prepared: turn?.prepared_field_count ?? 0, total: turn?.preparation_field_count ?? 0 })}</p>
+          <dl className="worksheet-fields">{formAssistance.fields.filter(field => field.may_appear_on_sheet !== false).map(field => {
+            const prepared = preparedValues[field.field_id]
+            const isEditing = editingField === field.field_id
+            return <div key={field.field_id}><dt>{field.label}{field.required ? ' *' : ''}</dt><dd>
+              {isEditing ? <form onSubmit={event => { event.preventDefault(); onEditPreparedValue(field.field_id, editValue); setEditingField(null) }}><label className="visually-hidden" htmlFor={`edit-${field.field_id}`}>{field.label}</label><input id={`edit-${field.field_id}`} value={editValue} onChange={event => setEditValue(event.target.value)} /><button type="submit">{messages.saveEdit}</button></form>
+                : <p><strong>{prepared ? messages.preparedValue : messages.missingValue}:</strong> {prepared?.value ?? '—'}</p>}
+              {prepared && field.editable && field.input_type !== 'readiness_value' && !isEditing && <button type="button" className="secondary compact no-print" onClick={() => { setEditingField(field.field_id); setEditValue(prepared.value) }}>{messages.editAnswer}</button>}
+            </dd></div>
+          })}</dl>
+          {turn && turn.missing_required_field_ids.length > 0 && <p className="missing-information"><strong>{messages.missingInformation}:</strong> {turn.missing_required_field_ids.map(id => formAssistance.fields.find(field => field.field_id === id)?.label ?? id).join(', ')}</p>}
+          <button type="button" className="secondary compact no-print" onClick={() => window.print()}>{messages.printPreparation}</button>
+        </section>}
       </details>}
       {turn && turn.contextual_sources.length > 0 && <details className="contextual-sources"><summary>{messages.officialSources}</summary><ul>{turn.contextual_sources.map(source => <li key={source.source_id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a></li>)}</ul></details>}
-      {readiness?.complete && procedure && <section className="official-ready"><h2>{messages.openOfficialNext}</h2><p>{messages.governmentDisclaimer}</p><a className="official-handoff" href={procedure.official_handoff_url} target="_blank" rel="noopener noreferrer">{messages.openOfficialService} <span aria-hidden="true">↗</span></a><button type="button" className="secondary compact" onClick={onViewDetails}>{messages.verifiedOfficial}</button></section>}
+      {turn?.next_action === 'official_handoff' && procedure && <section className="official-ready"><h2>{messages.openOfficialNext}</h2><p>{messages.governmentDisclaimer}</p><a className="official-handoff" href={procedure.official_handoff_url} target="_blank" rel="noopener noreferrer">{messages.openOfficialService} <span aria-hidden="true">↗</span></a><button type="button" className="secondary compact" onClick={onViewDetails}>{messages.verifiedOfficial}</button></section>}
     </div>
-    {procedures !== null && !readiness?.complete && <form className="conversation-composer" onSubmit={event => { event.preventDefault(); onFind() }}><label className="visually-hidden" htmlFor="service-query">{messages.queryLabel}</label>
+    {procedures !== null && !question && !preparationQuestion && !readiness?.complete && <form className="conversation-composer" onSubmit={event => { event.preventDefault(); onFind() }}><label className="visually-hidden" htmlFor="service-query">{messages.queryLabel}</label>
       <textarea id="service-query" value={query} maxLength={MAX_QUERY_LENGTH} rows={2} aria-label={messages.queryLabel} placeholder={messages.queryLabel} onChange={event => onQueryChange(event.target.value)} />
       <div className="composer-actions"><VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} /><button type="submit" disabled={!query.trim()}>{messages.conversationSend}</button></div>
       <p className="composer-privacy">{messages.privacyNote}</p>

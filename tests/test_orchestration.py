@@ -140,6 +140,21 @@ async def test_readiness_recomputes_and_preparation_fans_out_to_exact_pack_hando
     assert result.checklist is not None
     assert result.preparation is not None
     assert result.preparation.watermark == "DEMO — NOT FOR SUBMISSION"
+    assert result.current_preparation_question is not None
+    assert result.current_preparation_question.field_id == "new-address"
+    result.state.completed_field_ids = ["new-address"]
+    result = await run_conversation_turn(
+        ConversationTurnRequest(
+            locale="en",
+            event_type="field_completed",
+            completed_field_id="new-address",
+            state=result.state,
+        ),
+        registry,
+        runtime,
+        "test",
+    )
+    assert result.current_preparation_question is None
     assert str(result.official_handoff_url) == str(registry[AADHAAR].pack.official_handoff_url)
     assert result.next_action == "official_handoff"
 
@@ -196,6 +211,133 @@ async def test_document_worker_accepts_only_confirmed_pack_allowlisted_evidence(
                 "raw_ocr_text": "forbidden",
             },
         })
+
+
+@pytest.mark.anyio
+async def test_confirmed_ocr_maps_only_structural_field_completion_and_never_a_value(registry) -> None:
+    runtime = AgentRuntime(replace(get_settings(), agent_enabled=False))
+    proposal = await run_conversation_turn(
+        ConversationTurnRequest(locale="en", event_type="start", local_candidates=[{"service_id": AADHAAR, "confidence": 1.0}]),
+        registry,
+        runtime,
+        "test",
+    )
+    result = await run_conversation_turn(
+        ConversationTurnRequest(locale="en", event_type="confirm_service", confirmed_service_id=AADHAAR, state=proposal.state),
+        registry,
+        runtime,
+        "test",
+    )
+    result.state.completed_field_ids = ["proof-of-address-document"]
+    result = await run_conversation_turn(
+        ConversationTurnRequest(
+            locale="en",
+            event_type="document_evidence",
+            document_evidence={"document_id": "valid-proof-of-address", "appears_relevant": True, "citizen_confirmed": True},
+            state=result.state,
+        ),
+        registry,
+        runtime,
+        "test",
+    )
+    assert result.state.completed_field_ids == ["proof-of-address-document"]
+    assert next(field for field in result.preparation.fields if field.field_id == "proof-of-address-document").value is None
+
+
+@pytest.mark.anyio
+async def test_complete_kerala_preparation_asks_each_local_required_field_once(registry) -> None:
+    runtime = AgentRuntime(replace(get_settings(), agent_enabled=False))
+    result = await run_conversation_turn(
+        ConversationTurnRequest(locale="en", event_type="start", local_candidates=[{"service_id": PENSION, "confidence": 1.0}]),
+        registry,
+        runtime,
+        "test",
+    )
+    result = await run_conversation_turn(
+        ConversationTurnRequest(locale="en", event_type="confirm_service", confirmed_service_id=PENSION, state=result.state),
+        registry,
+        runtime,
+        "test",
+    )
+    for value in ("yes", "yes", "within", "no", "no", "no"):
+        result = await run_conversation_turn(
+            ConversationTurnRequest(
+                locale="en",
+                event_type="answer",
+                answer={"question_id": result.current_question.question_id, "value": value},
+                state=result.state,
+            ),
+            registry,
+            runtime,
+            "test",
+        )
+    asked = []
+    while result.current_preparation_question is not None:
+        field_id = result.current_preparation_question.field_id
+        asked.append(field_id)
+        result.state.completed_field_ids = sorted({*result.state.completed_field_ids, field_id})
+        result = await run_conversation_turn(
+            ConversationTurnRequest(locale="en", event_type="field_completed", completed_field_id=field_id, state=result.state),
+            registry,
+            runtime,
+            "test",
+        )
+    assert asked == ["applicant-name", "gender-category", "contact-and-address"]
+    assert result.next_action == "official_handoff"
+    assert result.missing_required_field_ids == []
+
+
+@pytest.mark.anyio
+async def test_hidden_readiness_derived_fields_do_not_count_on_another_route(registry) -> None:
+    runtime = AgentRuntime(replace(get_settings(), agent_enabled=False))
+    result = await run_conversation_turn(
+        ConversationTurnRequest(locale="en", event_type="start", local_candidates=[{"service_id": AADHAAR, "confidence": 1.0}]),
+        registry,
+        runtime,
+        "test",
+    )
+    result = await run_conversation_turn(
+        ConversationTurnRequest(locale="en", event_type="confirm_service", confirmed_service_id=AADHAAR, state=result.state),
+        registry,
+        runtime,
+        "test",
+    )
+    result = await run_conversation_turn(
+        ConversationTurnRequest(
+            locale="en",
+            event_type="answer",
+            answer={"question_id": result.current_question.question_id, "value": True},
+            state=result.state,
+        ),
+        registry,
+        runtime,
+        "test",
+    )
+    result = await run_conversation_turn(
+        ConversationTurnRequest(
+            locale="en",
+            event_type="answer",
+            answer={"question_id": result.current_question.question_id, "value": "head-of-family"},
+            state=result.state,
+        ),
+        registry,
+        runtime,
+        "test",
+    )
+    result = await run_conversation_turn(
+        ConversationTurnRequest(
+            locale="en",
+            event_type="answer",
+            answer={"question_id": result.current_question.question_id, "value": True},
+            state=result.state,
+        ),
+        registry,
+        runtime,
+        "test",
+    )
+    assert result.current_preparation_question.field_id == "new-address"
+    assert "poa-ready" not in result.missing_required_field_ids
+    assert result.preparation_field_count == 4
 
 
 @pytest.mark.anyio
@@ -293,6 +435,13 @@ def test_turn_schema_forbids_unknown_fields_and_raw_message_without_consent() ->
         ConversationTurnRequest.model_validate({"locale": "en", "event_type": "start", "metadata": {"x": 1}})
     with pytest.raises(ValidationError):
         ConversationTurnRequest.model_validate({"locale": "en", "event_type": "cloud_clarification", "message": "help", "consent": False})
+    with pytest.raises(ValidationError):
+        ConversationTurnRequest.model_validate({
+            "locale": "en",
+            "event_type": "field_completed",
+            "completed_field_id": "new-address",
+            "field_value": "must remain in browser memory",
+        })
 
 
 @pytest.mark.anyio

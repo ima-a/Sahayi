@@ -10,8 +10,12 @@ from sahayi_api.procedures import (
     FormAssistanceMode,
     FormFieldHandling,
     FormFieldStatus,
+    FormAssistanceField,
     Identifier,
     LoadedProcedure,
+    PreparationInputType,
+    PreparationValidationKind,
+    PreparationValueSource,
     ShortText,
     SourceId,
     SourceRecord,
@@ -74,6 +78,21 @@ class SyntheticFormFieldResponse(StrictModel):
     handling: FormFieldHandling
     status: FormFieldStatus
     source_ids: list[SourceId]
+    question_id: Identifier | None
+    question: str | None
+    why_needed: str | None
+    input_type: PreparationInputType | None
+    required: bool | None
+    validation_kind: PreparationValidationKind | None
+    minimum_length: int | None
+    maximum_length: int | None
+    supported_value_sources: list[PreparationValueSource]
+    may_appear_on_sheet: bool | None
+    confirmation_required: bool | None
+    editable: bool | None
+    choices: list[dict[str, str]]
+    readiness_question_id: Identifier | None
+    document_ids: list[Identifier]
 
 
 class SyntheticFormAssistance(StrictModel):
@@ -94,6 +113,38 @@ class SyntheticFormAssistance(StrictModel):
     pack_digest: str
 
 
+def localize_preparation_field(
+    field: FormAssistanceField,
+    locale: SupportedLocale,
+    *,
+    value: str | None = None,
+) -> SyntheticFormFieldResponse:
+    return SyntheticFormFieldResponse(
+        field_id=field.field_id,
+        label=field.label[locale],
+        explanation=field.explanation[locale],
+        value=value,
+        handling=field.handling,
+        status=field.status,
+        source_ids=field.source_ids,
+        question_id=field.question_id,
+        question=field.question[locale] if field.question is not None else None,
+        why_needed=field.why_needed[locale] if field.why_needed is not None else None,
+        input_type=field.input_type,
+        required=field.required,
+        validation_kind=field.validation.kind if field.validation is not None else None,
+        minimum_length=field.validation.minimum_length if field.validation is not None else None,
+        maximum_length=field.validation.maximum_length if field.validation is not None else None,
+        supported_value_sources=field.supported_value_sources,
+        may_appear_on_sheet=field.may_appear_on_sheet,
+        confirmation_required=field.confirmation_required,
+        editable=field.editable,
+        choices=[{"option_id": choice.option_id, "label": choice.label[locale]} for choice in field.choices],
+        readiness_question_id=field.readiness_question_id,
+        document_ids=field.document_ids,
+    )
+
+
 _COPY = {
     "en": {
         "incomplete": "Complete the readiness questions to personalize this result.",
@@ -102,7 +153,9 @@ _COPY = {
         "checklist_disclaimer": "Preparation guidance only. This is not an eligibility decision, approval, submission, or tracking service.",
         "watermark": "DEMO — NOT FOR SUBMISSION",
         "privacy": "Only fictional demo values are shown. Citizen identifiers and sensitive values must be provided privately to the official service and are not collected by Sahayi.",
+        "local_privacy": "Prepared values stay only in this browser memory. They are not sent to Sahayi's server, Groq, logs, or browser storage.",
         "form_disclaimer": "Preparation worksheet only. Sahayi does not fill, submit, download, or track an official form.",
+        "local_form_disclaimer": "Sahayi preparation sheet only. Review it locally, then use the verified official channel. Sahayi does not submit or track an official application.",
     },
     "hi": {
         "incomplete": "इस परिणाम को व्यक्तिगत बनाने के लिए तैयारी प्रश्न पूरे करें।",
@@ -111,7 +164,9 @@ _COPY = {
         "checklist_disclaimer": "केवल तैयारी मार्गदर्शन। यह पात्रता निर्णय, स्वीकृति, जमा करने या ट्रैकिंग की सेवा नहीं है।",
         "watermark": "DEMO — NOT FOR SUBMISSION",
         "privacy": "केवल काल्पनिक डेमो मान दिखते हैं। नागरिक पहचान और संवेदनशील मान आधिकारिक सेवा को निजी रूप से देने होंगे; Sahayi उन्हें एकत्र नहीं करता।",
+        "local_privacy": "तैयार मान केवल इस ब्राउज़र की मेमोरी में रहते हैं। वे Sahayi सर्वर, Groq, लॉग या ब्राउज़र स्टोरेज को नहीं भेजे जाते।",
         "form_disclaimer": "केवल तैयारी वर्कशीट। Sahayi आधिकारिक फॉर्म भरता, जमा करता, डाउनलोड करता या ट्रैक नहीं करता।",
+        "local_form_disclaimer": "केवल Sahayi तैयारी शीट। इसे इसी डिवाइस पर जाँचकर सत्यापित आधिकारिक माध्यम उपयोग करें। Sahayi आवेदन जमा या ट्रैक नहीं करता।",
     },
     "ml": {
         "incomplete": "ഈ ഫലം വ്യക്തിഗതമാക്കാൻ തയ്യാറെടുപ്പ് ചോദ്യങ്ങൾ പൂർത്തിയാക്കുക.",
@@ -120,7 +175,9 @@ _COPY = {
         "checklist_disclaimer": "തയ്യാറെടുപ്പ് മാർഗനിർദേശം മാത്രം. ഇത് അർഹതാ തീരുമാനമോ അംഗീകാരമോ സമർപ്പണമോ ട്രാക്കിംഗ് സേവനമോ അല്ല.",
         "watermark": "DEMO — NOT FOR SUBMISSION",
         "privacy": "സാങ്കൽപ്പിക ഡെമോ മൂല്യങ്ങൾ മാത്രം കാണിക്കുന്നു. പൗരന്റെ തിരിച്ചറിയൽ വിവരങ്ങളും സൂക്ഷ്മ മൂല്യങ്ങളും ഔദ്യോഗിക സേവനത്തിന് സ്വകാര്യമായി നൽകണം; Sahayi അവ ശേഖരിക്കുന്നില്ല.",
+        "local_privacy": "തയ്യാറാക്കിയ മൂല്യങ്ങൾ ഈ ബ്രൗസർ മെമ്മറിയിൽ മാത്രം നിലനിൽക്കും. Sahayi സർവർ, Groq, ലോഗുകൾ, ബ്രൗസർ സ്റ്റോറേജ് എന്നിവയിലേക്ക് അയയ്ക്കില്ല.",
         "form_disclaimer": "തയ്യാറെടുപ്പ് വർക്ക്‌ഷീറ്റ് മാത്രം. Sahayi ഔദ്യോഗിക ഫോം പൂരിപ്പിക്കുകയോ സമർപ്പിക്കുകയോ ഡൗൺലോഡ് ചെയ്യുകയോ ട്രാക്ക് ചെയ്യുകയോ ചെയ്യുന്നില്ല.",
+        "local_form_disclaimer": "Sahayi തയ്യാറെടുപ്പ് ഷീറ്റ് മാത്രം. ഈ ഉപകരണത്തിൽ പരിശോധിച്ച ശേഷം സ്ഥിരീകരിച്ച ഔദ്യോഗിക ചാനൽ ഉപയോഗിക്കുക. Sahayi അപേക്ഷ സമർപ്പിക്കുകയോ ട്രാക്ക് ചെയ്യുകയോ ഇല്ല.",
     },
 }
 
@@ -225,6 +282,7 @@ def prepare_synthetic_form_assistance(
     persona_id: str | None = None,
     *,
     locale: SupportedLocale = "en",
+    include_demo_values: bool = True,
 ) -> SyntheticFormAssistance:
     pack = loaded.pack
     definition = pack.assistance
@@ -238,19 +296,13 @@ def prepare_synthetic_form_assistance(
     persona_fields = set(persona.field_ids)
     source_ids = set(definition.form_source_ids)
     fields = []
-    for field in definition.fields:
+    for field in definition.preparation_fields:
         source_ids.update(field.source_ids)
-        fields.append(
-            SyntheticFormFieldResponse(
-                field_id=field.field_id,
-                label=field.label[locale],
-                explanation=field.explanation[locale],
-                value=field.demo_value[locale] if field.demo_value is not None and field.field_id in persona_fields else None,
-                handling=field.handling,
-                status=field.status,
-                source_ids=field.source_ids,
-            )
-        )
+        fields.append(localize_preparation_field(
+            field,
+            locale,
+            value=field.demo_value[locale] if include_demo_values and field.demo_value is not None and field.field_id in persona_fields else None,
+        ))
     return SyntheticFormAssistance(
         locale=locale,
         translation=translation_info(pack, locale),
@@ -270,8 +322,8 @@ def prepare_synthetic_form_assistance(
         fields=fields,
         sources=localized_sources(pack, locale, source_ids),
         watermark=_COPY[locale]["watermark"],
-        privacy_notice=_COPY[locale]["privacy"],
-        disclaimer=_COPY[locale]["form_disclaimer"],
+        privacy_notice=_COPY[locale]["privacy" if include_demo_values else "local_privacy"],
+        disclaimer=_COPY[locale]["form_disclaimer" if include_demo_values else "local_form_disclaimer"],
         official_handoff_url=pack.official_handoff_url,
         pack_version=pack.pack_version,
         pack_digest=loaded.digest,

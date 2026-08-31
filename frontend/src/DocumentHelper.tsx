@@ -7,7 +7,7 @@ import type { Locale } from './i18n'
 type Props = {
   locale: Locale
   documents: DocumentGuidance[]
-  onConfirm: (evidence: ConfirmedDocumentEvidence) => Promise<void>
+  onConfirm: (evidence: ConfirmedDocumentEvidence, clueValue: string) => Promise<void>
 }
 
 const COPY = {
@@ -85,7 +85,9 @@ export function DocumentHelper({ locale, documents, onConfirm }: Props) {
 
   const confirm = async () => {
     if (!conclusion?.documentId) return
-    await onConfirm({ document_id: conclusion.documentId, appears_relevant: conclusion.appearsRelevant, citizen_confirmed: true })
+    const clueValue = documents.find(document => document.document_id === conclusion.documentId)?.name
+    if (!clueValue) return
+    await onConfirm({ document_id: conclusion.documentId, appears_relevant: conclusion.appearsRelevant, citizen_confirmed: true }, clueValue)
     setState('confirmed')
     setConclusion(null)
   }

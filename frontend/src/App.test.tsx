@@ -131,7 +131,26 @@ const formFixture: SyntheticFormAssistance = {
   locale: 'en', translation: englishTranslation, service_id: summary.service_id, title: 'Aadhaar preparation worksheet', mode: 'preparation_worksheet',
   persona: { persona_id: 'fictional-demo', display_name: 'DEMO — fictional citizen', synthetic: true, readiness_answers: { 'mobile-auth-access': true } },
   available_personas: [{ persona_id: 'fictional-demo', display_name: 'DEMO — fictional citizen', synthetic: true, readiness_answers: { 'mobile-auth-access': true } }],
-  fields: [{ field_id: 'aadhaar-number', label: 'Aadhaar number', explanation: 'Citizen must provide privately.', value: null, handling: 'not_collected', status: 'preparation_only', source_ids: ['uidai-update-overview'] }],
+  fields: [
+    {
+      field_id: 'update-route', label: 'Planned update route', explanation: 'Derived from readiness.', value: null, handling: 'fictional_demo', status: 'preparation_only', source_ids: ['uidai-update-overview'],
+      question_id: 'prepare-update-route', question: 'Which route?', why_needed: 'Determines the verified route.', input_type: 'readiness_value', required: true,
+      validation_kind: 'structural', minimum_length: null, maximum_length: null, supported_value_sources: ['deterministic_derived_value'], may_appear_on_sheet: true, confirmation_required: true, editable: true,
+      choices: [], readiness_question_id: 'address-update-route', document_ids: [],
+    },
+    {
+      field_id: 'new-address', label: 'New address', explanation: 'Kept locally.', value: null, handling: 'citizen_private', status: 'preparation_only', source_ids: ['uidai-update-overview'],
+      question_id: 'prepare-new-address', question: 'What new address should your preparation sheet show?', why_needed: 'Review it locally before official action.', input_type: 'textarea', required: true,
+      validation_kind: 'non_empty_text', minimum_length: 5, maximum_length: 240, supported_value_sources: ['citizen_confirmed_local_answer', 'citizen_confirmed_local_ocr_suggestion'], may_appear_on_sheet: true, confirmation_required: true, editable: true,
+      choices: [], readiness_question_id: null, document_ids: [],
+    },
+    {
+      field_id: 'aadhaar-number', label: 'Aadhaar number', explanation: 'Citizen must provide privately.', value: null, handling: 'not_collected', status: 'preparation_only', source_ids: ['uidai-update-overview'],
+      question_id: 'prepare-aadhaar-number', question: 'Aadhaar number', why_needed: 'Use only on the official service.', input_type: 'not_collected', required: false,
+      validation_kind: 'not_collected', minimum_length: null, maximum_length: null, supported_value_sources: [], may_appear_on_sheet: true, confirmation_required: false, editable: false,
+      choices: [], readiness_question_id: null, document_ids: [],
+    },
+  ],
   sources: [readinessSource], watermark: 'DEMO — NOT FOR SUBMISSION', privacy_notice: 'Identifiers are not collected.', disclaimer: 'Preparation only.',
   official_handoff_url: detail.official_handoff_url, pack_version: '1.4.0', pack_digest: 'd'.repeat(64),
 }
@@ -143,6 +162,8 @@ const emptyJourneyState = (): PublicJourneyState => ({
   answers: {},
   current_question_id: null,
   document_evidence: [],
+  completed_field_ids: [],
+  current_preparation_question_id: null,
 })
 
 const graphTurn = ({
@@ -151,6 +172,7 @@ const graphTurn = ({
   readiness = null,
   checklist = null,
   preparation = null,
+  preparationQuestion = null,
   message = 'Continue one step at a time.',
 }: {
   state: PublicJourneyState
@@ -158,23 +180,28 @@ const graphTurn = ({
   readiness?: ReadinessResponse | null
   checklist?: PersonalizedChecklist | null
   preparation?: SyntheticFormAssistance | null
+  preparationQuestion?: SyntheticFormAssistance['fields'][number] | null
   message?: string
 }): ConversationTurnResponse => ({
   status: 'ok',
   locale: 'en',
   assistant_message: message,
-  next_action: readiness?.complete ? 'official_handoff' : readiness?.next_question ? 'ask_user' : 'confirm_service',
+  next_action: preparationQuestion ? 'ask_user' : readiness?.complete ? 'official_handoff' : readiness?.next_question ? 'ask_user' : 'confirm_service',
   progress_text: readiness ? `${readiness.progress.answered} of ${readiness.progress.total}` : null,
   actions: [],
   active_procedure: procedure,
   current_question: readiness?.next_question ?? null,
+  current_preparation_question: preparationQuestion,
   readiness,
   checklist,
   preparation,
+  prepared_field_count: state.completed_field_ids.length,
+  preparation_field_count: preparation?.fields.length ?? 0,
+  missing_required_field_ids: preparationQuestion ? [preparationQuestion.field_id] : [],
   document_helper_available: readiness?.next_question?.question_id === 'accepted-poa-ready',
   accepted_document_evidence: state.document_evidence,
   contextual_sources: readiness?.sources ?? [],
-  official_handoff_url: readiness?.official_handoff_url ?? null,
+  official_handoff_url: preparationQuestion ? null : readiness?.official_handoff_url ?? null,
   state,
   diagnostic_category: 'none',
 })
@@ -205,11 +232,12 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
     if (parsed.pathname.endsWith('/conversation/turn')) {
       if (options.failReadiness) return Promise.reject(new Error('offline'))
       const body = JSON.parse(String(init?.body)) as {
-        event_type: 'start' | 'confirm_service' | 'answer' | 'document_evidence'
+        event_type: 'start' | 'confirm_service' | 'answer' | 'field_completed' | 'document_evidence'
         confirmed_service_id?: string
         local_candidates?: Array<{ service_id: string }>
         answer?: { question_id: string; value: boolean | number | string }
         document_evidence?: { document_id: string; appears_relevant: boolean; citizen_confirmed: true }
+        completed_field_id?: string
         state?: PublicJourneyState
       }
       if (body.event_type === 'start') {
@@ -228,7 +256,19 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
           state: { ...emptyJourneyState(), service_id: serviceId, confirmed: true, current_question_id: initial.next_question?.question_id ?? null },
           procedure: activeSummary,
           readiness: initial,
+          preparation: formFixture,
           message: initial.next_question?.prompt,
+        }))
+      }
+      if (body.event_type === 'field_completed') {
+        const completed = [...new Set([...(body.state?.completed_field_ids ?? []), body.completed_field_id!])]
+        return response(graphTurn({
+          state: { ...(body.state ?? emptyJourneyState()), completed_field_ids: completed, current_preparation_question_id: null },
+          procedure: activeSummary,
+          readiness: completeReadiness,
+          checklist: checklistFixture,
+          preparation: formFixture,
+          message: 'Your preparation is ready.',
         }))
       }
       if (body.event_type === 'document_evidence') {
@@ -255,13 +295,15 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
         confirmed: true,
         answers,
         current_question_id: next.next_question?.question_id ?? null,
+        current_preparation_question_id: next.complete ? 'prepare-new-address' : null,
       }
       return response(graphTurn({
         state: nextState,
         procedure: activeSummary,
         readiness: next,
-        checklist: next.complete ? checklistFixture : null,
-        preparation: next.complete ? formFixture : null,
+        checklist: checklistFixture,
+        preparation: formFixture,
+        preparationQuestion: next.complete ? formFixture.fields[1] : null,
         message: next.next_question?.prompt ?? 'Your preparation is ready.',
       }))
     }
@@ -629,9 +671,22 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
     expect(await screen.findByRole('heading', { name: completeReadiness.outcome?.title })).toBeInTheDocument()
     expect(screen.getAllByText(completeReadiness.outcome?.explanation ?? '')).toHaveLength(1)
+    expect(await screen.findByText('What new address should your preparation sheet show?')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Open the official service/ })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('New address'), { target: { value: 'Synthetic Demo Local Address' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm and continue' }))
     expect(await screen.findByText('DEMO — NOT FOR SUBMISSION')).toBeInTheDocument()
+    expect(screen.getByText('Review prepared information')).toBeInTheDocument()
     expect(screen.getByText('Ready for the demonstrated path.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Open the official service/ })).toHaveAttribute('href', detail.official_handoff_url)
+    expect(await screen.findByRole('link', { name: /Open the official service/ })).toHaveAttribute('href', detail.official_handoff_url)
+    expect(screen.getAllByText('Synthetic Demo Local Address')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit answer' }))
+    fireEvent.change(screen.getByLabelText('New address'), { target: { value: 'Edited Synthetic Local Address' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save edit' }))
+    expect(screen.getByText('Edited Synthetic Local Address')).toBeInTheDocument()
+    const fieldCall = fetchMock.mock.calls.find(call => String(call[0]).endsWith('/conversation/turn') && String(call[1]?.body).includes('field_completed'))
+    expect(fieldCall).toBeDefined()
+    expect(String(fieldCall?.[1]?.body)).not.toContain('Synthetic Demo Local Address')
     expect(screen.getByRole('heading', { name: 'What do you need help with?' })).toBeInTheDocument()
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/conversation/turn'))).toBe(true)
     expect(fetchMock.mock.calls.some(call => String(call[0]).includes('/checklist'))).toBe(false)
@@ -672,8 +727,8 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.queryByLabelText('Tell us what service you need')).not.toBeInTheDocument()
   })
 
-  it('clarifies an unqualified address change inside the pension task and switches only to a verified catalogue procedure', async () => {
-    const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
+  it('hides the free-text composer while a structured pension question is active', async () => {
+    mockApi({ procedures: [summary, pensionSummary] })
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
@@ -682,15 +737,9 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Yes, continue' }))
     await screen.findByText(pensionSensitiveQuestion.prompt)
-    fireEvent.change(input, { target: { value: 'I need to change the address' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
-    expect(await screen.findByText(/address linked to Aadhaar/)).toHaveTextContent('Sahayi will not assume either')
-    const choices = screen.getAllByRole('button', { name: /Aadhaar address|Kerala Indira Gandhi/ })
-    expect(choices).toHaveLength(2)
-    fireEvent.click(choices.find(item => item.textContent?.includes('Aadhaar'))!)
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, continue' }))
-    await waitFor(() => expect(fetchMock.mock.calls.some(call => String(call[0]).includes(`/procedures/${summary.service_id}?locale=en`))).toBe(true))
-    expect(fetchMock.mock.calls.every(call => !String(call[0]).includes('pension-record-address'))).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tell us what service you need')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Browse all services' })).toBeInTheDocument()
   })
 
   it('supports both example services, ambiguous/no-match fallback, and local PII warning', async () => {
@@ -873,7 +922,7 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].browseServices }))
     fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
     fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].syntheticForm }))
-    fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].nextField }))
+    for (let index = 0; index < formFixture.fields.length; index += 1) fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].nextField }))
     fireEvent.click(await screen.findByRole('button', { name: continueLabel }))
     expect(await screen.findByText(disclosure)).toBeInTheDocument()
     expect(screen.getByText(UI_MESSAGES[locale].noGovernmentContact)).toBeInTheDocument()
@@ -886,7 +935,7 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Next demo field' }))
+    for (let index = 0; index < formFixture.fields.length; index += 1) fireEvent.click(await screen.findByRole('button', { name: 'Next demo field' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Continue with demo submission' }))
     fireEvent.click(screen.getByRole('button', { name: 'Action-required scenario' }))
     expect(await screen.findByText('DEMO-UIDAI-ACTION')).toBeInTheDocument()
@@ -918,7 +967,7 @@ describe('Sahayi verified procedure flow', () => {
     render(<App />)
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Next demo field' }))
+    for (let index = 0; index < formFixture.fields.length; index += 1) fireEvent.click(await screen.findByRole('button', { name: 'Next demo field' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Continue with demo submission' }))
     fireEvent.click(screen.getByRole('button', { name: 'Normal completion scenario' }))
     await screen.findByText('DEMO-UIDAI-NORMAL')

@@ -843,7 +843,7 @@
     "form_source_ids": [
       "kerala-ign-oap-application-form"
     ],
-    "fields": [
+    "preparation_fields": [
       {
         "field_id": "applicant-name",
         "label": {
@@ -861,7 +861,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-applicant-name",
+        "question": { "en": "What applicant name should the preparation sheet show?", "hi": "तैयारी शीट पर आवेदक का कौन-सा नाम दिखना चाहिए?", "ml": "തയ്യാറെടുപ്പ് ഷീറ്റിൽ അപേക്ഷകന്റെ ഏത് പേരാണ് കാണിക്കേണ്ടത്?" },
+        "why_needed": { "en": "The reviewed official form contains applicant-name fields.", "hi": "समीक्षित आधिकारिक फॉर्म में आवेदक के नाम के क्षेत्र हैं।", "ml": "അവലോകനം ചെയ്ത ഔദ്യോഗിക ഫോമിൽ അപേക്ഷകന്റെ പേരിനുള്ള ഫീൽഡുകളുണ്ട്." },
+        "input_type": "text",
+        "required": true,
+        "validation": { "kind": "non_empty_text", "minimum_length": 2, "maximum_length": 120 },
+        "supported_value_sources": ["citizen_confirmed_local_answer", "citizen_confirmed_local_ocr_suggestion"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "gender-category",
@@ -884,7 +897,24 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-gender-category",
+        "question": { "en": "Which gender category should the preparation sheet show?", "hi": "तैयारी शीट पर कौन-सी लिंग श्रेणी दिखनी चाहिए?", "ml": "തയ്യാറെടുപ്പ് ഷീറ്റിൽ ഏത് ലിംഗ വിഭാഗമാണ് കാണിക്കേണ്ടത്?" },
+        "why_needed": { "en": "The reviewed official form includes this category.", "hi": "समीक्षित आधिकारिक फॉर्म में यह श्रेणी है।", "ml": "അവലോകനം ചെയ്ത ഔദ്യോഗിക ഫോമിൽ ഈ വിഭാഗമുണ്ട്." },
+        "input_type": "single_choice",
+        "required": true,
+        "validation": { "kind": "single_choice", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": ["citizen_confirmed_local_answer", "bundled_synthetic_demonstration_profile"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [
+          { "option_id": "woman", "label": { "en": "Woman", "hi": "महिला", "ml": "സ്ത്രീ" } },
+          { "option_id": "man", "label": { "en": "Man", "hi": "पुरुष", "ml": "പുരുഷൻ" } },
+          { "option_id": "other", "label": { "en": "Other / as applicable", "hi": "अन्य / जैसा लागू हो", "ml": "മറ്റ് / ബാധകമായത്" } }
+        ],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "contact-and-address",
@@ -903,7 +933,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-contact-and-address",
+        "question": { "en": "What contact address should the preparation sheet show?", "hi": "तैयारी शीट पर कौन-सा संपर्क पता दिखना चाहिए?", "ml": "തയ്യാറെടുപ്പ് ഷീറ്റിൽ ഏത് ബന്ധപ്പെടാനുള്ള വിലാസമാണ് കാണിക്കേണ്ടത്?" },
+        "why_needed": { "en": "The reviewed form contains address and contact fields; keep identifiers for the official channel.", "hi": "समीक्षित फॉर्म में पता और संपर्क क्षेत्र हैं; पहचान संख्याएँ आधिकारिक माध्यम के लिए रखें।", "ml": "അവലോകനം ചെയ്ത ഫോമിൽ വിലാസ-ബന്ധപ്പെടൽ ഫീൽഡുകളുണ്ട്; തിരിച്ചറിയൽ നമ്പറുകൾ ഔദ്യോഗിക ചാനലിന് മാത്രം നൽകുക." },
+        "input_type": "textarea",
+        "required": true,
+        "validation": { "kind": "non_empty_text", "minimum_length": 5, "maximum_length": 240 },
+        "supported_value_sources": ["citizen_confirmed_local_answer", "citizen_confirmed_local_ocr_suggestion"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "identity-card-numbers",
@@ -922,7 +965,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-identity-card-numbers",
+        "question": { "en": "Identity-card numbers", "hi": "पहचान-पत्र नंबर", "ml": "തിരിച്ചറിയൽ കാർഡ് നമ്പറുകൾ" },
+        "why_needed": { "en": "Provide identifiers only on the official form or to the local body.", "hi": "पहचान संख्याएँ केवल आधिकारिक फॉर्म या स्थानीय निकाय को दें।", "ml": "തിരിച്ചറിയൽ നമ്പറുകൾ ഔദ്യോഗിക ഫോമിലോ തദ്ദേശസ്ഥാപനത്തിനോ മാത്രം നൽകുക." },
+        "input_type": "not_collected",
+        "required": false,
+        "validation": { "kind": "not_collected", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": [],
+        "may_appear_on_sheet": true,
+        "confirmation_required": false,
+        "editable": false,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "kerala-residence-years",
@@ -945,7 +1001,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-kerala-residence-years",
+        "question": { "en": "Has the Kerala residence period been confirmed?", "hi": "क्या केरल निवास अवधि की पुष्टि हुई है?", "ml": "കേരളത്തിലെ താമസകാലം സ്ഥിരീകരിച്ചിട്ടുണ്ടോ?" },
+        "why_needed": { "en": "This is derived only from the confirmed readiness category.", "hi": "यह केवल पुष्टि की गई तैयारी श्रेणी से निकाला जाता है।", "ml": "സ്ഥിരീകരിച്ച തയ്യാറെടുപ്പ് വിഭാഗത്തിൽ നിന്ന് മാത്രം ഇത് നിർണ്ണയിക്കുന്നു." },
+        "input_type": "readiness_value",
+        "required": true,
+        "validation": { "kind": "structural", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": ["deterministic_derived_value", "bundled_synthetic_demonstration_profile"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": "kerala-residence-three-years",
+        "document_ids": []
       },
       {
         "field_id": "income-tax-declaration",
@@ -968,7 +1037,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-income-tax-declaration",
+        "question": { "en": "Has the income-tax declaration been confirmed?", "hi": "क्या आयकर घोषणा की पुष्टि हुई है?", "ml": "ആദായനികുതി പ്രഖ്യാപനം സ്ഥിരീകരിച്ചിട്ടുണ്ടോ?" },
+        "why_needed": { "en": "This is derived only from the confirmed readiness category.", "hi": "यह केवल पुष्टि की गई तैयारी श्रेणी से निकाला जाता है।", "ml": "സ്ഥിരീകരിച്ച തയ്യാറെടുപ്പ് വിഭാഗത്തിൽ നിന്ന് മാത്രം ഇത് നിർണ്ണയിക്കുന്നു." },
+        "input_type": "readiness_value",
+        "required": true,
+        "validation": { "kind": "structural", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": ["deterministic_derived_value", "bundled_synthetic_demonstration_profile"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": "income-tax-payer",
+        "document_ids": []
       },
       {
         "field_id": "bank-details",
@@ -987,7 +1069,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-bank-details",
+        "question": { "en": "Bank delivery and account details", "hi": "बैंक भुगतान और खाता विवरण", "ml": "ബാങ്ക് വിതരണവും അക്കൗണ്ട് വിവരങ്ങളും" },
+        "why_needed": { "en": "Provide these privately to the local body only if applicable.", "hi": "लागू होने पर इन्हें केवल स्थानीय निकाय को निजी रूप से दें।", "ml": "ബാധകമാണെങ്കിൽ ഇവ തദ്ദേശസ്ഥാപനത്തിന് സ്വകാര്യമായി മാത്രം നൽകുക." },
+        "input_type": "not_collected",
+        "required": false,
+        "validation": { "kind": "not_collected", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": [],
+        "may_appear_on_sheet": true,
+        "confirmation_required": false,
+        "editable": false,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "supporting-records",
@@ -1006,7 +1101,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-supporting-records",
+        "question": { "en": "Which supporting-record category will you take to the local body?", "hi": "आप स्थानीय निकाय में कौन-सी सहायक रिकॉर्ड श्रेणी ले जाएँगे?", "ml": "തദ്ദേശസ്ഥാപനത്തിലേക്ക് ഏത് സഹായ രേഖാ വിഭാഗമാണ് കൊണ്ടുപോകുന്നത്?" },
+        "why_needed": { "en": "A citizen-confirmed local clue can help prepare the checklist; files are never uploaded.", "hi": "नागरिक द्वारा पुष्टि किया स्थानीय संकेत चेकलिस्ट तैयार करने में मदद कर सकता है; फ़ाइलें कभी अपलोड नहीं होतीं।", "ml": "പൗരൻ സ്ഥിരീകരിച്ച പ്രാദേശിക സൂചന ചെക്ക്‌ലിസ്റ്റ് തയ്യാറാക്കാൻ സഹായിക്കും; ഫയലുകൾ ഒരിക്കലും അപ്‌ലോഡ് ചെയ്യില്ല." },
+        "input_type": "document_clue",
+        "required": false,
+        "validation": { "kind": "non_empty_text", "minimum_length": 2, "maximum_length": 120 },
+        "supported_value_sources": ["citizen_confirmed_local_answer", "citizen_confirmed_local_ocr_suggestion"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": ["supporting-documents"]
       },
       {
         "field_id": "place-date-signature",
@@ -1025,7 +1133,20 @@
         "status": "verified_official_form",
         "source_ids": [
           "kerala-ign-oap-application-form"
-        ]
+        ],
+        "question_id": "prepare-place-date-signature",
+        "question": { "en": "Place, date and applicant signature", "hi": "स्थान, तारीख और आवेदक के हस्ताक्षर", "ml": "സ്ഥലം, തീയതി, അപേക്ഷകന്റെ ഒപ്പ്" },
+        "why_needed": { "en": "Complete these privately on the official form; Sahayi does not collect a signature.", "hi": "इन्हें आधिकारिक फॉर्म पर निजी रूप से पूरा करें; Sahayi हस्ताक्षर एकत्र नहीं करता।", "ml": "ഇവ ഔദ്യോഗിക ഫോമിൽ സ്വകാര്യമായി പൂരിപ്പിക്കുക; Sahayi ഒപ്പ് ശേഖരിക്കില്ല." },
+        "input_type": "not_collected",
+        "required": false,
+        "validation": { "kind": "not_collected", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": [],
+        "may_appear_on_sheet": true,
+        "confirmation_required": false,
+        "editable": false,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       }
     ],
     "personas": [

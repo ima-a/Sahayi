@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first multilingual conversation prototype for a small verified catalogue of public-service procedures. It uses bounded workflow orchestration to ask the next relevant question, applies deterministic Procedure Pack rules, can optionally inspect supported documents locally on the citizen's device, prepares guidance, and hands the citizen to verified official channels.
+Sahayi is a privacy-first multilingual public-service preparation prototype. It identifies a supported verified procedure, asks the required questions, automatically prepares a personalised checklist and demonstration worksheet, and guides the citizen to the official channel when official action is required.
 
 **Public demo:** [https://sahayi.onrender.com](https://sahayi.onrender.com)
 
@@ -22,9 +22,9 @@ English is the canonical verified guidance. Hindi and Malayalam are machine-assi
 1. Choose English, Hindi, or Malayalam, press **Start**, and enter one conversation with text or optional voice; browsing the two verified services remains secondary.
 2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. Finder text is not sent online.
 3. Confirm the proposed verified service. Ambiguous address requests inside the pension task are clarified using only catalogue entries.
-4. Stay in the same conversation while Sahayi asks the next bounded readiness question and shows only relevant suggested responses.
-5. At a relevant document question, optionally choose a JPEG, PNG, WebP, or PDF for browser-local printed-text OCR. The file and OCR text never leave the browser; only a citizen-confirmed, allowlisted clue may reach the stateless graph.
-6. When readiness completes, Sahayi automatically derives the deterministic checklist and synthetic preparation worksheet and presents the verified official handoff. Citizens do not select separate readiness, checklist, or form modes in the primary journey.
+4. Stay in the same conversation while Sahayi asks one verified readiness or preparation question at a time. Confirmed answers immediately fill one browser-memory preparation record; already completed fields are skipped.
+5. At a relevant document question, optionally choose a JPEG, PNG, WebP, or PDF for browser-local printed-text OCR. The file, OCR text, and suggested personal value never leave the browser. A confirmed allowlisted clue can fill its mapped preparation field locally while only the clue category ID reaches the stateless graph.
+6. Sahayi continuously recomputes deterministic readiness and the checklist, shows missing fields, and produces a populated printable sheet with the exact `DEMO — NOT FOR SUBMISSION` watermark. The citizen can review and edit locally entered values before the verified official handoff.
 7. Detailed provenance and synthetic demo views remain secondary. The optional GroqCloud assistant remains separately disclosed and consent-gated when configured; it is not required for the deterministic conversation.
 8. Select **Start Over** or **End session** at any time; navigation, language change, cancellation, replacement, errors, unmount, and inactivity also terminate active document work and clear ephemeral content.
 
@@ -50,12 +50,12 @@ The production image builds React with Vite and serves the compiled files and `/
 
 | Area | Status | Boundary |
 | --- | --- | --- |
-| Unified conversation, local service finder, bounded LangGraph, automatic readiness/checklist/preparation/handoff, End Session and inactivity clearing | Fully working and deterministic | Stateless graph plus validated server-side rules; no AI decides facts or outcomes |
+| Unified conversation, local service finder, bounded LangGraph, automatic browser-memory field filling/readiness/checklist/preparation/handoff, End Session and inactivity clearing | Fully working and deterministic | Stateless graph receives only field IDs and safe structural state; no personal preparation value or AI decides facts/outcomes |
 | Optional local document helper | Browser-local progressive enhancement for printed JPEG/PNG/WebP and up to three PDF pages | Tesseract.js/PDF.js assets are pinned and self-hosted; OCR is uncertain and is not authenticity or government validation |
 | Procedure Pack provenance, version selection, freshness, fee-conflict display and schema validation | Fully working and deterministic | Active packs fail closed; reviewed facts remain source-linked |
 | Optional “Ask Sahayi AI” guidance | Consent-gated GroqCloud feature; disabled without both flag and server key | Groq's selected model may guide tool order/prose, while Sahayi validates output and reconstructs facts/actions from deterministic results |
 | Voice input and read-aloud | Progressive browser enhancement | Explicit start only; browser/vendor recognition may not be on-device; transcript is memory-only and text remains complete fallback |
-| Form preparation and application/status journey | Synthetic/demo-only | Fixed fictional personas, blank private fields, `DEMO — NOT FOR SUBMISSION`, and obvious `DEMO-...` references; no government contact |
+| Conversation-driven preparation | Populated demonstration preparation sheet plus separate synthetic persona demo | Citizen values remain editable in React memory, unsupported/identifier fields stay blank, every sheet is watermarked, and no government contact occurs |
 | Live submission, real status, OTP/payment, DigiLocker, certified translation and automatic fact activation | Out of prototype scope | No integration or production claim |
 
 ## Local matching ensemble
@@ -72,7 +72,7 @@ Conflicting official claims are preserved independently with their sources. Saha
 
 ## Privacy and safety boundary
 
-Finder text, match results, language, public graph state, readiness state, checklist, worksheet, demo status, consent, and conversation stay in React memory except for the bounded data deliberately sent in current API requests. Document files, filenames, raw OCR text, identifier-shaped OCR values, canvases, and worker state remain local and ephemeral. Static OCR runtime assets may use ordinary HTTP caching; citizen-derived content is not placed in cookies, local/session storage, IndexedDB, Cache Storage, service workers, filesystem APIs, logs, or server state. API responses use `Cache-Control: no-store`.
+Finder text, match results, conversation history, preparation values and their source/confirmation/validation/edit metadata, checklist, worksheet, and document suggestions stay in React memory. Conversation turns send only allowlisted service/question IDs, safe readiness categories, completed/missing field IDs, and confirmed document-clue category IDs. Names, addresses, form values, document files, filenames, raw OCR text, identifier-shaped OCR values, canvases, and worker state never enter FastAPI, LangGraph, Groq, logs, telemetry, or browser storage. Static OCR runtime assets may use ordinary HTTP caching; citizen-derived content is not placed in cookies, local/session storage, IndexedDB, Cache Storage, service workers, filesystem APIs, logs, or server state. API responses use `Cache-Control: no-store`.
 
 The graph uses one typed state machine with safety/consent, intent clarification, procedure routing, document evidence, interview/readiness, parallel checklist/preparation, explanation, and official-handoff nodes. It has no checkpointer, store, thread persistence, database, LangSmith tracing, or telemetry. Browser-carried state is revalidated against the current active Procedure Pack on every turn.
 

@@ -18,7 +18,7 @@ describe('DocumentHelper', () => {
     fireEvent.change(input, { target: { files: [new File([new Uint8Array([1])], 'synthetic.png', { type: 'image/png' })] } })
     await screen.findByText(/appears to contain information relevant/)
     fireEvent.click(screen.getByRole('button', { name: 'Confirm this clue' }))
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ document_id: 'valid-proof-of-address', appears_relevant: true, citizen_confirmed: true }))
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({ document_id: 'valid-proof-of-address', appears_relevant: true, citizen_confirmed: true }, 'Valid proof of address'))
     expect(JSON.stringify(onConfirm.mock.calls)).not.toContain('valid proof address accepted guidance')
   })
 

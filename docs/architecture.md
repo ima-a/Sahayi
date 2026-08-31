@@ -51,7 +51,7 @@ The model is imported at build time and embedded in the compiled frontend. Infer
 
 The browser keeps only the active public journey state in React memory. `POST /api/v1/conversation/turn` runs one compiled typed LangGraph as a bounded next-action machine: safety/consent, intent clarification, verified-procedure routing, confirmed document evidence, interview/readiness, parallel checklist and preparation, explanation, and official handoff. The graph has a 12-step recursion budget, at most one optional provider call, no retries, and explicit terminal/awaiting-user responses. It has no checkpointer, store, Agent Server, durable interrupts, database, server thread, LangSmith tracing, or telemetry.
 
-Procedure Packs remain the authority. Every browser-carried service ID, candidate, answer, question ID, option, and document ID is untrusted and revalidated against the active registry; readiness is recomputed from the complete bounded answer map. Independent deterministic checklist and synthetic preparation nodes fan out only after readiness completes. The graph emits only a pack-owned official URL. Within a Kerala pension task, the browser handles the narrow unqualified-address clarification using only the two loaded catalogue entries and never creates a pension-record address procedure.
+Procedure Packs remain the authority. Their strict `preparation_fields` definitions map stable field/question IDs to localized prompts, input/validation rules, allowed local sources, confirmation/edit/sheet behavior, readiness derivations, document clue categories, and reviewed sources. Every browser-carried service ID, candidate, readiness answer, question ID, completed field ID, option, and document ID is untrusted and revalidated against the active registry. Personal values never enter graph state. Checklist and structural preparation nodes fan out deterministically after every interview turn; official handoff is withheld until readiness and required structural field progress are complete. Within a Kerala pension task, the browser handles the narrow unqualified-address clarification using only the two loaded catalogue entries and never creates a pension-record address procedure.
 
 ## Browser-local document assistance
 
@@ -67,7 +67,7 @@ FastAPI loads Procedure Pack v1 JSON through strict Pydantic models. Exactly one
 
 The server exposes versioned `/api/v1` endpoints for health/public configuration, catalogue/detail, readiness, checklists, synthetic form assistance, synthetic submission/status, the stateless conversation turn, and the optional assistant. Procedure/readiness/orchestration APIs are stateless, accept only bounded schema-validated values, and return `Cache-Control: no-store`. Stable facts, rules, options, source URLs, and outcomes are language invariant; locale selects reviewed static text only.
 
-Readiness evaluates a bounded JSON AST rather than executable expressions. Checklists, worksheets, and simulated status are reconstructed from validated pack IDs and deterministic functions. “Readiness” is procedural guidance—not eligibility, approval, legal advice, submission, or government status.
+Readiness evaluates a bounded JSON AST rather than executable expressions. React validates and retains personal preparation answers in memory, overlays them on the pack-owned sheet, skips completed fields, supports local edits, and prints the populated demonstration sheet. FastAPI receives only structural progress and returns deterministic checklists, missing-field IDs, worksheet definitions, and handoff state. “Readiness” is procedural guidance—not eligibility, approval, legal advice, submission, or government status.
 
 ## Optional GroqCloud boundary
 
@@ -83,7 +83,7 @@ Active sources may declare bounded monitoring metadata. The monitoring CLI is of
 
 The conversation-first browser workspace retains only ephemeral journey state. The primary composer, history, suggested answers, progress, automatic preparation summary, and official handoff remain one surface; catalogue/provenance and synthetic demo pages are secondary. Optional SpeechRecognition/webkitSpeechRecognition starts only after an explicit microphone action and uses `en-IN`, `hi-IN`, or `ml-IN`; it may rely on browser/vendor processing and always has a complete text fallback. Speech synthesis reads only the current visible deterministic question, explanation, checklist, or next step. Recognition and synthesis stop on navigation, language change, session clearing, inactivity expiry, and unmount. Sahayi does not store or log audio or transcripts.
 
-Worksheets and submission/status flows use allowlisted fictional personas, closed choices, watermarks, and `DEMO-...` references. They do not fill an official form, create a server file, contact a government system, or track an application.
+The primary worksheet may display citizen-confirmed browser-memory values but is always marked `DEMO — NOT FOR SUBMISSION`; it is a preparation sheet, not an official form or server file. The separate synthetic persona and submission/status flows use allowlisted fictional values and `DEMO-...` references. Neither path contacts a government system, submits an application, or tracks one.
 
 ## Runtime and deployment
 

@@ -154,7 +154,14 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .integer-response label { color: #173d2e; font-weight: 750; }
 .integer-response input { min-height: 50px; padding: 8px 12px; border: 2px solid #78988b; border-radius: 10px; font: inherit; }
 .integer-response button { padding-inline: 18px; }
+.local-field-response { display: grid; gap: 10px; max-width: 680px; margin: 16px 0 22px; }
+.local-field-response label { color: #173d2e; font-weight: 800; }
+.local-field-response input, .local-field-response textarea, .worksheet-fields input { width: 100%; min-height: 50px; padding: 11px 12px; border: 2px solid #78988b; border-radius: 10px; color: #173d2e; font: inherit; }
+.local-field-response textarea { min-height: 104px; resize: vertical; }
+.local-field-response button { justify-self: start; min-height: 50px; }
 .prepared-guidance summary { cursor: pointer; color: #173d2e; font-weight: 850; }
+.prepared-sheet { margin-top: 22px; }
+.missing-information { padding: 12px; border-left: 4px solid #b76500; background: #fff8e8; }
 .official-ready .secondary { width: 100%; margin-top: 12px; }
 .conversation-composer { margin-top: 30px; padding-top: 24px; border-top: 1px solid #c9ded5; }
 .conversation-composer textarea { width: 100%; min-height: 100px; padding: 14px; border: 2px solid #78988b; border-radius: 12px; color: #173d2e; resize: vertical; }
@@ -177,7 +184,7 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .conversation-page .voice-controls > div { gap: 8px; }
 .conversation-page .voice-controls details { margin-top: 6px; color: #526d62; font-size: .8rem; }
 .conversation-page .voice-controls details p { max-width: 520px; margin: 6px 0; font-size: .82rem; }
-.conversation-composer textarea:focus-visible, .integer-response input:focus-visible { outline: 4px solid #d6a312; outline-offset: 3px; }
+.conversation-composer textarea:focus-visible, .integer-response input:focus-visible, .local-field-response input:focus-visible, .local-field-response textarea:focus-visible, .worksheet-fields input:focus-visible { outline: 4px solid #d6a312; outline-offset: 3px; }
 .fact-card, .checklist-result { margin: 18px 0; padding: 20px; border: 1px solid #afccbf; border-radius: 14px; background: #f8fcfa; }
 .fact-card h2, .checklist-result h2 { margin-top: 0; }
 .activity { color: #526d62; font-size: .9rem; }
@@ -242,6 +249,10 @@ fieldset { margin: 0; padding: 0; border: 0; }
   .kiosk-shell { display: block; min-height: auto; padding: 0; background: #fff; }
   .content-card { width: 100%; max-width: none; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
   .no-print, .language-controls, .journey-summary { display: none !important; }
+  .conversation-header, .conversation-page > h1, .conversation, .conversation-question, .conversation-result, .contextual-sources, .official-ready, .browse-fallback { display: none !important; }
+  .prepared-guidance { display: block; margin: 0; padding: 0; border: 0; background: #fff; }
+  .prepared-guidance > summary, .prepared-guidance > h2, .prepared-guidance > p, .prepared-guidance > ul { display: none; }
+  .prepared-guidance > .prepared-sheet { display: block !important; }
   a { color: #000; text-decoration: underline; }
   .watermark { break-inside: avoid; }
 }

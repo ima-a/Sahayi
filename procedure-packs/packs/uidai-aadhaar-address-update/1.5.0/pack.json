@@ -729,7 +729,7 @@
       "ml": "ആധാർ വിലാസ പുതുക്കൽ തയ്യാറെടുപ്പ് വർക്ക്‌ഷീറ്റ്"
     },
     "form_source_ids": [],
-    "fields": [
+    "preparation_fields": [
       {
         "field_id": "update-route",
         "label": {
@@ -752,7 +752,20 @@
         "source_ids": [
           "uidai-update-overview",
           "uidai-enrolment-update-faq"
-        ]
+        ],
+        "question_id": "prepare-update-route",
+        "question": { "en": "Which verified update route are you preparing for?", "hi": "आप किस सत्यापित अपडेट मार्ग की तैयारी कर रहे हैं?", "ml": "ഏത് പരിശോധിച്ച പുതുക്കൽ മാർഗത്തിനാണ് നിങ്ങൾ തയ്യാറെടുക്കുന്നത്?" },
+        "why_needed": { "en": "The route determines the verified document and handoff steps.", "hi": "मार्ग सत्यापित दस्तावेज़ और अगले चरण तय करता है।", "ml": "പരിശോധിച്ച രേഖയും കൈമാറ്റ ഘട്ടങ്ങളും മാർഗം നിർണ്ണയിക്കുന്നു." },
+        "input_type": "readiness_value",
+        "required": true,
+        "validation": { "kind": "structural", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": ["deterministic_derived_value", "bundled_synthetic_demonstration_profile"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": "address-update-route",
+        "document_ids": []
       },
       {
         "field_id": "mobile-auth-ready",
@@ -775,7 +788,20 @@
         "status": "preparation_only",
         "source_ids": [
           "uidai-update-overview"
-        ]
+        ],
+        "question_id": "prepare-mobile-auth-ready",
+        "question": { "en": "Is registered-mobile authentication available?", "hi": "क्या पंजीकृत मोबाइल प्रमाणीकरण उपलब्ध है?", "ml": "രജിസ്റ്റർ ചെയ്ത മൊബൈൽ പ്രാമാണീകരണം ലഭ്യമാണോ?" },
+        "why_needed": { "en": "UIDAI requires authentication for the online route; no number or OTP is collected.", "hi": "ऑनलाइन मार्ग के लिए UIDAI प्रमाणीकरण चाहता है; कोई नंबर या OTP एकत्र नहीं होता।", "ml": "ഓൺലൈൻ മാർഗത്തിന് UIDAI പ്രാമാണീകരണം ആവശ്യപ്പെടുന്നു; നമ്പറോ OTPയോ ശേഖരിക്കില്ല." },
+        "input_type": "readiness_value",
+        "required": true,
+        "validation": { "kind": "structural", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": ["deterministic_derived_value", "bundled_synthetic_demonstration_profile"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": "mobile-auth-access",
+        "document_ids": []
       },
       {
         "field_id": "poa-ready",
@@ -798,7 +824,20 @@
         "status": "preparation_only",
         "source_ids": [
           "uidai-enrolment-update-faq"
-        ]
+        ],
+        "question_id": "prepare-poa-ready",
+        "question": { "en": "Is an accepted proof-of-address document ready?", "hi": "क्या स्वीकृत पता-प्रमाण दस्तावेज़ तैयार है?", "ml": "അംഗീകരിച്ച വിലാസ തെളിവ് രേഖ തയ്യാറാണോ?" },
+        "why_needed": { "en": "The own-document route requires a document matching UIDAI guidance.", "hi": "स्वयं-दस्तावेज़ मार्ग के लिए UIDAI मार्गदर्शन से मेल खाता दस्तावेज़ चाहिए।", "ml": "സ്വന്തം-രേഖ മാർഗത്തിന് UIDAI മാർഗനിർദേശവുമായി പൊരുത്തപ്പെടുന്ന രേഖ വേണം." },
+        "input_type": "readiness_value",
+        "required": false,
+        "validation": { "kind": "structural", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": ["deterministic_derived_value", "bundled_synthetic_demonstration_profile"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": "accepted-poa-ready",
+        "document_ids": []
       },
       {
         "field_id": "aadhaar-number",
@@ -817,7 +856,20 @@
         "status": "preparation_only",
         "source_ids": [
           "uidai-update-overview"
-        ]
+        ],
+        "question_id": "prepare-aadhaar-number",
+        "question": { "en": "Aadhaar number", "hi": "आधार नंबर", "ml": "ആധാർ നമ്പർ" },
+        "why_needed": { "en": "Provide this only to the official UIDAI service.", "hi": "इसे केवल आधिकारिक UIDAI सेवा को दें।", "ml": "ഇത് ഔദ്യോഗിക UIDAI സേവനത്തിന് മാത്രം നൽകുക." },
+        "input_type": "not_collected",
+        "required": false,
+        "validation": { "kind": "not_collected", "minimum_length": null, "maximum_length": null },
+        "supported_value_sources": [],
+        "may_appear_on_sheet": true,
+        "confirmation_required": false,
+        "editable": false,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "new-address",
@@ -836,7 +888,20 @@
         "status": "preparation_only",
         "source_ids": [
           "uidai-enrolment-update-faq"
-        ]
+        ],
+        "question_id": "prepare-new-address",
+        "question": { "en": "What new address should your preparation sheet show?", "hi": "आपकी तैयारी शीट पर कौन-सा नया पता दिखना चाहिए?", "ml": "നിങ്ങളുടെ തയ്യാറെടുപ്പ് ഷീറ്റിൽ ഏത് പുതിയ വിലാസമാണ് കാണിക്കേണ്ടത്?" },
+        "why_needed": { "en": "This lets you review the address locally before using the official service.", "hi": "इससे आधिकारिक सेवा उपयोग करने से पहले पता इसी डिवाइस पर जाँचा जा सकता है।", "ml": "ഔദ്യോഗിക സേവനം ഉപയോഗിക്കുന്നതിന് മുമ്പ് ഈ ഉപകരണത്തിൽ വിലാസം പരിശോധിക്കാം." },
+        "input_type": "textarea",
+        "required": true,
+        "validation": { "kind": "non_empty_text", "minimum_length": 5, "maximum_length": 240 },
+        "supported_value_sources": ["citizen_confirmed_local_answer", "citizen_confirmed_local_ocr_suggestion"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": []
       },
       {
         "field_id": "proof-of-address-document",
@@ -856,7 +921,20 @@
         "source_ids": [
           "uidai-update-overview",
           "uidai-enrolment-update-faq"
-        ]
+        ],
+        "question_id": "prepare-proof-of-address-document",
+        "question": { "en": "Which proof-of-address document will you use?", "hi": "आप कौन-सा पता-प्रमाण दस्तावेज़ उपयोग करेंगे?", "ml": "ഏത് വിലാസ തെളിവ് രേഖയാണ് നിങ്ങൾ ഉപയോഗിക്കുക?" },
+        "why_needed": { "en": "The preparation sheet can record a citizen-confirmed local clue; the file is never uploaded.", "hi": "तैयारी शीट नागरिक द्वारा पुष्टि किए स्थानीय संकेत को लिख सकती है; फ़ाइल कभी अपलोड नहीं होती।", "ml": "പൗരൻ സ്ഥിരീകരിച്ച പ്രാദേശിക സൂചന തയ്യാറെടുപ്പ് ഷീറ്റിൽ രേഖപ്പെടുത്താം; ഫയൽ ഒരിക്കലും അപ്‌ലോഡ് ചെയ്യില്ല." },
+        "input_type": "document_clue",
+        "required": false,
+        "validation": { "kind": "non_empty_text", "minimum_length": 2, "maximum_length": 120 },
+        "supported_value_sources": ["citizen_confirmed_local_answer", "citizen_confirmed_local_ocr_suggestion"],
+        "may_appear_on_sheet": true,
+        "confirmation_required": true,
+        "editable": true,
+        "choices": [],
+        "readiness_question_id": null,
+        "document_ids": ["valid-proof-of-address"]
       }
     ],
     "personas": [
