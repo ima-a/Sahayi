@@ -9,6 +9,7 @@ import secrets
 import time
 import unicodedata
 from collections import defaultdict, deque
+from copy import deepcopy
 from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import Field, StringConstraints, ValidationError
@@ -59,6 +60,41 @@ _UNSAFE_MODEL_PROSE = re.compile(
     r"आप (?:पात्र|स्वीकृत) हैं|आवेदन स्वीकृत है|शुल्क (?:₹|रु|rs)|"
     r"നിങ്ങൾ (?:അർഹനാണ്|അർഹയാണ്)|അപേക്ഷ അംഗീകരിച്ചു|ഫീസ് (?:₹|rs)"
 )
+_SAFE_PROVIDER_ERROR_TYPES = {
+    "api_error",
+    "authentication_error",
+    "invalid_request_error",
+    "permission_error",
+    "rate_limit_error",
+    "server_error",
+}
+_SAFE_PROVIDER_ERROR_CODES = {
+    "authentication_error",
+    "invalid_request_error",
+    "json_schema_invalid",
+    "permission_denied",
+    "rate_limit_exceeded",
+    "server_error",
+}
+_SAFE_PROVIDER_ERROR_PARAM = re.compile(
+    r"^(?:input|instructions|max_output_tokens|model|parallel_tool_calls|stream|tool_choice|tools)"
+    r"(?:\[[0-9]{1,3}\]|\.[A-Za-z_][A-Za-z0-9_]{0,63})*$"
+)
+_SAFE_EXCEPTION_TYPES = {
+    "APIConnectionError",
+    "APIError",
+    "APIStatusError",
+    "APITimeoutError",
+    "AuthenticationError",
+    "BadRequestError",
+    "InternalServerError",
+    "PermissionDeniedError",
+    "RateLimitError",
+    "RuntimeError",
+    "TimeoutError",
+    "ValidationError",
+}
+_JSON_SCHEMA_TYPES = {"array", "boolean", "integer", "null", "number", "object", "string"}
 
 
 class PriorMessage(StrictModel):
@@ -351,17 +387,71 @@ def _log_failure(
     raw_status_code = getattr(error, "status_code", None)
     safe_status_code = raw_status_code if isinstance(raw_status_code, int) else None
     safe_response_status = response_status if response_status in {"completed", "failed", "in_progress", "incomplete"} else None
+    provider_error_type = _safe_provider_error_field_value(error, "type")
+    provider_error_code = _safe_provider_error_field_value(error, "code")
+    provider_error_param = _safe_provider_error_field_value(error, "param")
     logger.warning(
-        "assistant_turn_failed reason=%s provider=%s model=%s status_code=%s exception_type=%s response_status=%s round=%s tool_calls=%s",
+        "assistant_turn_failed reason=%s provider=%s model=%s status_code=%s exception_type=%s "
+        "provider_error_type=%s provider_error_code=%s provider_error_param=%s "
+        "response_status=%s round=%s tool_calls=%s",
         reason,
         runtime.settings.agent_provider,
         runtime.settings.agent_model,
         safe_status_code,
-        type(error).__name__ if error is not None else None,
+        _safe_exception_type(error),
+        provider_error_type,
+        provider_error_code,
+        provider_error_param,
         safe_response_status,
         round_number,
         tool_calls,
     )
+
+
+def _safe_provider_error_field_value(error: Exception | None, field: str) -> str | None:
+    """Extract only bounded provider classification fields, never a content-bearing message."""
+    if error is None:
+        return None
+    body = getattr(error, "body", None)
+    if not isinstance(body, dict):
+        return None
+    details = body.get("error", body)
+    if not isinstance(details, dict):
+        return None
+    value = details.get(field)
+    if not isinstance(value, str):
+        return None
+    if field == "type":
+        return value if value in _SAFE_PROVIDER_ERROR_TYPES else None
+    if field == "code":
+        return value if value in _SAFE_PROVIDER_ERROR_CODES else None
+    if field == "param":
+        return value if _SAFE_PROVIDER_ERROR_PARAM.fullmatch(value) is not None else None
+    return None
+
+
+def _safe_exception_type(error: Exception | None) -> str | None:
+    if error is None:
+        return None
+    exception_type = type(error).__name__
+    return exception_type if exception_type in _SAFE_EXCEPTION_TYPES else None
+
+
+def _provider_failure_reason(error: Exception) -> str:
+    status_code = getattr(error, "status_code", None)
+    if status_code == 400:
+        return "provider_bad_request"
+    if status_code == 401:
+        return "provider_authentication_error"
+    if status_code == 403:
+        return "provider_permission_error"
+    if status_code == 408 or isinstance(error, TimeoutError) or type(error).__name__ == "APITimeoutError":
+        return "provider_timeout"
+    if status_code == 429:
+        return "provider_rate_limit"
+    if isinstance(status_code, int) and status_code >= 500:
+        return "provider_server_error"
+    return "provider_api_error"
 
 
 def _service_choice(loaded: LoadedProcedure, locale: SupportedLocale) -> ServiceChoice:
@@ -505,18 +595,9 @@ async def _provider_turn(
             _log_failure("process_request_budget_exhausted", runtime, round_number=round_number, tool_calls=tool_calls)
             return safe_response(request.locale, "fallback")
         try:
-            response = await client.responses.create(
-                model=runtime.settings.agent_model,
-                instructions=_instructions(request.locale, selected_id, request.demo_status_id),
-                input=input_items,
-                tools=_tool_definitions(registry),
-                tool_choice="auto",
-                parallel_tool_calls=False,
-                stream=False,
-                max_output_tokens=runtime.settings.agent_max_output_tokens,
-            )
+            response = await client.responses.create(**_provider_request(request, registry, runtime, input_items, selected_id))
         except Exception as error:
-            _log_failure("provider_api_error", runtime, error=error, round_number=round_number, tool_calls=tool_calls)
+            _log_failure(_provider_failure_reason(error), runtime, error=error, round_number=round_number, tool_calls=tool_calls)
             status = "rate_limited" if getattr(error, "status_code", None) == 429 else "fallback"
             return safe_response(request.locale, status)
         response_status = getattr(response, "status", None)
@@ -595,6 +676,64 @@ def _strict_tool(name: str, description: str, properties: dict[str, Any], requir
         "description": description,
         "strict": True,
         "parameters": {"type": "object", "properties": properties, "required": required, "additionalProperties": False},
+    }
+
+
+def _normalise_groq_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert canonical JSON Schema unions to Groq's documented ``anyOf`` form."""
+    if not isinstance(schema, dict):
+        raise ValueError("Provider schema must be an object")
+
+    def visit(value: Any) -> Any:
+        if isinstance(value, list):
+            return [visit(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        normalized = {key: visit(item) for key, item in value.items() if key != "type"}
+        schema_type = value.get("type")
+        if schema_type is None:
+            return normalized
+        if isinstance(schema_type, str):
+            if schema_type not in _JSON_SCHEMA_TYPES:
+                raise ValueError("Unsupported provider schema type")
+            normalized["type"] = schema_type
+            return normalized
+        if not isinstance(schema_type, list) or not schema_type:
+            raise ValueError("Unsupported provider schema union")
+        if any(not isinstance(item, str) or item not in _JSON_SCHEMA_TYPES for item in schema_type):
+            raise ValueError("Unsupported provider schema union")
+        if len(set(schema_type)) != len(schema_type) or "anyOf" in normalized:
+            raise ValueError("Ambiguous provider schema union")
+        normalized["anyOf"] = [{"type": item} for item in schema_type]
+        return normalized
+
+    return visit(deepcopy(schema))
+
+
+def _provider_tool_definitions(registry: dict[str, LoadedProcedure]) -> list[dict[str, Any]]:
+    tools = deepcopy(_tool_definitions(registry))
+    for tool in tools:
+        tool["parameters"] = _normalise_groq_schema(tool["parameters"])
+    return tools
+
+
+def _provider_request(
+    request: AssistantTurnRequest,
+    registry: dict[str, LoadedProcedure],
+    runtime: AgentRuntime,
+    input_items: list[Any],
+    selected_id: str | None,
+) -> dict[str, Any]:
+    """Build the sole provider-bound request without mutating canonical schemas or input state."""
+    return {
+        "model": runtime.settings.agent_model,
+        "instructions": _instructions(request.locale, selected_id, request.demo_status_id),
+        "input": deepcopy(input_items),
+        "tools": _provider_tool_definitions(registry),
+        "tool_choice": "auto",
+        "parallel_tool_calls": False,
+        "stream": False,
+        "max_output_tokens": runtime.settings.agent_max_output_tokens,
     }
 
 

@@ -1,6 +1,16 @@
 # Task state
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
+
+## Groq/LangGraph contract restoration
+
+Release work continues on the existing `feat/sahayi-deployment` branch from exact fetched local/upstream commit `2fbc0d7339d60cbfd7c260609124b9639df93ad8` at divergence `0/0`, with `origin/main` unchanged at `256b8e4b5eb8663ed66ea7631f24a72885fa2c75`. The only initial pending files were the explicitly authorized `src/sahayi_api/agent.py` and `tests/test_agent.py`; no deleted historical branch was recreated and no unrelated work was discarded.
+
+The Groq HTTP 400 contract failure was isolated to an array-valued JSON Schema `type` in the provider tool definition (the readiness answer value path), which Groq rejected with safe classification `invalid_request_error`, code `json_schema_invalid`, and the structural rejected-parameter path. Canonical schemas and Pydantic validation remain unchanged. The sole existing adapter now deep-copies each provider-bound tool schema and recursively converts valid `type` arrays to equivalent `anyOf` branches. Its request remains limited to the fixed `openai/gpt-oss-120b` model, instructions, application-owned input, the exact seven local tools, `tool_choice: auto`, `parallel_tool_calls: false`, `stream: false`, and bounded output. No retry, fallback model, built-in/remote tool, reasoning option, persistence, or second client was added.
+
+Provider failures remain generic for citizens and deterministic guidance remains available. Server logs now distinguish bad request, authentication, permission, timeout, rate limit, server, and other API categories while admitting only allowlisted exception classes, HTTP status, narrowly allowlisted Groq error type/code/structural parameter, response status, graph round, and tool-call count. Citizen messages/history, prompts, provider messages/bodies/output, tool arguments/results, addresses, and credentials are never logged. Tests exercise successful and invalid execution for all seven registered tools: `list_supported_services`, `get_verified_procedure`, `get_readiness_questions`, `evaluate_readiness`, `build_personalized_checklist`, `prepare_synthetic_form_assistance`, and `explain_simulated_status`.
+
+Local release gates pass: 230 backend tests, 86 frontend tests, focused provider/orchestration tests, 17 offline agent evaluations, frontend lint/TypeScript/build, intent-model integrity, both Procedure Packs, schema drift, OCR asset integrity, `pip check`, zero-vulnerability `pip-audit`/`npm audit`, YAML parsing, same-origin/no-store runtime checks, and redacted secret/PII/logging/persistence/telemetry/frontend-bundle scans. No-cache image `4c9c55d75b9485efc8615d8975d94ff401a90ab9ce8873858b4411c79bf4f614` runs as UID/GID 10001 and passed root, hashed assets, OCR, localized API, public-config, and deterministic AI-disabled checks. The established browser suite passed 23 temporary `/tmp` screenshots across English/Hindi/Malayalam and 360/390/768/1280 widths, with zero local-intent network requests, explicit confirmation, one-question readiness, automatic preparation/handoff, same-origin local OCR, voice text fallback, Groq disclosure, exactly-once UI coverage, and session clearing. Visual review found no release-blocking issue. Commit/push, test-branch fast-forward, one Render deployment, hosted API/live Groq verification, and main fast-forward remain pending.
 
 ## LangGraph and local document-assistance release
 
