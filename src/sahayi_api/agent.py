@@ -47,6 +47,22 @@ TOOL_NAMES = (
     "prepare_synthetic_form_assistance",
     "explain_simulated_status",
 )
+AgentGraphNode = Literal[
+    "safety_intent",
+    "procedure_routing",
+    "readiness_interview",
+    "automatic_preparation",
+    "explanation_status",
+    "official_handoff",
+]
+NODE_TOOL_NAMES: dict[AgentGraphNode, tuple[str, ...]] = {
+    "safety_intent": ("list_supported_services",),
+    "procedure_routing": ("list_supported_services", "get_verified_procedure"),
+    "readiness_interview": ("get_readiness_questions", "evaluate_readiness"),
+    "automatic_preparation": ("build_personalized_checklist", "prepare_synthetic_form_assistance"),
+    "explanation_status": ("explain_simulated_status",),
+    "official_handoff": (),
+}
 ACTION_IDS = {
     "view-procedure",
     "start-readiness",
@@ -109,6 +125,7 @@ class AssistantTurnRequest(StrictModel):
     history: Annotated[list[PriorMessage], Field(default_factory=list, max_length=4)]
     service_id: Identifier | None = None
     readiness_answers: Annotated[dict[Identifier, AnswerValue], Field(default_factory=dict, max_length=30)]
+    synthetic_persona_id: Identifier | None = None
     demo_status_id: DemoStatusId | None = None
     consent: Literal[True]
 
@@ -162,7 +179,13 @@ class AgentModelOutput(StrictModel):
     guidance_message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1200)]
     selection_state: Literal["none", "clarification", "selected"]
     service_id: str | None
-    action_ids: Annotated[list[str], Field(max_length=8)]
+    action_ids: Annotated[list[Literal[
+        "view-procedure",
+        "start-readiness",
+        "build-checklist",
+        "prepare-synthetic-form",
+        "open-official-service",
+    ]], Field(max_length=8)]
 
 
 class ToolServiceListInput(StrictModel):
@@ -309,6 +332,7 @@ _COPY = {
         "switch": "This request appears to match a different verified Sahayi service. Choose it to switch without using facts from the currently selected service.",
         "address_clarify": "Do you mean an Aadhaar address update, or help related to the address on your Kerala pension record? Sahayi has a verified Aadhaar address-update procedure, but no separate verified pension-record address-change procedure, so I will not assume either. Choose the relevant verified service.",
         "pension_address_scope": "Sahayi's verified catalogue does not contain a separate pension-record address-change procedure. You can keep the Kerala pension service selected for its verified general guidance, but Sahayi will not invent address-change steps.",
+        "invite": "Tell me which government service you need help with, such as an Aadhaar address update or Kerala old-age pension.",
     },
     "hi": {
         "blocked": "मैं इस संदेश का उपयोग नहीं कर सकता क्योंकि इसमें निजी पहचान जानकारी हो सकती है। पहचान, संपर्क, पता और दस्तावेज़ विवरण हटाकर फिर प्रयास करें।",
@@ -327,6 +351,7 @@ _COPY = {
         "switch": "यह अनुरोध किसी दूसरी सत्यापित Sahayi सेवा से मेल खाता है। वर्तमान सेवा के तथ्यों का उपयोग किए बिना उस सेवा पर जाने के लिए उसे चुनें।",
         "address_clarify": "क्या आपका मतलब आधार का पता अपडेट करना है, या केरल पेंशन रिकॉर्ड के पते से जुड़ी मदद? Sahayi में आधार पता अपडेट की सत्यापित प्रक्रिया है, लेकिन पेंशन रिकॉर्ड का पता बदलने की अलग सत्यापित प्रक्रिया नहीं है; इसलिए मैं कोई अनुमान नहीं लगाऊँगा। संबंधित सत्यापित सेवा चुनें।",
         "pension_address_scope": "Sahayi की सत्यापित सूची में पेंशन रिकॉर्ड का पता बदलने की अलग प्रक्रिया नहीं है। आप सत्यापित सामान्य मार्गदर्शन के लिए केरल पेंशन सेवा चुनी रख सकते हैं, लेकिन Sahayi पता बदलने के चरण नहीं गढ़ेगा।",
+        "invite": "बताइए कि आपको किस सरकारी सेवा में मदद चाहिए, जैसे आधार पता अपडेट या केरल वृद्धावस्था पेंशन।",
     },
     "ml": {
         "blocked": "ഈ സന്ദേശത്തിൽ വ്യക്തിയെ തിരിച്ചറിയുന്ന വിവരങ്ങൾ ഉണ്ടായേക്കാം; അതിനാൽ എനിക്ക് ഇത് ഉപയോഗിക്കാനാകില്ല. തിരിച്ചറിയൽ, ബന്ധപ്പെടൽ, വിലാസം, രേഖാ വിവരങ്ങൾ നീക്കി വീണ്ടും ശ്രമിക്കുക.",
@@ -345,6 +370,7 @@ _COPY = {
         "switch": "ഈ അഭ്യർത്ഥന മറ്റൊരു പരിശോധിച്ച Sahayi സേവനവുമായി പൊരുത്തപ്പെടുന്നതായി തോന്നുന്നു. നിലവിൽ തിരഞ്ഞെടുത്ത സേവനത്തിലെ വസ്തുതകൾ ഉപയോഗിക്കാതെ മാറാൻ ആ സേവനം തിരഞ്ഞെടുക്കുക.",
         "address_clarify": "ആധാർ വിലാസം പുതുക്കലാണോ, അതോ കേരള പെൻഷൻ രേഖയിലെ വിലാസവുമായി ബന്ധപ്പെട്ട സഹായമാണോ ഉദ്ദേശിക്കുന്നത്? Sahayiയിൽ പരിശോധിച്ച ആധാർ വിലാസ-പുതുക്കൽ നടപടിയുണ്ട്, പക്ഷേ പെൻഷൻ രേഖയിലെ വിലാസം മാറ്റാൻ പ്രത്യേകം പരിശോധിച്ച നടപടിയില്ല; അതിനാൽ ഞാൻ ഒന്നും അനുമാനിക്കില്ല. ബന്ധപ്പെട്ട പരിശോധിച്ച സേവനം തിരഞ്ഞെടുക്കുക.",
         "pension_address_scope": "Sahayiയുടെ പരിശോധിച്ച പട്ടികയിൽ പെൻഷൻ രേഖയിലെ വിലാസം മാറ്റാനുള്ള പ്രത്യേക നടപടിയില്ല. പരിശോധിച്ച പൊതുവായ മാർഗനിർദേശത്തിനായി കേരള പെൻഷൻ സേവനം തിരഞ്ഞെടുത്ത നിലയിൽ തുടരാം, എന്നാൽ Sahayi വിലാസമാറ്റ നടപടികൾ സൃഷ്ടിക്കില്ല.",
+        "invite": "ആധാർ വിലാസം പുതുക്കൽ അല്ലെങ്കിൽ കേരള വയോജന പെൻഷൻ പോലുള്ള ഏത് സർക്കാർ സേവനത്തിലാണ് സഹായം വേണ്ടതെന്ന് പറയുക.",
     },
 }
 
@@ -375,6 +401,21 @@ def safe_response(
     )
 
 
+def _local_invitation_response(locale: SupportedLocale) -> AssistantTurnResponse:
+    return AssistantTurnResponse(
+        status="ok",
+        locale=locale,
+        message=_COPY[locale]["invite"],
+        selection=_empty_selection(),
+        fact_cards=[],
+        sources=[],
+        actions=[],
+        tool_trace=[],
+        disclaimer=_COPY[locale]["disclaimer"],
+        fallback=False,
+    )
+
+
 def _log_failure(
     reason: str,
     runtime: AgentRuntime,
@@ -383,6 +424,8 @@ def _log_failure(
     response_status: object = None,
     round_number: int | None = None,
     tool_calls: int | None = None,
+    graph_node: AgentGraphNode | None = None,
+    exposed_tools: tuple[str, ...] = (),
 ) -> None:
     """Log only operational metadata; never log prompts, output, arguments, IPs, or keys."""
     raw_status_code = getattr(error, "status_code", None)
@@ -391,9 +434,11 @@ def _log_failure(
     provider_error_type = _safe_provider_error_field_value(error, "type")
     provider_error_code = _safe_provider_error_field_value(error, "code")
     provider_error_param = _safe_provider_error_field_value(error, "param")
+    failed_generation_present = _failed_generation_present(error)
     logger.warning(
         "assistant_turn_failed reason=%s provider=%s model=%s status_code=%s exception_type=%s "
         "provider_error_type=%s provider_error_code=%s provider_error_param=%s "
+        "failed_generation_present=%s graph_node=%s exposed_tool_count=%s exposed_tools=%s "
         "response_status=%s round=%s tool_calls=%s",
         reason,
         runtime.settings.agent_provider,
@@ -403,10 +448,25 @@ def _log_failure(
         provider_error_type,
         provider_error_code,
         provider_error_param,
+        failed_generation_present,
+        graph_node,
+        len(exposed_tools),
+        ",".join(exposed_tools),
         safe_response_status,
         round_number,
         tool_calls,
     )
+
+
+def _failed_generation_present(error: Exception | None) -> bool:
+    """Report only whether Groq supplied failed generation metadata, never its contents."""
+    if error is None:
+        return False
+    body = getattr(error, "body", None)
+    if not isinstance(body, dict):
+        return False
+    details = body.get("error", body)
+    return isinstance(details, dict) and "failed_generation" in details
 
 
 def _safe_provider_error_field_value(error: Exception | None, field: str) -> str | None:
@@ -492,6 +552,51 @@ _ADDRESS_TERMS = ("address", "पता", "വിലാസ")
 _CHANGE_TERMS = ("change", "update", "correct", "बदल", "अपडेट", "सुधार", "മാറ്റ", "പുതുക്ക", "തിരുത്ത")
 _AADHAAR_TERMS = ("aadhaar", "aadhar", "आधार", "ആധാർ", "ആധാര്")
 _PENSION_TERMS = ("pension", "sevana", "पेंशन", "पेन्शन", "പെൻഷൻ", "പെന്‍ഷന്")
+_GREETING_TERMS = {
+    "hi", "hello", "hey", "namaste", "namaskar", "नमस्ते", "नमस्कार", "ഹലോ", "നമസ്കാരം",
+}
+_READINESS_TERMS = ("ready", "readiness", "eligible", "पात्र", "तैयार", "അർഹ", "തയ്യാർ")
+_PREPARATION_TERMS = ("checklist", "worksheet", "form", "prepare", "चेकलिस्ट", "फॉर्म", "तैयार", "ചെക്ക്", "ഫോം", "തയ്യാർ")
+_OFFICIAL_TERMS = ("official", "handoff", "apply", "open service", "आधिकारिक", "आवेदन", "ഔദ്യോഗിക", "അപേക്ഷ")
+
+
+def _is_greeting_or_low_information(value: str) -> bool:
+    normalized = _normalise_intent(value)
+    if not normalized or normalized in {_normalise_intent(term) for term in _GREETING_TERMS}:
+        return True
+    compact = normalized.replace(" ", "")
+    if len(compact) <= 2:
+        return True
+    if compact.isascii() and compact.isalpha() and len(compact) <= 16:
+        vowels = sum(character in "aeiouy" for character in compact)
+        if vowels == 0:
+            return True
+    return False
+
+
+def _select_graph_node(
+    request: AssistantTurnRequest,
+    registry: dict[str, LoadedProcedure],
+) -> AgentGraphNode:
+    """Choose the provider phase only from already validated application state."""
+    if request.demo_status_id is not None:
+        return "explanation_status"
+    if request.service_id not in registry:
+        return "safety_intent"
+    normalized = _normalise_intent(request.message)
+    if any(term in normalized for term in _OFFICIAL_TERMS):
+        return "official_handoff"
+    try:
+        readiness = evaluate_readiness(registry[request.service_id], request.readiness_answers, locale=request.locale)
+    except ReadinessInputError:
+        return "readiness_interview"
+    if request.synthetic_persona_id is not None or (
+        readiness.complete and any(term in normalized for term in _PREPARATION_TERMS)
+    ):
+        return "automatic_preparation"
+    if request.readiness_answers or any(term in normalized for term in _READINESS_TERMS):
+        return "readiness_interview"
+    return "procedure_routing"
 
 
 def _catalogue_route(
@@ -544,10 +649,14 @@ async def run_assistant_turn(
     registry: dict[str, LoadedProcedure],
     runtime: AgentRuntime,
     client_address: str,
+    *,
+    graph_node: AgentGraphNode | None = None,
 ) -> AssistantTurnResponse:
     history_text = [message.content for message in request.history]
     if conversation_contains_high_risk_pii(request.message, history_text):
         return safe_response(request.locale, "blocked")
+    if _is_greeting_or_low_information(request.message):
+        return _local_invitation_response(request.locale)
     if not runtime.available:
         if not runtime.settings.agent_enabled:
             reason = "agent_disabled"
@@ -567,7 +676,12 @@ async def run_assistant_turn(
 
     try:
         async with runtime.semaphore:
-            return await _provider_turn(request, registry, runtime)
+            return await _provider_turn(
+                request,
+                registry,
+                runtime,
+                graph_node=graph_node or _select_graph_node(request, registry),
+            )
     except Exception as error:
         _log_failure("internal_turn_processing_error", runtime, error=error)
         return safe_response(request.locale, "fallback")
@@ -577,6 +691,8 @@ async def _provider_turn(
     request: AssistantTurnRequest,
     registry: dict[str, LoadedProcedure],
     runtime: AgentRuntime,
+    *,
+    graph_node: AgentGraphNode,
 ) -> AssistantTurnResponse:
     if request.service_id is not None and request.service_id not in registry:
         return _clarification_response(request.locale, registry, [])
@@ -592,6 +708,7 @@ async def _provider_turn(
     tool_calls = 0
     selected_id = request.service_id
     explained_status_id: DemoStatusId | None = None
+    exposed_tools = NODE_TOOL_NAMES[graph_node]
 
     for round_index in range(runtime.settings.agent_max_rounds):
         round_number = round_index + 1
@@ -604,10 +721,24 @@ async def _provider_turn(
                 "content": _instructions(request.locale, selected_id, request.demo_status_id),
             }
             response = await client.chat.completions.create(
-                **_provider_request(registry, runtime, messages)
+                **_provider_request(
+                    registry,
+                    runtime,
+                    messages,
+                    graph_node=graph_node,
+                    final=bool(trace),
+                )
             )
         except Exception as error:
-            _log_failure(_provider_failure_reason(error), runtime, error=error, round_number=round_number, tool_calls=tool_calls)
+            _log_failure(
+                _provider_failure_reason(error),
+                runtime,
+                error=error,
+                round_number=round_number,
+                tool_calls=tool_calls,
+                graph_node=graph_node,
+                exposed_tools=exposed_tools if not trace else (),
+            )
             status = "rate_limited" if getattr(error, "status_code", None) == 429 else "fallback"
             return safe_response(request.locale, status)
         choices = getattr(response, "choices", None)
@@ -638,6 +769,16 @@ async def _provider_turn(
                 reason = "model_output_invalid_json" if "json_invalid" in error_types else "model_output_schema_invalid"
                 _log_failure(reason, runtime, error=error, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
+            if parsed.service_id is not None and parsed.service_id not in registry:
+                _log_failure("unknown_model_service_id", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
+            if (
+                graph_node != "safety_intent"
+                and selected_id is not None
+                and parsed.service_id not in {None, selected_id}
+            ):
+                _log_failure("model_service_scope_mismatch", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
             if parsed.service_id in registry:
                 selected_id = parsed.service_id
             return _assemble_response(request.locale, registry, parsed, selected_id, trace, explained_status_id)
@@ -656,13 +797,24 @@ async def _provider_turn(
             if not isinstance(call_id, str) or _TOOL_CALL_ID.fullmatch(call_id) is None:
                 _log_failure("malformed_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
-            if name not in TOOL_NAMES:
+            if name not in exposed_tools or trace:
                 _log_failure("unknown_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
             if not isinstance(arguments, str):
                 _log_failure("malformed_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
-            tool_output, used_service, used_status = _execute_tool(name, arguments, registry)
+            bound_arguments = _bind_provider_tool_arguments(name, arguments, request)
+            if bound_arguments is None:
+                _log_failure(
+                    "tool_argument_validation_failed",
+                    runtime,
+                    round_number=round_number,
+                    tool_calls=tool_calls,
+                    graph_node=graph_node,
+                    exposed_tools=exposed_tools,
+                )
+                return safe_response(request.locale, "fallback")
+            tool_output, used_service, used_status = _execute_tool(name, bound_arguments, registry)
             if tool_output == '{"error": "Invalid tool request"}':
                 _log_failure("tool_argument_validation_failed", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
@@ -717,7 +869,7 @@ def _strict_tool(name: str, description: str, properties: dict[str, Any], requir
 
 
 def _normalise_groq_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Build a provider-compatible copy without weakening canonical local schemas."""
+    """Validate and copy only the deliberately simple provider schema subset."""
     if not isinstance(schema, dict):
         raise ValueError("Provider schema must be an object")
 
@@ -726,53 +878,53 @@ def _normalise_groq_schema(schema: dict[str, Any]) -> dict[str, Any]:
             return [visit(item) for item in value]
         if not isinstance(value, dict):
             return value
-        normalized = {
-            key: visit(item)
-            for key, item in value.items()
-            if key not in {"type", "maxItems"}
-        }
+        if any(keyword in value for keyword in ("anyOf", "oneOf", "maxItems")):
+            raise ValueError("Unsupported provider schema keyword")
         schema_type = value.get("type")
-        if schema_type is None:
-            return normalized
-        if isinstance(schema_type, str):
-            if schema_type not in _JSON_SCHEMA_TYPES:
-                raise ValueError("Unsupported provider schema type")
-            normalized["type"] = schema_type
-            return normalized
-        if not isinstance(schema_type, list) or not schema_type:
+        if isinstance(schema_type, list):
             raise ValueError("Unsupported provider schema union")
-        if any(not isinstance(item, str) or item not in _JSON_SCHEMA_TYPES for item in schema_type):
-            raise ValueError("Unsupported provider schema union")
-        if len(set(schema_type)) != len(schema_type) or "anyOf" in normalized:
-            raise ValueError("Ambiguous provider schema union")
-        enum_values = normalized.pop("enum", None)
-        branches: list[dict[str, Any]] = []
-        for item in schema_type:
-            branch: dict[str, Any] = {"type": item}
-            if enum_values is not None and item == "string":
-                string_values = [entry for entry in enum_values if isinstance(entry, str)]
-                if string_values:
-                    branch["enum"] = string_values
-            branches.append(branch)
-        normalized["anyOf"] = branches
-        return normalized
+        if schema_type == "null":
+            raise ValueError("Unsupported provider nullable schema")
+        if schema_type is not None and schema_type not in _JSON_SCHEMA_TYPES:
+            raise ValueError("Unsupported provider schema type")
+        return {key: visit(item) for key, item in value.items()}
 
     return visit(deepcopy(schema))
 
 
-def _provider_tool_definitions(registry: dict[str, LoadedProcedure]) -> list[dict[str, Any]]:
-    tools = []
-    for canonical in _tool_definitions(registry):
+def _provider_tool_definitions(
+    registry: dict[str, LoadedProcedure],
+    graph_node: AgentGraphNode = "safety_intent",
+) -> list[dict[str, Any]]:
+    return _provider_tool_definitions_for_node(registry, graph_node)
+
+
+def _provider_tool_definitions_for_node(
+    registry: dict[str, LoadedProcedure],
+    graph_node: AgentGraphNode,
+) -> list[dict[str, Any]]:
+    """Expose only the node allowlist with state-bound, zero-argument schemas."""
+    canonical_by_name = {tool["name"]: tool for tool in _tool_definitions(registry)}
+    tools: list[dict[str, Any]] = []
+    for name in NODE_TOOL_NAMES[graph_node]:
+        canonical = canonical_by_name[name]
         tool = {
             "type": "function",
             "function": {
-                "name": canonical["name"],
+                "name": name,
                 "description": canonical["description"],
-                "parameters": _normalise_groq_schema(canonical["parameters"]),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
             },
         }
         _validate_provider_tool(tool)
         tools.append(tool)
+    if len(tools) > 3:
+        raise ValueError("Provider tool exposure exceeds node limit")
     return tools
 
 
@@ -793,11 +945,13 @@ def _validate_provider_tool(tool: dict[str, Any]) -> None:
             return
         if not isinstance(value, dict):
             return
-        if "strict" in value or "maxItems" in value:
+        if any(keyword in value for keyword in ("strict", "maxItems", "anyOf", "oneOf")):
             raise ValueError("Unsupported provider schema keyword")
         schema_type = value.get("type")
         if isinstance(schema_type, list):
             raise ValueError("Unsupported provider schema type union")
+        if schema_type == "null":
+            raise ValueError("Unsupported provider nullable schema")
         if schema_type == "object":
             properties = value.get("properties")
             required = value.get("required")
@@ -817,17 +971,23 @@ def _provider_request(
     registry: dict[str, LoadedProcedure],
     runtime: AgentRuntime,
     messages: list[dict[str, Any]],
+    *,
+    graph_node: AgentGraphNode = "safety_intent",
+    final: bool = False,
 ) -> dict[str, Any]:
     """Build the sole provider-bound request without mutating canonical schemas or input state."""
-    return {
+    request: dict[str, Any] = {
         "model": runtime.settings.agent_model,
         "messages": deepcopy(messages),
-        "tools": _provider_tool_definitions(registry),
-        "tool_choice": "auto",
-        "parallel_tool_calls": False,
+        "tool_choice": "none" if final or not NODE_TOOL_NAMES[graph_node] else "auto",
         "stream": False,
+        "temperature": 0,
         "max_completion_tokens": runtime.settings.agent_max_output_tokens,
     }
+    if not final and NODE_TOOL_NAMES[graph_node]:
+        request["tools"] = _provider_tool_definitions_for_node(registry, graph_node)
+        request["parallel_tool_calls"] = False
+    return request
 
 
 def _tool_definitions(registry: dict[str, LoadedProcedure] | None = None) -> list[dict[str, Any]]:
@@ -866,6 +1026,45 @@ def _tool_definitions(registry: dict[str, LoadedProcedure] | None = None) -> lis
         _strict_tool("prepare_synthetic_form_assistance", "Prepare a synthetic, non-submittable worksheet.", {"service_id": service, "locale": locale, "persona_id": {"type": ["string", "null"], "enum": [*persona_ids, None]}}, ["service_id", "locale", "persona_id"]),
         _strict_tool("explain_simulated_status", "Explain only a validated fictional demo status; never look up a real application.", {"service_id": service, "locale": locale, "status_id": {"type": "string", "enum": status_ids}}, ["service_id", "locale", "status_id"]),
     ]
+
+
+def _bind_provider_tool_arguments(
+    name: str,
+    arguments: str,
+    request: AssistantTurnRequest,
+) -> str | None:
+    """Replace the model's empty object with canonical values from validated state."""
+    try:
+        supplied = json.loads(arguments)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if supplied != {}:
+        return None
+
+    canonical: dict[str, Any] = {"locale": request.locale}
+    if name == "list_supported_services":
+        return json.dumps(canonical, ensure_ascii=False)
+    if request.service_id is None:
+        return None
+    canonical["service_id"] = request.service_id
+    if name in {
+        "get_readiness_questions",
+        "evaluate_readiness",
+        "build_personalized_checklist",
+    }:
+        canonical["answers"] = [
+            {"question_id": question_id, "value": value}
+            for question_id, value in request.readiness_answers.items()
+        ]
+    elif name == "prepare_synthetic_form_assistance":
+        canonical["persona_id"] = request.synthetic_persona_id
+    elif name == "explain_simulated_status":
+        if request.demo_status_id is None:
+            return None
+        canonical["status_id"] = request.demo_status_id.value
+    elif name != "get_verified_procedure":
+        return None
+    return json.dumps(canonical, ensure_ascii=False)
 
 
 def _execute_tool(name: str, arguments: str, registry: dict[str, LoadedProcedure]) -> tuple[str, str | None, DemoStatusId | None]:

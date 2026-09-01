@@ -486,6 +486,7 @@ async def run_conversation_turn(
             registry,
             runtime,
             client_address,
+            graph_node="safety_intent",
         )
         initial["llm_calls"] = 1
     try:

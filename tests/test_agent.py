@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 import sahayi_api.main as main_module
 from sahayi_api.agent import (
+    NODE_TOOL_NAMES,
     AgentRuntime,
     AssistantTurnRequest,
     RateLimiter,
@@ -97,22 +98,46 @@ async def test_disabled_agent_falls_back_without_provider() -> None:
     assert result.fallback is True
 
 
+@pytest.mark.parametrize(("locale", "message"), [("en", "hi"), ("en", "dfzgdsf"), ("hi", "नमस्ते"), ("ml", "ഹലോ")])
+@pytest.mark.anyio
+async def test_greetings_and_low_information_bypass_groq_with_local_invitation(locale: str, message: str) -> None:
+    runtime, responses = fake_runtime([])
+    turn = AssistantTurnRequest(locale=locale, message=message, consent=True)
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "local-input")
+    assert result.status == "ok"
+    assert result.fallback is False
+    assert result.selection.state == "none"
+    assert responses.calls == []
+
+
 @pytest.mark.anyio
 async def test_strict_tool_loop_uses_bounded_chat_settings_and_deterministic_facts() -> None:
     function_call = tool_call(
         "get_verified_procedure",
-        json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
+        "{}",
     )
     first = chat_response(tool_calls=[function_call])
     final_output = {
         "guidance_message": "I used the verified Aadhaar procedure.",
         "selection_state": "selected",
         "service_id": "uidai-aadhaar-address-update",
-        "action_ids": ["view-procedure", "open-official-service", "invented-action"],
+        "action_ids": ["view-procedure", "open-official-service"],
     }
     second = chat_response(content=json.dumps(final_output))
     runtime, responses = fake_runtime([first, second])
-    result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.1")
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="Explain the verified Aadhaar procedure",
+        service_id="uidai-aadhaar-address-update",
+        consent=True,
+    )
+    result = await run_assistant_turn(
+        turn,
+        load_procedure_registry(default_pack_root()),
+        runtime,
+        "127.0.0.1",
+        graph_node="procedure_routing",
+    )
     assert result.status == "ok"
     assert result.tool_trace == ["get_verified_procedure"]
     assert {card.card_id for card in result.fact_cards} == {"verified-requirements", "fee-information"}
@@ -133,25 +158,26 @@ async def test_strict_tool_loop_uses_bounded_chat_settings_and_deterministic_fac
             "type": "function",
             "function": {
                 "name": "get_verified_procedure",
-                "arguments": json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
+                "arguments": "{}",
             },
         }],
     }
     for call in responses.calls:
         assert call["model"] == AGENT_MODEL
         assert call["stream"] is False
-        assert call["parallel_tool_calls"] is False
+        assert call["temperature"] == 0
         for unsupported in ("input", "instructions", "max_output_tokens", "previous_response_id", "response_format", "store"):
             assert unsupported not in call
         assert "single JSON object without Markdown" in call["messages"][0]["content"]
-        assert len(call["tools"]) == 7
-        assert all(set(tool) == {"type", "function"} for tool in call["tools"])
-        readiness_tool = next(tool for tool in call["tools"] if tool["function"]["name"] == "evaluate_readiness")
-        answers_schema = readiness_tool["function"]["parameters"]["properties"]["answers"]
-        assert answers_schema["type"] == "array"
-        assert "maxItems" not in answers_schema
-        assert answers_schema["items"]["additionalProperties"] is False
-        assert answers_schema["items"]["required"] == ["question_id", "value"]
+    assert responses.calls[0]["parallel_tool_calls"] is False
+    assert [tool["function"]["name"] for tool in responses.calls[0]["tools"]] == [
+        "list_supported_services",
+        "get_verified_procedure",
+    ]
+    assert responses.calls[0]["tool_choice"] == "auto"
+    assert responses.calls[1]["tool_choice"] == "none"
+    assert "tools" not in responses.calls[1]
+    assert "parallel_tool_calls" not in responses.calls[1]
 
 
 def test_chat_transport_is_the_only_callable_provider_surface() -> None:
@@ -161,33 +187,33 @@ def test_chat_transport_is_the_only_callable_provider_surface() -> None:
     assert not hasattr(runtime.client, "responses")
 
 
-def test_provider_schema_normalization_is_recursive_deterministic_and_idempotent() -> None:
+def test_provider_schemas_are_node_specific_simple_and_canonical_schemas_stay_strict() -> None:
     registry = load_procedure_registry(default_pack_root())
     canonical = _tool_definitions(registry)
-    provider = _provider_tool_definitions(registry)
     canonical_value = next(tool for tool in canonical if tool["name"] == "evaluate_readiness")["parameters"]["properties"]["answers"]["items"]["properties"]["value"]
-    provider_value = next(tool for tool in provider if tool["function"]["name"] == "evaluate_readiness")["function"]["parameters"]["properties"]["answers"]["items"]["properties"]["value"]
     canonical_persona = next(tool for tool in canonical if tool["name"] == "prepare_synthetic_form_assistance")["parameters"]["properties"]["persona_id"]
-    provider_persona = next(tool for tool in provider if tool["function"]["name"] == "prepare_synthetic_form_assistance")["function"]["parameters"]["properties"]["persona_id"]
 
     assert canonical_value == {"type": ["boolean", "integer", "string"]}
-    assert provider_value == {"anyOf": [{"type": "boolean"}, {"type": "integer"}, {"type": "string"}]}
     assert canonical_persona["type"] == ["string", "null"]
-    assert provider_persona["anyOf"] == [
-        {"type": "string", "enum": canonical_persona["enum"][:-1]},
-        {"type": "null"},
-    ]
     assert canonical == _tool_definitions(registry)
     canonical_answers = next(tool for tool in canonical if tool["name"] == "evaluate_readiness")["parameters"]["properties"]["answers"]
     assert canonical_answers["maxItems"] == 30
     assert all(tool["strict"] is True for tool in canonical)
-    for tool in provider:
-        function = tool["function"]
-        assert _normalise_groq_schema(function["parameters"]) == function["parameters"]
-        serialized = json.dumps(tool)
-        assert '"strict"' not in serialized
-        assert '"maxItems"' not in serialized
-        assert '"type": [' not in serialized
+    for graph_node, expected_names in NODE_TOOL_NAMES.items():
+        provider = _provider_tool_definitions(registry, graph_node)
+        assert [tool["function"]["name"] for tool in provider] == list(expected_names)
+        assert len(provider) <= 3
+        for tool in provider:
+            parameters = tool["function"]["parameters"]
+            assert parameters == {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            }
+            serialized = json.dumps(tool)
+            for forbidden in ('"strict"', '"maxItems"', '"anyOf"', '"oneOf"', '"type": [', '"type": "null"'):
+                assert forbidden not in serialized
 
 
 @pytest.mark.parametrize(
@@ -234,20 +260,13 @@ def test_provider_request_contract_snapshot_is_redacted_and_groq_only() -> None:
             "model",
             "parallel_tool_calls",
             "stream",
+            "temperature",
             "tool_choice",
             "tools",
         ],
         "message_fields": [["content", "role"], ["content", "role"]],
         "model": "openai/gpt-oss-120b",
-        "tool_names": [
-            "list_supported_services",
-            "get_verified_procedure",
-            "get_readiness_questions",
-            "evaluate_readiness",
-            "build_personalized_checklist",
-            "prepare_synthetic_form_assistance",
-            "explain_simulated_status",
-        ],
+        "tool_names": ["list_supported_services"],
         "tool_fields": ["function", "type"],
         "function_fields": ["description", "name", "parameters"],
         "root_schema_fields": ["additionalProperties", "properties", "required", "type"],
@@ -547,24 +566,26 @@ async def test_every_allowlisted_tool_invalid_call_fails_closed_without_continua
 
 
 @pytest.mark.parametrize(
-    ("name", "arguments", "demo_status_id"),
+    ("name", "graph_node", "service_id", "readiness_answers", "demo_status_id"),
     [
-        ("list_supported_services", {"locale": "en"}, None),
-        ("get_verified_procedure", {"service_id": "uidai-aadhaar-address-update", "locale": "en"}, None),
-        ("get_readiness_questions", {"service_id": "uidai-aadhaar-address-update", "locale": "en", "answers": []}, None),
-        ("evaluate_readiness", {"service_id": "uidai-aadhaar-address-update", "locale": "en", "answers": []}, None),
-        ("build_personalized_checklist", {"service_id": "uidai-aadhaar-address-update", "locale": "en", "answers": []}, None),
-        ("prepare_synthetic_form_assistance", {"service_id": "uidai-aadhaar-address-update", "locale": "en", "persona_id": None}, None),
-        ("explain_simulated_status", {"service_id": "uidai-aadhaar-address-update", "locale": "en", "status_id": "action-required"}, "action-required"),
+        ("list_supported_services", "safety_intent", None, {}, None),
+        ("get_verified_procedure", "procedure_routing", "uidai-aadhaar-address-update", {}, None),
+        ("get_readiness_questions", "readiness_interview", "uidai-aadhaar-address-update", {}, None),
+        ("evaluate_readiness", "readiness_interview", "uidai-aadhaar-address-update", {"mobile-auth-access": False}, None),
+        ("build_personalized_checklist", "automatic_preparation", "uidai-aadhaar-address-update", {"mobile-auth-access": False}, None),
+        ("prepare_synthetic_form_assistance", "automatic_preparation", "uidai-aadhaar-address-update", {}, None),
+        ("explain_simulated_status", "explanation_status", "uidai-aadhaar-address-update", {}, "action-required"),
     ],
 )
 @pytest.mark.anyio
 async def test_every_allowlisted_tool_completes_the_bounded_provider_loop(
     name: str,
-    arguments: dict[str, object],
+    graph_node: str,
+    service_id: str | None,
+    readiness_answers: dict[str, object],
     demo_status_id: str | None,
 ) -> None:
-    function_call = tool_call(name, json.dumps(arguments), f"call-{name}")
+    function_call = tool_call(name, "{}", f"call-{name}")
     final_output = {
         "guidance_message": "I used only the verified deterministic service.",
         "selection_state": "selected",
@@ -578,11 +599,18 @@ async def test_every_allowlisted_tool_completes_the_bounded_provider_loop(
     turn = AssistantTurnRequest(
         locale="en",
         message="Explain the verified service",
-        service_id="uidai-aadhaar-address-update",
+        service_id=service_id,
+        readiness_answers=readiness_answers,
         demo_status_id=demo_status_id,
         consent=True,
     )
-    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, f"loop-{name}")
+    result = await run_assistant_turn(
+        turn,
+        load_procedure_registry(default_pack_root()),
+        runtime,
+        f"loop-{name}",
+        graph_node=graph_node,
+    )
     assert result.status == "ok"
     assert result.tool_trace == [name]
     assert result.selection.service_id == "uidai-aadhaar-address-update"
@@ -590,40 +618,94 @@ async def test_every_allowlisted_tool_completes_the_bounded_provider_loop(
     assert responses.calls[1]["messages"][-1]["tool_call_id"] == f"call-{name}"
     assert responses.calls[1]["messages"][-1]["role"] == "tool"
     assert responses.calls[1]["messages"][-1]["name"] == name
+    assert responses.calls[0]["tool_choice"] == "auto"
+    assert responses.calls[1]["tool_choice"] == "none"
+    assert "tools" not in responses.calls[1]
 
 
 @pytest.mark.anyio
-async def test_multiple_sequential_tool_rounds_reconstruct_only_allowlisted_messages() -> None:
+async def test_readiness_answers_are_bound_from_state_and_cannot_be_generated_by_groq() -> None:
+    call = tool_call("evaluate_readiness", "{}", "bound-readiness")
+    final = chat_response(content=json.dumps({
+        "guidance_message": "I evaluated the validated readiness answers.",
+        "selection_state": "selected",
+        "service_id": "uidai-aadhaar-address-update",
+        "action_ids": ["build-checklist"],
+    }))
+    runtime, completions = fake_runtime([chat_response(tool_calls=[call]), final])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="Am I ready?",
+        service_id="uidai-aadhaar-address-update",
+        readiness_answers={"mobile-auth-access": False},
+        consent=True,
+    )
+    result = await run_assistant_turn(
+        turn,
+        load_procedure_registry(default_pack_root()),
+        runtime,
+        "bound-readiness",
+        graph_node="readiness_interview",
+    )
+    assert result.status == "ok"
+    tool_result = json.loads(completions.calls[1]["messages"][-1]["content"])
+    assert tool_result["outcome"]["outcome_id"] == "use-alternative-channel"
+    assert completions.calls[1]["messages"][-2]["tool_calls"][0]["function"]["arguments"] == "{}"
+
+    invented = tool_call(
+        "evaluate_readiness",
+        json.dumps({"answers": [{"question_id": "mobile-auth-access", "value": True}]}),
+        "invented-readiness",
+    )
+    runtime, completions = fake_runtime([chat_response(tool_calls=[invented])])
+    rejected = await run_assistant_turn(
+        turn,
+        load_procedure_registry(default_pack_root()),
+        runtime,
+        "invented-readiness",
+        graph_node="readiness_interview",
+    )
+    assert rejected.status == "fallback"
+    assert len(completions.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_final_round_disables_tools_and_rejects_another_tool_call() -> None:
     first = tool_call(
         "get_verified_procedure",
-        json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
+        "{}",
         "call-first",
     )
     second = tool_call(
-        "get_readiness_questions",
-        json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en", "answers": []}),
+        "get_verified_procedure",
+        "{}",
         "call-second",
     )
-    final_output = json.dumps({
-        "guidance_message": "I used the verified procedure and readiness questions.",
-        "selection_state": "selected",
-        "service_id": "uidai-aadhaar-address-update",
-        "action_ids": ["start-readiness"],
-    })
     runtime, completions = fake_runtime([
         chat_response(tool_calls=[first]),
         chat_response(tool_calls=[second]),
-        chat_response(content=final_output),
     ])
-    result = await run_assistant_turn(
-        request(), load_procedure_registry(default_pack_root()), runtime, "sequential-tools"
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="Explain the verified Aadhaar procedure",
+        service_id="uidai-aadhaar-address-update",
+        consent=True,
     )
-    assert result.status == "ok"
-    assert result.tool_trace == ["get_verified_procedure", "get_readiness_questions"]
-    assert len(completions.calls) == 3
-    continuation = completions.calls[2]["messages"]
+    result = await run_assistant_turn(
+        turn,
+        load_procedure_registry(default_pack_root()),
+        runtime,
+        "sequential-tools",
+        graph_node="procedure_routing",
+    )
+    assert result.status == "fallback"
+    assert result.tool_trace == []
+    assert len(completions.calls) == 2
+    assert completions.calls[1]["tool_choice"] == "none"
+    assert "tools" not in completions.calls[1]
+    continuation = completions.calls[1]["messages"]
     assert [message["role"] for message in continuation] == [
-        "system", "user", "assistant", "tool", "assistant", "tool"
+        "system", "user", "assistant", "tool"
     ]
     for message in continuation:
         assert set(message) <= {"role", "content", "tool_calls", "tool_call_id", "name"}
@@ -677,6 +759,16 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
     })
     runtime, _ = fake_runtime([chat_response(content=schema_invalid)])
     rejected = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.5")
+    assert rejected.status == "fallback"
+
+    unknown_action = json.dumps({
+        "guidance_message": "Do something",
+        "selection_state": "selected",
+        "service_id": "uidai-aadhaar-address-update",
+        "action_ids": ["invented-action"],
+    })
+    runtime, _ = fake_runtime([chat_response(content=unknown_action)])
+    rejected = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.7")
     assert rejected.status == "fallback"
 
     oversized = json.dumps({
@@ -811,6 +903,7 @@ async def test_provider_http_400_logs_only_safe_structured_fields(caplog: pytest
             "type": "invalid_request_error",
             "code": "json_schema_invalid",
             "param": "tools[2].function.parameters.properties.answers.items.properties.value.type",
+            "failed_generation": "private attempted tool generation",
         }
     }
     runtime, responses = fake_runtime([error])
@@ -822,8 +915,13 @@ async def test_provider_http_400_logs_only_safe_structured_fields(caplog: pytest
     assert "provider_error_type=invalid_request_error" in caplog.text
     assert "provider_error_code=json_schema_invalid" in caplog.text
     assert "provider_error_param=tools[2].function.parameters.properties.answers.items.properties.value.type" in caplog.text
+    assert "failed_generation_present=True" in caplog.text
+    assert "graph_node=safety_intent" in caplog.text
+    assert "exposed_tool_count=1" in caplog.text
+    assert "exposed_tools=list_supported_services" in caplog.text
     assert "private provider message" not in caplog.text
     assert "private request-bearing provider message" not in caplog.text
+    assert "private attempted tool generation" not in caplog.text
 
 
 @pytest.mark.anyio

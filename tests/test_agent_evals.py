@@ -46,7 +46,7 @@ def test_offline_selected_service_evals(case_name: str, locale: str, service_id:
         guidance_message=message,
         selection_state="selected",
         service_id=service_id,
-        action_ids=["view-procedure", "browse-web", "open-official-service"],
+        action_ids=["view-procedure", "open-official-service"],
     )
     result = _assemble_response(locale, REGISTRY, model, service_id, ["get_verified_procedure"])
     assert result.status == "ok", case_name
@@ -121,7 +121,7 @@ async def test_offline_excessive_tool_call_eval_stops_at_budget() -> None:
     call = SimpleNamespace(
         id="eval-call",
         type="function",
-        function=SimpleNamespace(name="list_supported_services", arguments='{"locale":"en"}'),
+        function=SimpleNamespace(name="list_supported_services", arguments="{}"),
     )
     message = SimpleNamespace(content=None, tool_calls=[call, call])
     responses = ScriptedChatCompletions(SimpleNamespace(choices=[SimpleNamespace(message=message)]))
