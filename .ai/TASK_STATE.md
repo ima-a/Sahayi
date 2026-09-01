@@ -1,6 +1,16 @@
 # Task state
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
+
+## Groq Chat Completions transport correction
+
+Work is active on the existing `feat/sahayi-deployment` branch from exact clean fetched deployed commit `187b31aa2d268aecef32b4251a93924f1f1c5e06`. At preflight, local/remote `main`, `feat/sahayi-deployment`, and `test/sahayi-final` all matched that commit at divergence `0/0`; no branch was created and no unrelated change existed.
+
+The production HTTP 400 occurs before any tool executes because the deployed adapter uses Groq's beta Responses interface with flattened provider-side strict tools and complex schemas. The correction replaces only that transport with `client.chat.completions.create`. Requests contain the fixed model, bounded validated system/history/current-user messages, exactly seven nested local function tools, automatic tool choice, disabled parallel calls and streaming, and `max_completion_tokens`. Responses-only request fields and function-output items are absent. The bounded loop requires exactly one choice, validates tool-call IDs/names/JSON arguments/budgets, executes the existing strict Pydantic-backed local tools, reconstructs only allowlisted assistant tool-call fields, sends documented named tool messages, and validates non-empty final JSON as `AgentModelOutput`. Provider failure remains no-retry and returns generic deterministic guidance with only allowlisted diagnostics.
+
+Canonical application tool schemas remain strict and retain the local 30-answer `maxItems` limit. A separate provider copy omits top-level `strict` and all `maxItems`, nests `name`/`description`/`parameters` under `function`, converts readiness unions to `anyOf`, expresses nullable persona ID as string-enum-or-null `anyOf`, requires every object property, forbids additional properties, and is recursively validated before transport. No Procedure Pack, LangGraph node, form-preparation path, UI, dependency, privacy boundary, secret, or environment setting changed.
+
+Local verification passes: 242 backend tests; 86 frontend tests; focused provider, offline evaluation, and LangGraph suites; frontend lint, TypeScript, OCR integrity, and production build; intent-model integrity; both active Procedure Packs and schema drift; `pip check`; zero-vulnerability `pip-audit` and `npm audit`; workflow/Render YAML parsing; `git diff --check`; and redacted secret/privacy/logging/persistence/telemetry/frontend-bundle scans. No-cache image `f79b54f5f79ab48013b2d7a43b5a312f87492d212915fb000464e59b77adf9c1` runs as UID/GID 10001 and passed root/hashed asset, health/public-config/catalogue/detail/readiness/checklist/conversation, same-origin, and no-store checks. The established browser suite passed 23 temporary `/tmp` screenshots across English/Hindi/Malayalam and 360/390/768/1280 widths with visible focus, no overflow, local intent without network requests, explicit confirmation, automatic preparation, local-only values/edits, one structured composer, same-origin OCR, Groq disclosure, demo boundaries, and session clearing. Direct contact-sheet review found no release-blocking visual issue. The container log scan found no credential, citizen, tool-payload, OCR, filename, or document content. Commit/push, test-branch fast-forward, Render deployment, the single hosted Groq tool-backed call, and conditional main fast-forward remain pending.
 
 ## Conversation-driven preparation implementation
 

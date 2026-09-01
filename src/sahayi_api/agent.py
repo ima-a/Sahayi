@@ -77,7 +77,7 @@ _SAFE_PROVIDER_ERROR_CODES = {
     "server_error",
 }
 _SAFE_PROVIDER_ERROR_PARAM = re.compile(
-    r"^(?:input|instructions|max_output_tokens|model|parallel_tool_calls|stream|tool_choice|tools)"
+    r"^(?:max_completion_tokens|messages|model|parallel_tool_calls|stream|tool_choice|tools)"
     r"(?:\[[0-9]{1,3}\]|\.[A-Za-z_][A-Za-z0-9_]{0,63})*$"
 )
 _SAFE_EXCEPTION_TYPES = {
@@ -95,6 +95,7 @@ _SAFE_EXCEPTION_TYPES = {
     "ValidationError",
 }
 _JSON_SCHEMA_TYPES = {"array", "boolean", "integer", "null", "number", "object", "string"}
+_TOOL_CALL_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 class PriorMessage(StrictModel):
@@ -190,23 +191,23 @@ class ToolStatusInput(ToolProcedureInput):
     status_id: DemoStatusId
 
 
-class ResponsesClient(Protocol):
-    responses: Any
+class ChatCompletionsClient(Protocol):
+    chat: Any
 
 
 class AgentProvider(Protocol):
     @property
     def available(self) -> bool: ...
 
-    def get_client(self) -> ResponsesClient: ...
+    def get_client(self) -> ChatCompletionsClient: ...
 
 
 class GroqProvider:
-    """Application-controlled Groq Responses API configuration."""
+    """Application-controlled Groq Chat Completions configuration."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.client: ResponsesClient | None = None
+        self.client: ChatCompletionsClient | None = None
 
     @property
     def available(self) -> bool:
@@ -217,7 +218,7 @@ class GroqProvider:
             and bool(self.settings.groq_api_key)
         )
 
-    def get_client(self) -> ResponsesClient:
+    def get_client(self) -> ChatCompletionsClient:
         if self.client is None:
             from openai import AsyncOpenAI
 
@@ -278,13 +279,13 @@ class AgentRuntime:
         self.rate_limiter = RateLimiter(settings.agent_rate_limit, settings.agent_rate_window_seconds)
         self.request_budget = RequestBudget(settings.agent_request_budget)
         self.semaphore = asyncio.Semaphore(settings.agent_concurrency)
-        self.client: ResponsesClient | None = None
+        self.client: ChatCompletionsClient | None = None
 
     @property
     def available(self) -> bool:
         return self.provider.available
 
-    def get_client(self) -> ResponsesClient:
+    def get_client(self) -> ChatCompletionsClient:
         if self.client is None:
             self.client = self.provider.get_client()
         return self.client
@@ -580,10 +581,13 @@ async def _provider_turn(
     if request.service_id is not None and request.service_id not in registry:
         return _clarification_response(request.locale, registry, [])
     client = runtime.get_client()
-    input_items: list[Any] = [
-        {"role": message.role, "content": message.content} for message in request.history
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": _instructions(request.locale, request.service_id, request.demo_status_id)},
+        *[
+            {"role": message.role, "content": message.content} for message in request.history
+        ],
+        {"role": "user", "content": request.message},
     ]
-    input_items.append({"role": "user", "content": request.message})
     trace: list[str] = []
     tool_calls = 0
     selected_id = request.service_id
@@ -595,61 +599,94 @@ async def _provider_turn(
             _log_failure("process_request_budget_exhausted", runtime, round_number=round_number, tool_calls=tool_calls)
             return safe_response(request.locale, "fallback")
         try:
-            response = await client.responses.create(**_provider_request(request, registry, runtime, input_items, selected_id))
+            messages[0] = {
+                "role": "system",
+                "content": _instructions(request.locale, selected_id, request.demo_status_id),
+            }
+            response = await client.chat.completions.create(
+                **_provider_request(registry, runtime, messages)
+            )
         except Exception as error:
             _log_failure(_provider_failure_reason(error), runtime, error=error, round_number=round_number, tool_calls=tool_calls)
             status = "rate_limited" if getattr(error, "status_code", None) == 429 else "fallback"
             return safe_response(request.locale, status)
-        response_status = getattr(response, "status", None)
-        if response_status not in {None, "completed"}:
-            _log_failure("provider_response_not_completed", runtime, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+        choices = getattr(response, "choices", None)
+        if not isinstance(choices, list) or len(choices) != 1:
+            _log_failure("malformed_provider_response", runtime, round_number=round_number, tool_calls=tool_calls)
             return safe_response(request.locale, "fallback")
-        output = getattr(response, "output", None)
-        if not isinstance(output, list):
-            _log_failure("malformed_provider_response", runtime, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+        message = getattr(choices[0], "message", None)
+        if message is None:
+            _log_failure("malformed_provider_response", runtime, round_number=round_number, tool_calls=tool_calls)
             return safe_response(request.locale, "fallback")
-        calls = [item for item in output if getattr(item, "type", None) == "function_call"]
+        raw_calls = getattr(message, "tool_calls", None)
+        if raw_calls is None:
+            calls: list[Any] = []
+        elif isinstance(raw_calls, list):
+            calls = raw_calls
+        else:
+            _log_failure("malformed_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
+            return safe_response(request.locale, "fallback")
         if not calls:
-            output_text = getattr(response, "output_text", None)
+            output_text = getattr(message, "content", None)
             if not isinstance(output_text, str) or not output_text.strip():
-                _log_failure("missing_model_output_text", runtime, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+                _log_failure("missing_model_output_text", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
             try:
                 parsed = AgentModelOutput.model_validate_json(output_text)
             except ValidationError as error:
                 error_types = {item["type"] for item in error.errors(include_url=False)}
                 reason = "model_output_invalid_json" if "json_invalid" in error_types else "model_output_schema_invalid"
-                _log_failure(reason, runtime, error=error, response_status=response_status, round_number=round_number, tool_calls=tool_calls)
+                _log_failure(reason, runtime, error=error, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
             if parsed.service_id in registry:
                 selected_id = parsed.service_id
             return _assemble_response(request.locale, registry, parsed, selected_id, trace, explained_status_id)
 
-        input_items.extend(output)
+        reconstructed_calls: list[dict[str, Any]] = []
+        tool_messages: list[dict[str, Any]] = []
         for call in calls:
             tool_calls += 1
             if tool_calls > runtime.settings.agent_max_tool_calls:
                 _log_failure("tool_call_budget_exhausted", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
-            if getattr(call, "name", None) not in TOOL_NAMES:
-                _log_failure("unknown_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
-                return safe_response(request.locale, "fallback")
-            if not isinstance(getattr(call, "arguments", None), str) or not isinstance(getattr(call, "call_id", None), str):
+            call_id = getattr(call, "id", None)
+            function = getattr(call, "function", None)
+            name = getattr(function, "name", None)
+            arguments = getattr(function, "arguments", None)
+            if not isinstance(call_id, str) or _TOOL_CALL_ID.fullmatch(call_id) is None:
                 _log_failure("malformed_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
-            tool_output, used_service, used_status = _execute_tool(call.name, call.arguments, registry)
+            if name not in TOOL_NAMES:
+                _log_failure("unknown_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
+            if not isinstance(arguments, str):
+                _log_failure("malformed_tool_call", runtime, round_number=round_number, tool_calls=tool_calls)
+                return safe_response(request.locale, "fallback")
+            tool_output, used_service, used_status = _execute_tool(name, arguments, registry)
             if tool_output == '{"error": "Invalid tool request"}':
                 _log_failure("tool_argument_validation_failed", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
-            if call.name == "explain_simulated_status" and used_status != request.demo_status_id:
+            if name == "explain_simulated_status" and used_status != request.demo_status_id:
                 _log_failure("demo_status_tool_scope_mismatch", runtime, round_number=round_number, tool_calls=tool_calls)
                 return safe_response(request.locale, "fallback")
             if used_service is not None:
                 selected_id = used_service
             if used_status is not None:
                 explained_status_id = used_status
-            trace.append(call.name)
-            input_items.append({"type": "function_call_output", "call_id": call.call_id, "output": tool_output})
+            trace.append(name)
+            reconstructed_calls.append({
+                "id": call_id,
+                "type": "function",
+                "function": {"name": name, "arguments": arguments},
+            })
+            tool_messages.append({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "name": name,
+                "content": tool_output,
+            })
+        messages.append({"role": "assistant", "tool_calls": reconstructed_calls})
+        messages.extend(tool_messages)
     _log_failure("tool_round_budget_exhausted", runtime, round_number=runtime.settings.agent_max_rounds, tool_calls=tool_calls)
     return safe_response(request.locale, "fallback")
 
@@ -659,7 +696,7 @@ def _instructions(locale: SupportedLocale, service_id: str | None, demo_status_i
         "You are Sahayi's concise prototype guide. Respond in the requested locale. "
         "Never invent procedure facts, fees, eligibility, URLs, approval, submission, form filling, real tracking, or monitoring. "
         "A simulated status is fictional and may be explained only through explain_simulated_status; never request or accept a real reference number. "
-        "Use only the supplied strict functions for facts and use their exact service IDs. Ask for service clarification when needed. "
+        "Use only the supplied local functions for facts and use their exact service IDs. Ask for service clarification when needed. "
         "Do not request or repeat identifiers, contact details, addresses, OTPs, document contents, or files. "
         "Return a single JSON object without Markdown and with exactly these fields: "
         "guidance_message (string), selection_state (none, clarification, or selected), "
@@ -680,7 +717,7 @@ def _strict_tool(name: str, description: str, properties: dict[str, Any], requir
 
 
 def _normalise_groq_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Convert canonical JSON Schema unions to Groq's documented ``anyOf`` form."""
+    """Build a provider-compatible copy without weakening canonical local schemas."""
     if not isinstance(schema, dict):
         raise ValueError("Provider schema must be an object")
 
@@ -689,7 +726,11 @@ def _normalise_groq_schema(schema: dict[str, Any]) -> dict[str, Any]:
             return [visit(item) for item in value]
         if not isinstance(value, dict):
             return value
-        normalized = {key: visit(item) for key, item in value.items() if key != "type"}
+        normalized = {
+            key: visit(item)
+            for key, item in value.items()
+            if key not in {"type", "maxItems"}
+        }
         schema_type = value.get("type")
         if schema_type is None:
             return normalized
@@ -704,36 +745,88 @@ def _normalise_groq_schema(schema: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Unsupported provider schema union")
         if len(set(schema_type)) != len(schema_type) or "anyOf" in normalized:
             raise ValueError("Ambiguous provider schema union")
-        normalized["anyOf"] = [{"type": item} for item in schema_type]
+        enum_values = normalized.pop("enum", None)
+        branches: list[dict[str, Any]] = []
+        for item in schema_type:
+            branch: dict[str, Any] = {"type": item}
+            if enum_values is not None and item == "string":
+                string_values = [entry for entry in enum_values if isinstance(entry, str)]
+                if string_values:
+                    branch["enum"] = string_values
+            branches.append(branch)
+        normalized["anyOf"] = branches
         return normalized
 
     return visit(deepcopy(schema))
 
 
 def _provider_tool_definitions(registry: dict[str, LoadedProcedure]) -> list[dict[str, Any]]:
-    tools = deepcopy(_tool_definitions(registry))
-    for tool in tools:
-        tool["parameters"] = _normalise_groq_schema(tool["parameters"])
+    tools = []
+    for canonical in _tool_definitions(registry):
+        tool = {
+            "type": "function",
+            "function": {
+                "name": canonical["name"],
+                "description": canonical["description"],
+                "parameters": _normalise_groq_schema(canonical["parameters"]),
+            },
+        }
+        _validate_provider_tool(tool)
+        tools.append(tool)
     return tools
 
 
+def _validate_provider_tool(tool: dict[str, Any]) -> None:
+    """Fail closed before transport if a generated Chat Completions tool drifts."""
+    if set(tool) != {"type", "function"} or tool.get("type") != "function":
+        raise ValueError("Invalid provider tool envelope")
+    function = tool.get("function")
+    if not isinstance(function, dict) or set(function) != {"name", "description", "parameters"}:
+        raise ValueError("Invalid provider function")
+    if function.get("name") not in TOOL_NAMES or not isinstance(function.get("description"), str):
+        raise ValueError("Invalid provider function metadata")
+
+    def visit(value: Any) -> None:
+        if isinstance(value, list):
+            for item in value:
+                visit(item)
+            return
+        if not isinstance(value, dict):
+            return
+        if "strict" in value or "maxItems" in value:
+            raise ValueError("Unsupported provider schema keyword")
+        schema_type = value.get("type")
+        if isinstance(schema_type, list):
+            raise ValueError("Unsupported provider schema type union")
+        if schema_type == "object":
+            properties = value.get("properties")
+            required = value.get("required")
+            if (
+                not isinstance(properties, dict)
+                or required != list(properties)
+                or value.get("additionalProperties") is not False
+            ):
+                raise ValueError("Provider objects must require exactly their declared properties")
+        for item in value.values():
+            visit(item)
+
+    visit(function["parameters"])
+
+
 def _provider_request(
-    request: AssistantTurnRequest,
     registry: dict[str, LoadedProcedure],
     runtime: AgentRuntime,
-    input_items: list[Any],
-    selected_id: str | None,
+    messages: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build the sole provider-bound request without mutating canonical schemas or input state."""
     return {
         "model": runtime.settings.agent_model,
-        "instructions": _instructions(request.locale, selected_id, request.demo_status_id),
-        "input": deepcopy(input_items),
+        "messages": deepcopy(messages),
         "tools": _provider_tool_definitions(registry),
         "tool_choice": "auto",
         "parallel_tool_calls": False,
         "stream": False,
-        "max_output_tokens": runtime.settings.agent_max_output_tokens,
+        "max_completion_tokens": runtime.settings.agent_max_output_tokens,
     }
 
 

@@ -25,7 +25,7 @@ AADHAAR = "uidai-aadhaar-address-update"
 PENSION = "kerala-ign-oap"
 
 
-class FakeResponses:
+class FakeChatCompletions:
     def __init__(self, replies: list[object]) -> None:
         self.replies = replies
         self.calls: list[dict[str, object]] = []
@@ -38,10 +38,10 @@ class FakeResponses:
         return reply
 
 
-def runtime_with_replies(replies: list[object]) -> tuple[AgentRuntime, FakeResponses]:
+def runtime_with_replies(replies: list[object]) -> tuple[AgentRuntime, FakeChatCompletions]:
     runtime = AgentRuntime(replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_request_budget=10))
-    responses = FakeResponses(replies)
-    runtime.client = SimpleNamespace(responses=responses)
+    responses = FakeChatCompletions(replies)
+    runtime.client = SimpleNamespace(chat=SimpleNamespace(completions=responses))
     return runtime, responses
 
 
@@ -348,7 +348,8 @@ async def test_mocked_cloud_clarification_is_one_call_and_still_requires_confirm
         "service_id": PENSION,
         "action_ids": ["view-procedure"],
     }
-    runtime, responses = runtime_with_replies([SimpleNamespace(status="completed", output=[], output_text=json.dumps(output))])
+    message = SimpleNamespace(content=json.dumps(output), tool_calls=None)
+    runtime, responses = runtime_with_replies([SimpleNamespace(choices=[SimpleNamespace(message=message)])])
     result = await run_conversation_turn(
         ConversationTurnRequest(locale="en", event_type="cloud_clarification", message="Help with an old age pension", consent=True),
         registry,

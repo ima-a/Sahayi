@@ -25,7 +25,7 @@ from sahayi_api.main import app
 from sahayi_api.procedures import default_pack_root, load_procedure_registry
 
 
-class FakeResponses:
+class FakeChatCompletions:
     def __init__(self, replies: list[object]) -> None:
         self.replies = replies
         self.calls: list[dict[str, object]] = []
@@ -38,12 +38,26 @@ class FakeResponses:
         return reply
 
 
-def fake_runtime(replies: list[object]) -> tuple[AgentRuntime, FakeResponses]:
+def fake_runtime(replies: list[object]) -> tuple[AgentRuntime, FakeChatCompletions]:
     settings = replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_request_budget=20)
     runtime = AgentRuntime(settings)
-    responses = FakeResponses(replies)
-    runtime.client = SimpleNamespace(responses=responses)
-    return runtime, responses
+    completions = FakeChatCompletions(replies)
+    runtime.client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+    return runtime, completions
+
+
+def tool_call(name: str, arguments: str, call_id: str = "call-1") -> SimpleNamespace:
+    return SimpleNamespace(
+        id=call_id,
+        type="function",
+        function=SimpleNamespace(name=name, arguments=arguments),
+    )
+
+
+def chat_response(content: str | None = None, tool_calls: list[object] | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content, tool_calls=tool_calls))]
+    )
 
 
 def request(message: str = "Help me update my Aadhaar address") -> AssistantTurnRequest:
@@ -84,21 +98,19 @@ async def test_disabled_agent_falls_back_without_provider() -> None:
 
 
 @pytest.mark.anyio
-async def test_strict_tool_loop_uses_bounded_responses_settings_and_deterministic_facts() -> None:
-    function_call = SimpleNamespace(
-        type="function_call",
-        name="get_verified_procedure",
-        arguments=json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
-        call_id="call-1",
+async def test_strict_tool_loop_uses_bounded_chat_settings_and_deterministic_facts() -> None:
+    function_call = tool_call(
+        "get_verified_procedure",
+        json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
     )
-    first = SimpleNamespace(output=[function_call], output_text="")
+    first = chat_response(tool_calls=[function_call])
     final_output = {
         "guidance_message": "I used the verified Aadhaar procedure.",
         "selection_state": "selected",
         "service_id": "uidai-aadhaar-address-update",
         "action_ids": ["view-procedure", "open-official-service", "invented-action"],
     }
-    second = SimpleNamespace(output=[], output_text=json.dumps(final_output))
+    second = chat_response(content=json.dumps(final_output))
     runtime, responses = fake_runtime([first, second])
     result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.1")
     assert result.status == "ok"
@@ -108,26 +120,45 @@ async def test_strict_tool_loop_uses_bounded_responses_settings_and_deterministi
     assert [action.action_id for action in result.actions] == ["view-procedure", "open-official-service"]
     assert all(str(source.url).startswith("https://") for source in result.sources)
     assert len(responses.calls) == 2
-    assert responses.calls[1]["input"][-1] == {
-        "type": "function_call_output",
-        "call_id": "call-1",
-        "output": responses.calls[1]["input"][-1]["output"],
+    assert responses.calls[1]["messages"][-1] == {
+        "role": "tool",
+        "tool_call_id": "call-1",
+        "name": "get_verified_procedure",
+        "content": responses.calls[1]["messages"][-1]["content"],
+    }
+    assert responses.calls[1]["messages"][-2] == {
+        "role": "assistant",
+        "tool_calls": [{
+            "id": "call-1",
+            "type": "function",
+            "function": {
+                "name": "get_verified_procedure",
+                "arguments": json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
+            },
+        }],
     }
     for call in responses.calls:
         assert call["model"] == AGENT_MODEL
         assert call["stream"] is False
         assert call["parallel_tool_calls"] is False
-        for unsupported in ("store", "previous_response_id", "truncation", "include", "safety_identifier", "prompt_cache_key", "prompt", "reasoning", "text"):
+        for unsupported in ("input", "instructions", "max_output_tokens", "previous_response_id", "response_format", "store"):
             assert unsupported not in call
-        assert "single JSON object without Markdown" in call["instructions"]
+        assert "single JSON object without Markdown" in call["messages"][0]["content"]
         assert len(call["tools"]) == 7
-        assert all(tool["strict"] is True for tool in call["tools"])
-        readiness_tool = next(tool for tool in call["tools"] if tool["name"] == "evaluate_readiness")
-        answers_schema = readiness_tool["parameters"]["properties"]["answers"]
+        assert all(set(tool) == {"type", "function"} for tool in call["tools"])
+        readiness_tool = next(tool for tool in call["tools"] if tool["function"]["name"] == "evaluate_readiness")
+        answers_schema = readiness_tool["function"]["parameters"]["properties"]["answers"]
         assert answers_schema["type"] == "array"
-        assert answers_schema["maxItems"] == 30
+        assert "maxItems" not in answers_schema
         assert answers_schema["items"]["additionalProperties"] is False
         assert answers_schema["items"]["required"] == ["question_id", "value"]
+
+
+def test_chat_transport_is_the_only_callable_provider_surface() -> None:
+    runtime, completions = fake_runtime([])
+    assert runtime.client is not None
+    assert runtime.client.chat.completions is completions
+    assert not hasattr(runtime.client, "responses")
 
 
 def test_provider_schema_normalization_is_recursive_deterministic_and_idempotent() -> None:
@@ -135,17 +166,28 @@ def test_provider_schema_normalization_is_recursive_deterministic_and_idempotent
     canonical = _tool_definitions(registry)
     provider = _provider_tool_definitions(registry)
     canonical_value = next(tool for tool in canonical if tool["name"] == "evaluate_readiness")["parameters"]["properties"]["answers"]["items"]["properties"]["value"]
-    provider_value = next(tool for tool in provider if tool["name"] == "evaluate_readiness")["parameters"]["properties"]["answers"]["items"]["properties"]["value"]
+    provider_value = next(tool for tool in provider if tool["function"]["name"] == "evaluate_readiness")["function"]["parameters"]["properties"]["answers"]["items"]["properties"]["value"]
     canonical_persona = next(tool for tool in canonical if tool["name"] == "prepare_synthetic_form_assistance")["parameters"]["properties"]["persona_id"]
-    provider_persona = next(tool for tool in provider if tool["name"] == "prepare_synthetic_form_assistance")["parameters"]["properties"]["persona_id"]
+    provider_persona = next(tool for tool in provider if tool["function"]["name"] == "prepare_synthetic_form_assistance")["function"]["parameters"]["properties"]["persona_id"]
 
     assert canonical_value == {"type": ["boolean", "integer", "string"]}
     assert provider_value == {"anyOf": [{"type": "boolean"}, {"type": "integer"}, {"type": "string"}]}
     assert canonical_persona["type"] == ["string", "null"]
-    assert provider_persona["anyOf"] == [{"type": "string"}, {"type": "null"}]
+    assert provider_persona["anyOf"] == [
+        {"type": "string", "enum": canonical_persona["enum"][:-1]},
+        {"type": "null"},
+    ]
     assert canonical == _tool_definitions(registry)
+    canonical_answers = next(tool for tool in canonical if tool["name"] == "evaluate_readiness")["parameters"]["properties"]["answers"]
+    assert canonical_answers["maxItems"] == 30
+    assert all(tool["strict"] is True for tool in canonical)
     for tool in provider:
-        assert _normalise_groq_schema(tool["parameters"]) == tool["parameters"]
+        function = tool["function"]
+        assert _normalise_groq_schema(function["parameters"]) == function["parameters"]
+        serialized = json.dumps(tool)
+        assert '"strict"' not in serialized
+        assert '"maxItems"' not in serialized
+        assert '"type": [' not in serialized
 
 
 @pytest.mark.parametrize(
@@ -166,35 +208,36 @@ def test_provider_request_contract_snapshot_is_redacted_and_groq_only() -> None:
     registry = load_procedure_registry(default_pack_root())
     runtime = AgentRuntime(replace(get_settings(), agent_enabled=True, groq_api_key="test-key"))
     provider_request = _provider_request(
-        request("synthetic request"),
         registry,
         runtime,
-        [{"role": "user", "content": "<redacted>"}],
-        None,
+        [
+            {"role": "system", "content": "<redacted-system>"},
+            {"role": "user", "content": "<redacted>"},
+        ],
     )
     tools = provider_request["tools"]
     snapshot = {
-        "endpoint": "POST /openai/v1/responses",
+        "endpoint": "POST /openai/v1/chat/completions",
         "request_fields": sorted(provider_request),
-        "input_item_fields": [sorted(item) for item in provider_request["input"]],
+        "message_fields": [sorted(item) for item in provider_request["messages"]],
         "model": provider_request["model"],
-        "tool_names": [tool["name"] for tool in tools],
+        "tool_names": [tool["function"]["name"] for tool in tools],
         "tool_fields": sorted(tools[0]),
-        "root_schema_fields": sorted(tools[0]["parameters"]),
+        "function_fields": sorted(tools[0]["function"]),
+        "root_schema_fields": sorted(tools[0]["function"]["parameters"]),
     }
     assert snapshot == {
-        "endpoint": "POST /openai/v1/responses",
+        "endpoint": "POST /openai/v1/chat/completions",
         "request_fields": [
-            "input",
-            "instructions",
-            "max_output_tokens",
+            "max_completion_tokens",
+            "messages",
             "model",
             "parallel_tool_calls",
             "stream",
             "tool_choice",
             "tools",
         ],
-        "input_item_fields": [["content", "role"]],
+        "message_fields": [["content", "role"], ["content", "role"]],
         "model": "openai/gpt-oss-120b",
         "tool_names": [
             "list_supported_services",
@@ -205,12 +248,40 @@ def test_provider_request_contract_snapshot_is_redacted_and_groq_only() -> None:
             "prepare_synthetic_form_assistance",
             "explain_simulated_status",
         ],
-        "tool_fields": ["description", "name", "parameters", "strict", "type"],
+        "tool_fields": ["function", "type"],
+        "function_fields": ["description", "name", "parameters"],
         "root_schema_fields": ["additionalProperties", "properties", "required", "type"],
     }
     serialized = json.dumps(snapshot)
     assert "test-key" not in serialized
     assert "Authorization" not in serialized
+
+
+@pytest.mark.anyio
+async def test_messages_are_bounded_validated_history_between_system_and_current_user() -> None:
+    final_output = json.dumps({
+        "guidance_message": "I can help with the verified service.",
+        "selection_state": "selected",
+        "service_id": "uidai-aadhaar-address-update",
+        "action_ids": ["view-procedure"],
+    })
+    runtime, completions = fake_runtime([chat_response(content=final_output)])
+    turn = AssistantTurnRequest(
+        locale="en",
+        message="Which documents are covered?",
+        history=[
+            {"role": "user", "content": "Tell me about this service"},
+            {"role": "assistant", "content": "Which part should I explain?"},
+        ],
+        service_id="uidai-aadhaar-address-update",
+        consent=True,
+    )
+    result = await run_assistant_turn(turn, load_procedure_registry(default_pack_root()), runtime, "message-order")
+    assert result.status == "ok"
+    sent = completions.calls[0]
+    assert [message["role"] for message in sent["messages"]] == ["system", "user", "assistant", "user"]
+    assert sent["messages"][-1]["content"] == "Which documents are covered?"
+    assert "response_format" not in sent
 
 
 @pytest.mark.anyio
@@ -221,7 +292,7 @@ async def test_successful_normal_ai_turn_for_selected_service() -> None:
         "service_id": "kerala-ign-oap",
         "action_ids": ["view-procedure"],
     }
-    runtime, responses = fake_runtime([SimpleNamespace(status="completed", output=[], output_text=json.dumps(final_output))])
+    runtime, responses = fake_runtime([chat_response(content=json.dumps(final_output))])
     turn = AssistantTurnRequest(
         locale="en",
         message="What documents are covered by this pension procedure?",
@@ -462,13 +533,8 @@ async def test_every_allowlisted_tool_invalid_call_fails_closed_without_continua
     name: str,
     arguments: dict[str, object],
 ) -> None:
-    function_call = SimpleNamespace(
-        type="function_call",
-        name=name,
-        arguments=json.dumps(arguments),
-        call_id=f"invalid-{name}",
-    )
-    runtime, responses = fake_runtime([SimpleNamespace(status="completed", output=[function_call], output_text="")])
+    function_call = tool_call(name, json.dumps(arguments), f"invalid-{name}")
+    runtime, responses = fake_runtime([chat_response(tool_calls=[function_call])])
     result = await run_assistant_turn(
         request(),
         load_procedure_registry(default_pack_root()),
@@ -498,7 +564,7 @@ async def test_every_allowlisted_tool_completes_the_bounded_provider_loop(
     arguments: dict[str, object],
     demo_status_id: str | None,
 ) -> None:
-    function_call = SimpleNamespace(type="function_call", name=name, arguments=json.dumps(arguments), call_id=f"call-{name}")
+    function_call = tool_call(name, json.dumps(arguments), f"call-{name}")
     final_output = {
         "guidance_message": "I used only the verified deterministic service.",
         "selection_state": "selected",
@@ -506,8 +572,8 @@ async def test_every_allowlisted_tool_completes_the_bounded_provider_loop(
         "action_ids": ["view-procedure"],
     }
     runtime, responses = fake_runtime([
-        SimpleNamespace(status="completed", output=[function_call], output_text=""),
-        SimpleNamespace(status="completed", output=[], output_text=json.dumps(final_output)),
+        chat_response(tool_calls=[function_call]),
+        chat_response(content=json.dumps(final_output)),
     ])
     turn = AssistantTurnRequest(
         locale="en",
@@ -521,19 +587,83 @@ async def test_every_allowlisted_tool_completes_the_bounded_provider_loop(
     assert result.tool_trace == [name]
     assert result.selection.service_id == "uidai-aadhaar-address-update"
     assert len(responses.calls) == 2
-    assert responses.calls[1]["input"][-1]["call_id"] == f"call-{name}"
-    assert responses.calls[1]["input"][-1]["type"] == "function_call_output"
+    assert responses.calls[1]["messages"][-1]["tool_call_id"] == f"call-{name}"
+    assert responses.calls[1]["messages"][-1]["role"] == "tool"
+    assert responses.calls[1]["messages"][-1]["name"] == name
+
+
+@pytest.mark.anyio
+async def test_multiple_sequential_tool_rounds_reconstruct_only_allowlisted_messages() -> None:
+    first = tool_call(
+        "get_verified_procedure",
+        json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en"}),
+        "call-first",
+    )
+    second = tool_call(
+        "get_readiness_questions",
+        json.dumps({"service_id": "uidai-aadhaar-address-update", "locale": "en", "answers": []}),
+        "call-second",
+    )
+    final_output = json.dumps({
+        "guidance_message": "I used the verified procedure and readiness questions.",
+        "selection_state": "selected",
+        "service_id": "uidai-aadhaar-address-update",
+        "action_ids": ["start-readiness"],
+    })
+    runtime, completions = fake_runtime([
+        chat_response(tool_calls=[first]),
+        chat_response(tool_calls=[second]),
+        chat_response(content=final_output),
+    ])
+    result = await run_assistant_turn(
+        request(), load_procedure_registry(default_pack_root()), runtime, "sequential-tools"
+    )
+    assert result.status == "ok"
+    assert result.tool_trace == ["get_verified_procedure", "get_readiness_questions"]
+    assert len(completions.calls) == 3
+    continuation = completions.calls[2]["messages"]
+    assert [message["role"] for message in continuation] == [
+        "system", "user", "assistant", "tool", "assistant", "tool"
+    ]
+    for message in continuation:
+        assert set(message) <= {"role", "content", "tool_calls", "tool_call_id", "name"}
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        SimpleNamespace(id="", function=SimpleNamespace(name="list_supported_services", arguments='{"locale":"en"}')),
+        SimpleNamespace(id="valid-id", function=None),
+        SimpleNamespace(id="valid-id", function=SimpleNamespace(name="list_supported_services", arguments={})),
+    ],
+)
+@pytest.mark.anyio
+async def test_malformed_chat_tool_calls_fail_closed(call: object) -> None:
+    runtime, completions = fake_runtime([chat_response(tool_calls=[call])])
+    result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "malformed-call")
+    assert result.status == "fallback"
+    assert result.tool_trace == []
+    assert len(completions.calls) == 1
+
+
+@pytest.mark.parametrize("content", [None, "", "   "])
+@pytest.mark.anyio
+async def test_empty_final_chat_content_fails_closed(content: str | None) -> None:
+    runtime, completions = fake_runtime([chat_response(content=content)])
+    result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "empty-final")
+    assert result.status == "fallback"
+    assert len(completions.calls) == 1
 
 
 @pytest.mark.anyio
 async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
-    unknown = SimpleNamespace(type="function_call", name="browse_web", arguments="{}", call_id="bad")
-    runtime, _ = fake_runtime([SimpleNamespace(output=[unknown], output_text="")])
+    unknown = tool_call("browse_web", "{}", "bad")
+    runtime, _ = fake_runtime([chat_response(tool_calls=[unknown])])
     result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.1")
     assert result.status == "fallback"
     assert result.tool_trace == []
 
-    runtime, _ = fake_runtime([SimpleNamespace(output=[], output_text="not-json")])
+    runtime, _ = fake_runtime([chat_response(content="not-json")])
     malformed = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.2")
     assert malformed.status == "fallback"
     assert "not-json" not in malformed.message
@@ -545,7 +675,7 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
         "action_ids": "view-procedure",
         "extra": True,
     })
-    runtime, _ = fake_runtime([SimpleNamespace(output=[], output_text=schema_invalid)])
+    runtime, _ = fake_runtime([chat_response(content=schema_invalid)])
     rejected = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.5")
     assert rejected.status == "fallback"
 
@@ -555,7 +685,7 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
         "service_id": "uidai-aadhaar-address-update",
         "action_ids": ["view-procedure"],
     })
-    runtime, _ = fake_runtime([SimpleNamespace(output=[], output_text=oversized)])
+    runtime, _ = fake_runtime([chat_response(content=oversized)])
     rejected = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.6")
     assert rejected.status == "fallback"
 
@@ -563,7 +693,7 @@ async def test_unknown_tool_and_malformed_model_output_fail_closed() -> None:
 @pytest.mark.anyio
 async def test_schema_failure_logs_only_safe_reason_metadata(caplog: pytest.LogCaptureFixture) -> None:
     unsafe_output = '{"guidance_message":"private model detail","action_ids":"wrong"}'
-    runtime, _ = fake_runtime([SimpleNamespace(status="completed", output=[], output_text=unsafe_output)])
+    runtime, _ = fake_runtime([chat_response(content=unsafe_output)])
     with caplog.at_level("WARNING", logger="sahayi_api.agent"):
         result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "schema-failure")
     assert result.status == "fallback"
@@ -572,16 +702,16 @@ async def test_schema_failure_logs_only_safe_reason_metadata(caplog: pytest.LogC
 
 
 @pytest.mark.anyio
-async def test_incomplete_and_malformed_provider_responses_are_logged_separately(caplog: pytest.LogCaptureFixture) -> None:
-    runtime, _ = fake_runtime([SimpleNamespace(status="incomplete", output=[], output_text="private partial output")])
+async def test_wrong_choice_count_and_malformed_provider_responses_fail_closed(caplog: pytest.LogCaptureFixture) -> None:
+    runtime, _ = fake_runtime([SimpleNamespace(choices=[])])
     with caplog.at_level("WARNING", logger="sahayi_api.agent"):
         incomplete = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "incomplete-response")
     assert incomplete.status == "fallback"
-    assert "reason=provider_response_not_completed" in caplog.text
+    assert "reason=malformed_provider_response" in caplog.text
     assert "private partial output" not in caplog.text
 
     caplog.clear()
-    runtime, _ = fake_runtime([SimpleNamespace(status="completed", output=None, output_text="private malformed output")])
+    runtime, _ = fake_runtime([SimpleNamespace(choices=None)])
     with caplog.at_level("WARNING", logger="sahayi_api.agent"):
         malformed = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "malformed-response")
     assert malformed.status == "fallback"
@@ -591,17 +721,16 @@ async def test_incomplete_and_malformed_provider_responses_are_logged_separately
 
 @pytest.mark.anyio
 async def test_agent_may_explain_only_the_current_validated_demo_status() -> None:
-    call = SimpleNamespace(
-        type="function_call",
-        name="explain_simulated_status",
-        arguments=json.dumps({
+    call = tool_call(
+        "explain_simulated_status",
+        json.dumps({
             "service_id": "uidai-aadhaar-address-update",
             "locale": "en",
             "status_id": "action-required",
         }),
-        call_id="demo-status-call",
+        "demo-status-call",
     )
-    runtime, _ = fake_runtime([SimpleNamespace(output=[call], output_text="")])
+    runtime, _ = fake_runtime([chat_response(tool_calls=[call])])
     turn = AssistantTurnRequest(
         locale="en",
         message="Explain the current demo status",
@@ -625,11 +754,11 @@ async def test_provider_timeout_is_generic_and_excessive_tool_loop_is_bounded(ca
     assert "exception_type=TimeoutError" in caplog.text
     assert "provider-secret-detail" not in caplog.text
 
-    call = SimpleNamespace(type="function_call", name="list_supported_services", arguments='{"locale":"en"}', call_id="call")
+    call = tool_call("list_supported_services", '{"locale":"en"}', "call")
     settings = replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_max_tool_calls=1, agent_request_budget=10)
     runtime = AgentRuntime(settings)
-    responses = FakeResponses([SimpleNamespace(output=[call, call], output_text="")])
-    runtime.client = SimpleNamespace(responses=responses)
+    responses = FakeChatCompletions([chat_response(tool_calls=[call, call])])
+    runtime.client = SimpleNamespace(chat=SimpleNamespace(completions=responses))
     bounded = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "127.0.0.3")
     assert bounded.status == "fallback"
     assert len(responses.calls) == 1
@@ -681,7 +810,7 @@ async def test_provider_http_400_logs_only_safe_structured_fields(caplog: pytest
             "message": "private request-bearing provider message",
             "type": "invalid_request_error",
             "code": "json_schema_invalid",
-            "param": "tools[2].parameters.properties.answers.items.properties.value.type",
+            "param": "tools[2].function.parameters.properties.answers.items.properties.value.type",
         }
     }
     runtime, responses = fake_runtime([error])
@@ -692,7 +821,7 @@ async def test_provider_http_400_logs_only_safe_structured_fields(caplog: pytest
     assert "status_code=400" in caplog.text
     assert "provider_error_type=invalid_request_error" in caplog.text
     assert "provider_error_code=json_schema_invalid" in caplog.text
-    assert "provider_error_param=tools[2].parameters.properties.answers.items.properties.value.type" in caplog.text
+    assert "provider_error_param=tools[2].function.parameters.properties.answers.items.properties.value.type" in caplog.text
     assert "private provider message" not in caplog.text
     assert "private request-bearing provider message" not in caplog.text
 
@@ -717,13 +846,13 @@ async def test_provider_error_metadata_rejects_content_bearing_fields(caplog: py
 
 @pytest.mark.anyio
 async def test_round_and_output_limits_are_applied_without_retry() -> None:
-    call = SimpleNamespace(type="function_call", name="list_supported_services", arguments='{"locale":"en"}', call_id="round-call")
-    runtime, responses = fake_runtime([SimpleNamespace(output=[call], output_text="")])
+    call = tool_call("list_supported_services", '{"locale":"en"}', "round-call")
+    runtime, responses = fake_runtime([chat_response(tool_calls=[call])])
     runtime.settings = replace(runtime.settings, agent_max_rounds=1, agent_max_output_tokens=333)
     result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "round-limit")
     assert result.status == "fallback"
     assert len(responses.calls) == 1
-    assert responses.calls[0]["max_output_tokens"] == 333
+    assert responses.calls[0]["max_completion_tokens"] == 333
 
 
 def test_groq_provider_selection_defaults_and_client_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -736,7 +865,7 @@ def test_groq_provider_selection_defaults_and_client_configuration(monkeypatch: 
     assert AgentRuntime(replace(settings, agent_enabled=True)).available is False
 
     captured: dict[str, object] = {}
-    sentinel = SimpleNamespace(responses=SimpleNamespace())
+    sentinel = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace()))
 
     def fake_client(**kwargs):
         captured.update(kwargs)
@@ -814,7 +943,7 @@ async def test_same_origin_assistant_endpoint_with_mocked_agent_enabled(monkeypa
         "service_id": "uidai-aadhaar-address-update",
         "action_ids": ["view-procedure", "start-readiness"],
     }
-    runtime, responses = fake_runtime([SimpleNamespace(output=[], output_text=json.dumps(final_output))])
+    runtime, responses = fake_runtime([chat_response(content=json.dumps(final_output))])
     monkeypatch.setattr(main_module, "agent_runtime", runtime)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         config = await client.get("/api/v1/public-config")

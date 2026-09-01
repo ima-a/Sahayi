@@ -40,7 +40,7 @@ flowchart LR
     API --> P[Validated Procedure Packs]
     P --> R[Deterministic readiness, checklist, worksheet, simulation]
     G -. explicit consent + bounded screened text .-> A[Optional GroqCloud assistant]
-    A -->|strict tool calls| R
+    A -->|validated local tool calls| R
     M[Offline-first one-shot source monitor] -. quarantined review metadata only .-> P
 ```
 
@@ -187,7 +187,7 @@ Groq's current published free-plan row for this model is 30 requests/minute, 1,0
 
 ## Technology and official sources
 
-Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, LangGraph, Tesseract.js, PDF.js, a standard-library Naive Bayes trainer, and an optional Groq Responses API integration through its documented OpenAI-compatible endpoint. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
+Sahayi uses React, TypeScript, Vite, FastAPI, Pydantic, Uvicorn, HTTPX, LangGraph, Tesseract.js, PDF.js, a standard-library Naive Bayes trainer, and an optional Groq Chat Completions local-tool integration through its documented OpenAI-compatible endpoint. LangGraph and the exact seven tools remain application-controlled; tool arguments and results are validated locally, government facts remain deterministic, the Groq key stays server-only, and provider failure preserves deterministic guidance. The active packs cite official sources including UIDAI's [Updating Data on Aadhaar](https://uidai.gov.in/en/updating-data-on-aadhaar) and [Enrolment & Update](https://uidai.gov.in/en/enrolment-and-update), and Kerala Sevana's [old-age-pension criteria](https://welfarepension.lsgkerala.gov.in/FAQsEng.aspx?pentypeid=2), [application forms](https://welfarepension.lsgkerala.gov.in/ApplicationFormsEng.aspx), and [IGNOAPS form](https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf).
 
 Deeper documentation: [architecture](docs/architecture.md), [privacy and safety](docs/privacy-boundary.md), [Procedure Packs](procedure-packs/README.md), [on-device model](docs/intent-model-card.md), and [deployment](.ai/DEPLOYMENT.md).
 

@@ -14,7 +14,7 @@ from sahayi_api.procedures import default_pack_root, load_procedure_registry
 REGISTRY = load_procedure_registry(default_pack_root())
 
 
-class ScriptedResponses:
+class ScriptedChatCompletions:
     def __init__(self, reply: object) -> None:
         self.reply = reply
         self.calls = 0
@@ -106,9 +106,9 @@ def test_offline_pii_attempt_evals(case_name: str, value: str) -> None:
 
 @pytest.mark.anyio
 async def test_offline_provider_unavailable_eval_falls_back_generically() -> None:
-    responses = ScriptedResponses(RuntimeError("provider detail must stay private"))
+    responses = ScriptedChatCompletions(RuntimeError("provider detail must stay private"))
     runtime = AgentRuntime(replace(get_settings(), agent_enabled=True, groq_api_key="test-key"))
-    runtime.client = SimpleNamespace(responses=responses)
+    runtime.client = SimpleNamespace(chat=SimpleNamespace(completions=responses))
     turn = AssistantTurnRequest(locale="en", message="Help with Aadhaar", consent=True)
     result = await run_assistant_turn(turn, REGISTRY, runtime, "offline-provider-eval")
     assert result.status == "fallback"
@@ -118,10 +118,15 @@ async def test_offline_provider_unavailable_eval_falls_back_generically() -> Non
 
 @pytest.mark.anyio
 async def test_offline_excessive_tool_call_eval_stops_at_budget() -> None:
-    call = SimpleNamespace(type="function_call", name="list_supported_services", arguments='{"locale":"en"}', call_id="eval-call")
-    responses = ScriptedResponses(SimpleNamespace(output=[call, call], output_text=""))
+    call = SimpleNamespace(
+        id="eval-call",
+        type="function",
+        function=SimpleNamespace(name="list_supported_services", arguments='{"locale":"en"}'),
+    )
+    message = SimpleNamespace(content=None, tool_calls=[call, call])
+    responses = ScriptedChatCompletions(SimpleNamespace(choices=[SimpleNamespace(message=message)]))
     runtime = AgentRuntime(replace(get_settings(), agent_enabled=True, groq_api_key="test-key", agent_max_tool_calls=1))
-    runtime.client = SimpleNamespace(responses=responses)
+    runtime.client = SimpleNamespace(chat=SimpleNamespace(completions=responses))
     turn = AssistantTurnRequest(locale="en", message="Help with a service", consent=True)
     result = await run_assistant_turn(turn, REGISTRY, runtime, "offline-budget-eval")
     assert result.status == "fallback"
