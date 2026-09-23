@@ -55,3 +55,12 @@ def test_retired_model_appears_only_in_labelled_history_or_migration_checks() ->
     assert "retired `llama-3.3-70b-versatile`" in readme
     assert "Historical migration context" in decisions
     assert "retirement of `llama-3.3-70b-versatile`" in decisions
+
+
+def test_completion_budget_default_and_explicit_operator_limit(monkeypatch) -> None:
+    monkeypatch.delenv("SAHAYI_AGENT_MAX_OUTPUT_TOKENS", raising=False)
+    assert get_settings().agent_max_output_tokens == 2048
+    monkeypatch.setenv("SAHAYI_AGENT_MAX_OUTPUT_TOKENS", "700")
+    assert get_settings().agent_max_output_tokens == 700
+    monkeypatch.setenv("SAHAYI_AGENT_MAX_OUTPUT_TOKENS", "999999")
+    assert get_settings().agent_max_output_tokens == 4096

@@ -1,6 +1,18 @@
 # Task state
 
-Last updated: 2026-09-01
+Last updated: 2026-09-22
+
+## Groq follow-up and final-response reliability
+
+Completed a local repair phase from a clean working tree. The assistant frontend accepted 500-character current messages and up to 1600-character replies but resent them unchanged as history, whose backend limit is 300 characters. The API adapter now bounds the last four outgoing history entries to 300 Unicode code points without changing the displayed memory-only transcript. A two-turn UI regression covers long accepted questions and replies.
+
+The Groq adapter now distinguishes tool-selection instructions from final-answer instructions, explicitly ends tool use after the validated result, and applies JSON mode only to tool-free requests. Low reasoning effort and a default 2048-token completion budget (256–4096, preserving explicit overrides) reduce the risk of spending the former 700-token allowance before final JSON. Provider `length` and `content_filter` completions fail closed before tool execution and produce only fixed diagnostic categories. The fixed provider/model, consent/PII checks, local canonical validation, deterministic facts, no retries, and no persistence remain intact. README documents that `.env` is not automatically loaded, safe local startup, feature/key configuration, public-config limitations, and operational failure causes.
+
+Baseline backend verification found one unrelated date-dependent assertion: the Aadhaar pack review date has passed, so its catalogue correctly reports stale. The test now computes expected freshness from the actual review deadline; Procedure Pack facts and review dates were not changed.
+
+Validation: 251 backend tests pass, including an actual OpenAI SDK tool/result/final round trip through a mocked HTTP transport, filtered/truncated completion regressions, and offline evaluations. Frontend lint, typecheck, 87 tests, OCR asset copy/integrity in prebuild, and production build pass. Intent-model integrity, both active packs, schema drift, and pip dependency consistency pass. npm dependency installation reported zero vulnerabilities. The SDK transport test required execution outside the restricted sandbox because asynchronous thread wakeups stalled there; no live provider request was made. The frontend build retains its chunk-size advisory.
+
+Read-only Render inspection in the user-confirmed Hackathons workspace found `sahayi` (`srv-da8occ0n74is73eige90`) user-suspended, last updated 2026-09-10. The queried retained `assistant_turn_failed` logs were empty. No local Groq key or `.env` exists in this checkout. Therefore live credential/quota validation and hosted verification remain unperformed; the hosted service must be deliberately resumed and the code deployed before the hosted repair can be verified. No commit, push, deployment, secret setting, or suspension change was performed.
 
 ## Groq node-routed tool correction
 

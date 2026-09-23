@@ -825,6 +825,29 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.queryAllByText('Choose the verified Aadhaar path.')).toHaveLength(0)
   })
 
+  it('bounds follow-up history after a long accepted question and reply without shortening the display', async () => {
+    const longReply = 'Please use the verified procedure. '.repeat(20).trim()
+    const longQuestion = 'Please explain the procedure. '.repeat(15).trim()
+    const fetchMock = mockApi({ agentAvailable: true, agentReply: { ...agentReply, message: longReply } })
+    render(<App />)
+    await openAssistant()
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: longQuestion } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    expect(await screen.findByText(longReply)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'What should I do next?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/assistant/turn'))
+      expect(calls).toHaveLength(2)
+      const body = JSON.parse(String(calls[1][1]?.body))
+      expect(body.history).toEqual([
+        { role: 'user', content: longQuestion.slice(0, 300).trim() },
+        { role: 'assistant', content: longReply.slice(0, 300).trim() },
+      ])
+    })
+  })
+
   it('identifies GroqCloud and its account-controlled retention boundary in every locale', () => {
     for (const locale of ['en', 'hi', 'ml'] as const) {
       expect(UI_MESSAGES[locale].aiDisclosure).toContain('GroqCloud')

@@ -166,7 +166,7 @@ async def test_strict_tool_loop_uses_bounded_chat_settings_and_deterministic_fac
         assert call["model"] == AGENT_MODEL
         assert call["stream"] is False
         assert call["temperature"] == 0
-        for unsupported in ("input", "instructions", "max_output_tokens", "previous_response_id", "response_format", "store"):
+        for unsupported in ("input", "instructions", "max_output_tokens", "previous_response_id", "store"):
             assert unsupported not in call
         assert "single JSON object without Markdown" in call["messages"][0]["content"]
     assert responses.calls[0]["parallel_tool_calls"] is False
@@ -176,6 +176,10 @@ async def test_strict_tool_loop_uses_bounded_chat_settings_and_deterministic_fac
     ]
     assert responses.calls[0]["tool_choice"] == "auto"
     assert responses.calls[1]["tool_choice"] == "none"
+    assert "response_format" not in responses.calls[0]
+    assert responses.calls[1]["response_format"] == {"type": "json_object"}
+    assert "Tool use is complete" not in responses.calls[0]["messages"][0]["content"]
+    assert "Tool use is complete" in responses.calls[1]["messages"][0]["content"]
     assert "tools" not in responses.calls[1]
     assert "parallel_tool_calls" not in responses.calls[1]
 
@@ -259,6 +263,7 @@ def test_provider_request_contract_snapshot_is_redacted_and_groq_only() -> None:
             "messages",
             "model",
             "parallel_tool_calls",
+            "reasoning_effort",
             "stream",
             "temperature",
             "tool_choice",
@@ -1056,3 +1061,70 @@ async def test_same_origin_assistant_endpoint_with_mocked_agent_enabled(monkeypa
     assert turn.headers["cache-control"] == "no-store"
     assert turn.json()["selection"]["service_id"] == "uidai-aadhaar-address-update"
     assert len(responses.calls) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("finish_reason,reason", [
+    ("length", "model_output_token_limit"),
+    ("content_filter", "model_output_filtered"),
+])
+async def test_incomplete_completion_never_executes_a_tool(finish_reason, reason, caplog) -> None:
+    reply = chat_response(tool_calls=[tool_call("list_supported_services", "{}")])
+    reply.choices[0].finish_reason = finish_reason
+    runtime, completions = fake_runtime([reply])
+    result = await run_assistant_turn(request(), load_procedure_registry(default_pack_root()), runtime, "incomplete")
+    assert result.status == "fallback"
+    assert result.tool_trace == []
+    assert len(completions.calls) == 1
+    assert f"reason={reason}" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_real_sdk_serializes_tool_and_json_final_requests_without_network() -> None:
+    import httpx2
+    from openai import AsyncOpenAI
+
+    sent = []
+
+    def respond(http_request):
+        assert str(http_request.url) == f"{GROQ_BASE_URL}/chat/completions"
+        payload = json.loads(http_request.content)
+        sent.append(payload)
+        if len(sent) == 1:
+            message = {"role": "assistant", "content": None, "tool_calls": [{
+                "id": "sdk-call", "type": "function",
+                "function": {"name": "get_verified_procedure", "arguments": "{}"},
+            }]}
+            finish = "tool_calls"
+        else:
+            assert payload["messages"][-1]["tool_call_id"] == "sdk-call"
+            assert payload["response_format"] == {"type": "json_object"}
+            assert payload["tool_choice"] == "none"
+            assert "tools" not in payload
+            message = {"role": "assistant", "content": json.dumps({
+                "guidance_message": "Use the verified procedure.",
+                "selection_state": "selected", "service_id": "uidai-aadhaar-address-update",
+                "action_ids": ["view-procedure"],
+            })}
+            finish = "stop"
+        return httpx2.Response(200, json={
+            "id": "synthetic-completion", "object": "chat.completion", "created": 0,
+            "model": AGENT_MODEL, "choices": [{"index": 0, "message": message, "finish_reason": finish}],
+        })
+
+    runtime, _ = fake_runtime([])
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as transport:
+        async with AsyncOpenAI(api_key="test-key", base_url=GROQ_BASE_URL, http_client=transport, max_retries=0) as client:
+            runtime.client = client
+            turn = AssistantTurnRequest(
+                locale="en", message="Explain the verified procedure", consent=True,
+                service_id="uidai-aadhaar-address-update",
+            )
+            result = await run_assistant_turn(
+                turn, load_procedure_registry(default_pack_root()), runtime, "sdk-test",
+                graph_node="procedure_routing",
+            )
+    assert result.status == "ok"
+    assert result.tool_trace == ["get_verified_procedure"]
+    assert len(sent) == 2
+    assert all(payload["reasoning_effort"] == "low" for payload in sent)

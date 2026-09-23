@@ -147,7 +147,20 @@ The Docker image must run as UID/GID 10001, serve hashed frontend assets, includ
 
 ## Configuration
 
-Copy `.env.example` to an ignored `.env` only for local configuration. Deterministic Sahayi needs no secret.
+Copy `.env.example` to an ignored `.env` only for local configuration. Deterministic Sahayi needs no secret. The backend reads process environment variables; copying the file alone does not load them. For a trusted local `.env`, start the backend from the repository root with:
+
+```bash
+set -a
+. ./.env
+set +a
+.venv/bin/python -m uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+To enable optional AI, set `SAHAYI_AGENT_ENABLED=true` and configure a real server-side `GROQ_API_KEY` in your local environment or Render secret settings. Restart the backend after changing configuration. Never paste the key into the chat or frontend. `GET /api/v1/public-config` reports whether configuration enables AI; it does not test provider authentication or quota.
+
+Groq requests use low reasoning effort and a default completion budget of 2048 tokens (bounded to 256–4096); explicit environment overrides still apply. If an existing environment sets the old 700-token value, update that setting to use the new default budget. The post-tool request uses JSON mode and an explicit final-answer instruction; the server still validates the schema and reconstructs factual content locally. See [Groq's API reference](https://console.groq.com/docs/api-reference).
+
+For failures, check the server's content-free `assistant_turn_failed` reason: configuration disabled/missing credentials, authentication, provider rate limits, `model_output_token_limit`, and JSON/schema validation are separate causes. A suspended Render service must be resumed by its owner before any endpoint works. The intentional process request budget also stops provider calls once exhausted until the process restarts; it is a demo spending safeguard.
 
 | Variable | Purpose |
 | --- | --- |
@@ -167,7 +180,7 @@ Copy `.env.example` to an ignored `.env` only for local configuration. Determini
 
 `render.yaml` preserves the existing one-service Docker architecture, `/api/v1/health`, disabled auto-deploy, an unset `GROQ_API_KEY` prompt (`sync: false`), the fixed Groq provider/model, and disabled agent flag. Promotion requires an exact tested deployment-branch commit, one manual Render deploy, and the hosted checks in [`.ai/DEPLOYMENT.md`](.ai/DEPLOYMENT.md).
 
-The selected runtime model is `openai/gpt-oss-120b`. The `openai/` prefix is Groq's model namespace; it does not switch Sahayi to OpenAI. Sahayi still authenticates only with the server-side `GROQ_API_KEY` and calls Groq's fixed `https://api.groq.com/openai/v1` endpoint. Groq officially recommends this model as a replacement for the retired `llama-3.3-70b-versatile`; its current model and rate-limit pages show a non-preview model with free-plan availability, local tool use, JSON/JSON Schema support, and multilingual capability. These fit Sahayi's bounded local-tool design. Sahayi does not enable the model's built-in browser search, code execution, MCP/remote tools, or arbitrary functions, and it does not set optional reasoning or provider-specific parameters.
+The selected runtime model is `openai/gpt-oss-120b`. The `openai/` prefix is Groq's model namespace; it does not switch Sahayi to OpenAI. Sahayi still authenticates only with the server-side `GROQ_API_KEY` and calls Groq's fixed `https://api.groq.com/openai/v1` endpoint. Groq officially recommends this model as a replacement for the retired `llama-3.3-70b-versatile`; its current model and rate-limit pages show a non-preview model with free-plan availability, local tool use, JSON/JSON Schema support, and multilingual capability. These fit Sahayi's bounded local-tool design. Sahayi does not enable the model's built-in browser search, code execution, MCP/remote tools, or arbitrary functions, and it uses the documented low reasoning effort setting.
 
 Groq's current published free-plan row for this model is 30 requests/minute, 1,000 requests/day, 8,000 tokens/minute, and 200,000 tokens/day. These figures are indicative and can change; operators must use their Groq Console for the exact limits applied to their organization. Provider errors, including rate limits, continue to return deterministic Sahayi guidance. There is no automatic second-model fallback.
 

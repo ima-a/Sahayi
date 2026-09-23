@@ -67,7 +67,7 @@ def get_settings() -> Settings:
         agent_configuration_valid=configured_provider == AGENT_PROVIDER and configured_model == AGENT_MODEL,
         groq_api_key=configured_key.strip() if configured_key and configured_key.strip() else None,
         agent_timeout_seconds=_float("SAHAYI_AGENT_TIMEOUT_SECONDS", 8.0, 2.0, 20.0),
-        agent_max_output_tokens=_integer("SAHAYI_AGENT_MAX_OUTPUT_TOKENS", 700, 256, 1200),
+        agent_max_output_tokens=_integer("SAHAYI_AGENT_MAX_OUTPUT_TOKENS", 2048, 256, 4096),
         agent_max_tool_calls=_integer("SAHAYI_AGENT_MAX_TOOL_CALLS", 6, 1, 8),
         agent_max_rounds=_integer("SAHAYI_AGENT_MAX_ROUNDS", 3, 1, 4),
         agent_concurrency=_integer("SAHAYI_AGENT_CONCURRENCY", 4, 1, 16),

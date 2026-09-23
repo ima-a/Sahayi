@@ -718,7 +718,10 @@ async def _provider_turn(
         try:
             messages[0] = {
                 "role": "system",
-                "content": _instructions(request.locale, selected_id, request.demo_status_id),
+                "content": _instructions(
+                    request.locale, selected_id, request.demo_status_id,
+                    final=bool(trace) or not exposed_tools,
+                ),
             }
             response = await client.chat.completions.create(
                 **_provider_request(
@@ -744,6 +747,11 @@ async def _provider_turn(
         choices = getattr(response, "choices", None)
         if not isinstance(choices, list) or len(choices) != 1:
             _log_failure("malformed_provider_response", runtime, round_number=round_number, tool_calls=tool_calls)
+            return safe_response(request.locale, "fallback")
+        finish_reason = getattr(choices[0], "finish_reason", None)
+        if finish_reason in {"length", "content_filter"}:
+            reason = "model_output_token_limit" if finish_reason == "length" else "model_output_filtered"
+            _log_failure(reason, runtime, round_number=round_number, tool_calls=tool_calls)
             return safe_response(request.locale, "fallback")
         message = getattr(choices[0], "message", None)
         if message is None:
@@ -843,15 +851,26 @@ async def _provider_turn(
     return safe_response(request.locale, "fallback")
 
 
-def _instructions(locale: SupportedLocale, service_id: str | None, demo_status_id: DemoStatusId | None) -> str:
+def _instructions(
+    locale: SupportedLocale, service_id: str | None, demo_status_id: DemoStatusId | None,
+    *, final: bool = False,
+) -> str:
+    phase = (
+        "Tool use is complete. No functions are available. Use only the supplied tool results and validated context. "
+        "Do not attempt another tool call. If information is missing, ask for clarification without inventing facts. "
+        if final else
+        "You may call at most one of the supplied functions with empty arguments {} before your final answer. "
+        "The application supplies its validated inputs. Do not call functions not present in this request. "
+    )
     return (
         "You are Sahayi's concise prototype guide. Respond in the requested locale. "
         "Never invent procedure facts, fees, eligibility, URLs, approval, submission, form filling, real tracking, or monitoring. "
-        "A simulated status is fictional and may be explained only through explain_simulated_status; never request or accept a real reference number. "
-        "Use only the supplied local functions for facts and use their exact service IDs. Ask for service clarification when needed. "
+        "A simulated status is fictional and may be explained only from a supplied explain_simulated_status result; never request or accept a real reference number. "
+        "Use exact supplied service IDs. Ask for service clarification when needed. "
+        + phase +
         "Do not request or repeat identifiers, contact details, addresses, OTPs, document contents, or files. "
-        "Return a single JSON object without Markdown and with exactly these fields: "
-        "guidance_message (string), selection_state (none, clarification, or selected), "
+        "For the final answer, return a single JSON object without Markdown and with exactly these fields: "
+        "guidance_message (a concise string of at most 1200 characters), selection_state (none, clarification, or selected), "
         "service_id (a supplied service ID or null), and action_ids (an array using only: "
         "view-procedure, start-readiness, build-checklist, prepare-synthetic-form, or open-official-service). "
         f"Locale: {locale}. Current validated service: {service_id or 'none'}. Current validated demo status: {demo_status_id or 'none'}."
@@ -982,11 +1001,14 @@ def _provider_request(
         "tool_choice": "none" if final or not NODE_TOOL_NAMES[graph_node] else "auto",
         "stream": False,
         "temperature": 0,
+        "reasoning_effort": "low",
         "max_completion_tokens": runtime.settings.agent_max_output_tokens,
     }
     if not final and NODE_TOOL_NAMES[graph_node]:
         request["tools"] = _provider_tool_definitions_for_node(registry, graph_node)
         request["parallel_tool_calls"] = False
+    else:
+        request["response_format"] = {"type": "json_object"}
     return request
 
 

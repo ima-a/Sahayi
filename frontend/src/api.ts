@@ -295,7 +295,15 @@ export const assistantTurn = (body: {
   readiness_answers: Record<string, ReadinessAnswer>
   demo_status_id: DemoStatusId | null
   consent: true
-}, signal?: AbortSignal) => postJson<AssistantTurnResponse>('/assistant/turn', body, signal)
+}, signal?: AbortSignal) => postJson<AssistantTurnResponse>('/assistant/turn', {
+  ...body,
+  // Current messages and replies have larger limits than PriorContent (300).
+  // Bound only the outgoing copy; keep the displayed transcript intact.
+  history: body.history.slice(-4).map(turn => ({
+    role: turn.role,
+    content: Array.from(turn.content.trim()).slice(0, 300).join('').trim(),
+  })).filter(turn => turn.content.length > 0),
+}, signal)
 export const conversationTurn = (body: {
   locale: Locale
   event_type: 'start' | 'confirm_service' | 'answer' | 'field_completed' | 'document_evidence' | 'cloud_clarification'

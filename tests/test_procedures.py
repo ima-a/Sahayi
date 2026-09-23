@@ -372,7 +372,9 @@ async def test_list_endpoint_returns_safe_active_summaries(client: AsyncClient) 
     summary = next(item for item in payload["procedures"] if item["service_id"] == "uidai-aadhaar-address-update")
     assert summary["service_id"] == "uidai-aadhaar-address-update"
     assert summary["intent_phrases"] == ["change Aadhaar address", "update address in Aadhaar", "moved to a new address"]
-    assert summary["trust_state"] == "current"
+    loaded = main_module.procedure_registry[summary["service_id"]]
+    expected_trust = "stale" if datetime.now(UTC) > loaded.pack.review_due_at else "current"
+    assert summary["trust_state"] == expected_trust
     assert summary["attention_required"] is True
     assert "requirements" not in summary
     assert "official_handoff_url" not in summary
