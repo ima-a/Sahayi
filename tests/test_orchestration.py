@@ -391,9 +391,9 @@ def test_graph_has_no_checkpointer_store_or_persistent_thread(registry) -> None:
     graph_nodes = set(graph.get_graph().nodes)
     assert graph.checkpointer is None
     assert graph.store is None
-    assert MAX_GRAPH_STEPS == 12
+    assert MAX_GRAPH_STEPS == 32
     assert len(graph_nodes - {"__start__", "__end__"}) <= MAX_GRAPH_STEPS
-    assert {"safety_consent", "intent_clarification", "procedure_router", "document_evidence", "interview_readiness", "checklist", "preparation", "explanation", "official_handoff"} <= graph_nodes
+    assert {"privacy_consent", "intent_understanding", "service_clarification", "procedure_confirmation", "procedure_loading", "requirements_planning", "document_intake", "local_document_extraction", "extracted_field_confirmation", "missing_field_interview", "readiness_evaluation", "form_field_mapping", "form_validation", "checklist_generation", "form_generation", "citizen_review", "official_handoff", "session_cleanup"} <= graph_nodes
 
 
 @pytest.mark.anyio
@@ -414,7 +414,7 @@ async def test_unknown_service_is_rejected_without_provider_or_procedure_facts(r
 @pytest.mark.anyio
 async def test_graph_recursion_limit_fails_closed_with_bounded_diagnostic(registry, monkeypatch) -> None:
     class ExhaustedGraph:
-        def invoke(self, *_args, **_kwargs):
+        async def ainvoke(self, *_args, **_kwargs):
             raise GraphRecursionError("synthetic bounded test")
 
     monkeypatch.setattr("sahayi_api.orchestration.build_conversation_graph", lambda *_args: ExhaustedGraph())

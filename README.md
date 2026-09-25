@@ -1,6 +1,6 @@
 # Sahayi
 
-Sahayi is a privacy-first multilingual public-service preparation prototype. It identifies a supported verified procedure, asks the required questions, automatically prepares a personalised checklist and demonstration worksheet, and guides the citizen to the official channel when official action is required.
+Sahayi is a privacy-first multilingual AI form-preparation assistant for supported public services. It understands a citizen’s goal, guides the citizen through required information, extracts user-confirmed details from documents locally, prepares a reviewed official-form draft or application worksheet, validates completeness and guides the citizen to the official submission channel.
 
 **Public demo:** [https://sahayi.onrender.com](https://sahayi.onrender.com)
 
@@ -19,14 +19,28 @@ English is the canonical verified guidance. Hindi and Malayalam are machine-assi
 
 ## Citizen journey
 
-1. Choose English, Hindi, or Malayalam, press **Start**, and enter one conversation with text or optional voice; browsing the two verified services remains secondary.
+1. Open directly into “How can I help you?” and type or explicitly use the microphone. English, Hindi and Malayalam and browsing supported services remain available; there is no Start screen.
 2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. Finder text is not sent online.
 3. Confirm the proposed verified service. Ambiguous address requests inside the pension task are clarified using only catalogue entries.
 4. Stay in the same conversation while Sahayi asks one verified readiness or preparation question at a time. Confirmed answers immediately fill one browser-memory preparation record; already completed fields are skipped.
 5. At a relevant document question, optionally choose a JPEG, PNG, WebP, or PDF for browser-local printed-text OCR. The file, OCR text, and suggested personal value never leave the browser. A confirmed allowlisted clue can fill its mapped preparation field locally while only the clue category ID reaches the stateless graph.
-6. Sahayi continuously recomputes deterministic readiness and the checklist, shows missing fields, and produces a populated printable sheet with the exact `DEMO — NOT FOR SUBMISSION` watermark. The citizen can review and edit locally entered values before the verified official handoff.
+6. Sahayi continuously recomputes deterministic readiness and the checklist, shows missing fields, and automatically generates a browser-local downloadable PDF preparation sheet with the exact `DEMO — NOT FOR SUBMISSION` watermark. The citizen can review and edit each populated value, confirm review, download or print, then open the verified official handoff. Editing invalidates review and the previous download.
 7. Detailed provenance and synthetic demo views remain secondary. The optional GroqCloud assistant remains separately disclosed and consent-gated when configured; it is not required for the deterministic conversation.
 8. Select **Start Over** or **End session** at any time; navigation, language change, cancellation, replacement, errors, unmount, and inactivity also terminate active document work and clear ephemeral content.
+
+## Reviewed form availability and PDF output
+
+`form-registry/` records versioned availability linked to each Procedure Pack. Build and application startup validate the registry. **No official PDF is activated in this release.** Aadhaar has no reviewed applicable PDF mapping in the pack evidence. The pack-linked Kerala IGNOAPS PDF is readable through source review, but direct immutable-artifact retrieval returned HTTP 403 on 2026-09-23. Its bytes, checksum and coordinates could not be registered; both services therefore produce an application preparation worksheet with `DEMO — NOT FOR SUBMISSION`.
+
+The lazy browser-only `pdf-lib` module provides checksum-gated AcroForm and reviewed-overlay filling, tested with synthetic templates. Activation requires a bundled immutable source, reviewed fields/coordinates and watermark positions. Protected, unsupported, signature and official-use fields remain blank. Non-Latin official-field filling currently fails closed to a worksheet. Worksheet English text is searchable; Hindi/Malayalam lines are locally rasterized using browser font shaping, so those PDF lines are not searchable or fully accessible. The on-screen review remains semantic HTML. Font availability depends on the citizen's device; no remote fonts are fetched.
+
+PDF values and OCR candidates remain in memory. PDFs are generated automatically, but download/print requires review. Artifact bytes are zeroed and object URLs revoked on replacement, navigation, language change, Start Over, End Session and inactivity. Downloaded/printed copies are deliberately saved by the citizen and cannot be erased by End Session.
+
+The stateless graph has 18 responsibilities: `privacy_consent`, `intent_understanding`, `service_clarification`, `procedure_confirmation`, `procedure_loading`, `requirements_planning`, `document_intake`, `local_document_extraction`, `extracted_field_confirmation`, `missing_field_interview`, `readiness_evaluation`, `form_field_mapping`, `form_validation`, `checklist_generation`, `form_generation`, `citizen_review`, `official_handoff`, `session_cleanup`. Its recursion budget is 32 steps; optional clarification invokes the existing bounded provider adapter once (up to two provider rounds). Checklist generation runs independently of structural form mapping/validation. Extraction and filled-PDF generation execute in the browser; their server nodes validate structural receipts and generate value-free definitions, never receive personal values.
+
+Local OCR proposes a small set of explicitly labelled name/address lines with confidence, correction and individual confirmation. It does not understand arbitrary document layouts, authenticate records, or infer missing values. Contradictory readiness choices use deterministic pack outcomes; unsupported or uncertain information still requires citizen/official review. There is no government login, OTP, payment, signature, biometric action, submission, official approval, or real tracking.
+
+Run `.venv/bin/python -m sahayi_api.forms` and `npm --prefix frontend run forms:check` for registry validation. Provider tool routing continues to expose at most two zero-argument local tools per phase, binds validated closed-choice state locally, and uses the exact tool-call/result/final loop. Raw form/document content never reaches Groq.
 
 ## Architecture
 

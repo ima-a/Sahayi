@@ -1,0 +1,125 @@
+{
+  "form_id": "kerala-ign-oap-preparation",
+  "service_id": "kerala-ign-oap",
+  "version": "1.0.0",
+  "official_title": "Indira Gandhi National Old Age Pension application form",
+  "official_source_url": "https://welfarepension.lsgkerala.gov.in/Application%20form/IGNOAPS.pdf",
+  "reviewed_date": "2026-09-23",
+  "output": "worksheet",
+  "page_count": 0,
+  "fields": [
+    {
+      "field_id": "applicant-name",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 120,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "gender-category",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 500,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "contact-and-address",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 240,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "identity-card-numbers",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 500,
+      "leave_blank": true,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "kerala-residence-years",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 500,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "income-tax-declaration",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 500,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "bank-details",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 500,
+      "leave_blank": true,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "supporting-records",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 120,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "place-date-signature",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "kerala-ign-oap-application-form"
+      ],
+      "maximum_length": 500,
+      "leave_blank": true,
+      "signature_or_attestation": true
+    }
+  ],
+  "protected_fields": [
+    "signature",
+    "attestation",
+    "official-use",
+    "biometrics",
+    "payment",
+    "reference-number",
+    "approval",
+    "identifiers",
+    "bank-details"
+  ],
+  "human_review_notes": "Only existing Procedure Pack fields are supported. No PDF bytes or coordinates have been registered. All unsupported and protected fields remain blank.",
+  "translation_limitations": "English is canonical. Hindi and Malayalam are prototype translations requiring human review.",
+  "fallback_reason": "The pack-linked Kerala form could not be retrieved as an immutable artifact (HTTP 403); no reviewed PDF mapping is registered."
+}

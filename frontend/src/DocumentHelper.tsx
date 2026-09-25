@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ConfirmedDocumentEvidence, DocumentGuidance } from './api'
-import { deriveDocumentConclusion, type LocalDocumentConclusion } from './documentEvidence'
+import type { ConfirmedDocumentEvidence, DocumentGuidance, SyntheticFormAssistance } from './api'
+import { deriveDocumentConclusion, extractFieldClues, type FieldClue, type LocalDocumentConclusion } from './documentEvidence'
 import { DocumentValidationError, validateDocumentFile } from './documentValidation'
 import type { Locale } from './i18n'
 
 type Props = {
   locale: Locale
+  fields?: SyntheticFormAssistance['fields']
+  onConfirmField?: (fieldId: string, value: string) => void
   documents: DocumentGuidance[]
   onConfirm: (evidence: ConfirmedDocumentEvidence, clueValue: string) => Promise<void>
 }
@@ -37,7 +39,9 @@ const COPY = {
   },
 } as const
 
-export function DocumentHelper({ locale, documents, onConfirm }: Props) {
+export function DocumentHelper({ locale, documents, onConfirm, fields = [], onConfirmField }: Props) {
+  const [clues, setClues] = useState<FieldClue[]>([])
+  const [candidateValue, setCandidateValue] = useState('')
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<'idle' | 'working' | 'result' | 'error' | 'confirmed'>('idle')
   const [progress, setProgress] = useState(0)
@@ -53,6 +57,7 @@ export function DocumentHelper({ locale, documents, onConfirm }: Props) {
     if (input.current) input.current.value = ''
     setProgress(0)
     setConclusion(null)
+    setClues([]); setCandidateValue('')
   }
 
   useEffect(() => () => {
@@ -72,6 +77,8 @@ export function DocumentHelper({ locale, documents, onConfirm }: Props) {
       const result = await runLocalOcr(file, validation, locale, nextController.signal, value => setProgress(Math.round(value.progress * 100)))
       if (nextController.signal.aborted) return
       setConclusion(deriveDocumentConclusion(result.text, result.confidence, documents))
+      const extracted = extractFieldClues(result.text, result.confidence, fields)
+      setClues(extracted); setCandidateValue(extracted[0]?.value ?? '')
       setState('result')
     } catch (error) {
       if (nextController.signal.aborted) { setState('idle'); return }
@@ -97,7 +104,8 @@ export function DocumentHelper({ locale, documents, onConfirm }: Props) {
     <h2>{copy.open}</h2><p>{copy.intro}</p>
     {state !== 'working' && state !== 'confirmed' && <label className="document-picker">{copy.choose}<input ref={input} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={event => { const file = event.target.files?.[0]; if (file) void inspect(file) }} /></label>}
     {state === 'working' && <div role="status" aria-live="polite"><p>{copy.working} {progress}%</p><progress max="100" value={progress} /><button type="button" className="secondary compact" onClick={() => { clear(); setState('idle') }}>{copy.cancel}</button></div>}
-    {state === 'result' && conclusion && <div className="document-conclusion" role="status"><p>{conclusion.appearsRelevant ? copy.relevant : copy.unknown}</p>{conclusion.appearsRelevant && <div className="suggested-responses"><button type="button" onClick={() => void confirm()}>{copy.confirm}</button><button type="button" className="secondary" onClick={() => { setConclusion(null); setState('idle') }}>{copy.reject}</button></div>}</div>}
+    {state === 'result' && clues[0] && onConfirmField && <div><label htmlFor="ocr-field">{clues[0].label} ({Math.round(clues[0].confidence)}%)</label><input id="ocr-field" value={candidateValue} maxLength={fields.find(field => field.field_id === clues[0].fieldId)?.maximum_length ?? 400} onChange={event => setCandidateValue(event.target.value)} /><button type="button" disabled={!candidateValue.trim()} onClick={() => { onConfirmField(clues[0].fieldId, candidateValue); setCandidateValue(clues[1]?.value ?? ''); setClues(clues.slice(1)) }}>{copy.confirm}</button><button type="button" onClick={() => { setCandidateValue(clues[1]?.value ?? ''); setClues(clues.slice(1)) }}>{copy.reject}</button></div>}
+    {state === 'result' && !clues.length && conclusion && <div className="document-conclusion" role="status"><p>{conclusion.appearsRelevant ? copy.relevant : copy.unknown} ({Math.round(conclusion.confidence)}%)</p>{conclusion.appearsRelevant && <div className="suggested-responses"><button type="button" onClick={() => void confirm()}>{copy.confirm}</button><button type="button" className="secondary" onClick={() => { setConclusion(null); setState('idle') }}>{copy.reject}</button></div>}</div>}
     {state === 'error' && <p className="inline-error" role="alert">{limitError ? copy.limit : copy.error}</p>}
     {state === 'confirmed' && <p role="status">{copy.confirmed}</p>}
     <button type="button" className="browse-fallback" onClick={() => { clear(); setOpen(false); setState('idle') }}>{copy.manual}</button>

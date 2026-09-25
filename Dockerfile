@@ -7,6 +7,7 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
 COPY intent-model/artifacts/intent-model.v1.json /build/intent-model/artifacts/intent-model.v1.json
+COPY form-registry/ /build/form-registry/
 RUN npm run build
 
 
@@ -31,9 +32,10 @@ RUN addgroup --system --gid 10001 sahayi \
 WORKDIR /app
 COPY --from=python-build --chown=10001:10001 /opt/sahayi-python/ /app/src/
 COPY --from=frontend-build --chown=10001:10001 /build/frontend/dist/ /app/frontend/dist/
+COPY --chown=10001:10001 form-registry/ /app/form-registry/
 COPY --chown=10001:10001 procedure-packs/packs/ /app/procedure-packs/packs/
 
 USER 10001:10001
 EXPOSE 10000
 
-CMD ["sh", "-c", "exec python -m uvicorn sahayi_api.main:app --host 0.0.0.0 --port \"${PORT:-10000}\""]
+CMD ["sh", "-c", "exec python -m uvicorn sahayi_api.main:app --host 0.0.0.0 --no-access-log --port \"${PORT:-10000}\""]

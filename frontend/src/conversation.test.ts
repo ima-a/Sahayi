@@ -12,6 +12,11 @@ describe('conversation routing', () => {
     if (route.kind === 'result' && route.result.kind === 'ambiguous') expect(route.result.candidates.map(item => item.procedure.service_id)).toEqual([aadhaar.service_id, pension.service_id])
   })
 
+  it('clarifies an unqualified address change at initial entry', () => {
+    expect(routeCitizenRequest('change address', [aadhaar, pension], null)).toMatchObject({ kind: 'result', reply: 'address-clarification', result: { kind: 'ambiguous' } })
+    expect(routeCitizenRequest('change pension address', [aadhaar, pension], null)).toMatchObject({ kind: 'result', reply: 'pension-address-unsupported' })
+  })
+
   it('does not invent a pension-record address procedure', () => {
     expect(routeCitizenRequest('change my pension address', [aadhaar, pension], pension.service_id)).toMatchObject({ kind: 'result', reply: 'pension-address-unsupported', result: { kind: 'none' } })
   })

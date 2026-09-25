@@ -1,6 +1,18 @@
 # Task state
 
-Last updated: 2026-09-22
+Last updated: 2026-09-25
+
+## AI-first form preparation phase
+
+Preflight: clean existing `feat/sahayi-deployment` at `946fd81`, fetched origin, upstream divergence 0/0; no new branch, unrelated work or unexpected remote commit. Reused local matching, preparation fields, Groq routing and OCR. Implemented direct chat entry, 18 bounded graph responsibilities with provider access inside consent validation, browser-local field-clue correction, versioned form availability, automatic local PDF worksheets, review-gated download/print/handoff, and URL/byte cleanup.
+
+Official form activation is deliberately withheld: Aadhaar has no applicable reviewed PDF mapping; Kerala direct pack-linked retrieval returned HTTP 403. Both registry entries are worksheet fallback. AcroForm and overlay functions are tested only with synthetic immutable templates. No official-form support, government submission or certified translations are claimed. Indic worksheets embed locally shaped raster lines, requiring device fonts.
+
+Final local verification passes: 254 backend tests (including offline agent evaluations), 95 frontend tests, lint, TypeScript, production build, OCR asset checks, intent-model integrity, both Procedure Packs, generated-schema drift, form-registry validation, pip consistency, zero-vulnerability npm/Python audits, YAML/documentation links, diff whitespace and redacted secret/persistence/frontend-bundle scans. The editable application itself is not a PyPI advisory package. Initial JS is 505.86 kB (111.45 kB gzip); PDF generation is a separate lazy 422.29 kB chunk (176.67 kB gzip). Vite retains its 500 kB advisory.
+
+Final no-cache image `458948235705847497f70161353166f9bce608573881c780adfab78dc2181965` runs as UID/GID 10001. Its production assets match the local build; root, APIs, English/Hindi/Malayalam, no-store, AI-disabled operation, strict rejection of private request fields and startup form validation pass. Access logging is disabled, avoiding client-IP logs. The established suite passed 23 responsive/keyboard/voice/local-OCR captures on that exact image. The added preparation suite passed full English/Hindi/Malayalam worksheet journeys, pension missing-field interviews, Aadhaar without upload, ambiguity/unsupported routing, download, URL cleanup, Start Over, End Session and simulated inactivity expiry. Recorded requests contain no synthetic personal value. Local OCR asset loading remains same-origin and sends no API request before confirmation. PDF rendering was inspected for A4 geometry, readable Indic fonts, watermarks and blank protected fields. AcroForm/overlay filling remains synthetic-test-only; no official PDF has been activated.
+
+Earlier intermediate builds were superseded after review changes; one failed safely on a missing registry COPY and another ran out of container disk space. The exact final build above completed after space became available; no unrelated resource or user work was removed. Render inspection on 2026-09-25 matched the active Hackathons Sahayi service with auto-deploy off. This verified source is ready for the explicitly authorized normal commit/push, test-branch fast-forward, one deployment, hosted synthetic/live consented Groq verification, and conditional main promotion. External release identifiers and outcomes are reported after this commit rather than requiring an untested post-deployment documentation commit.
 
 ## Groq follow-up and final-response reliability
 

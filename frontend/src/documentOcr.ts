@@ -63,6 +63,7 @@ export async function runLocalOcr(
     resources.loadingTask.onPassword = () => { void resources.loadingTask?.destroy() }
     resources.pdf = await resources.loadingTask.promise
     if (resources.pdf.numPages > MAX_PDF_PAGES) throw new Error('pdf-page-limit')
+    if (await resources.pdf.getAttachments() || await resources.pdf.getJSActions()) throw new Error('unsupported-pdf-structure')
     const texts: string[] = []
     let confidenceTotal = 0
     for (let pageNumber = 1; pageNumber <= resources.pdf.numPages; pageNumber += 1) {

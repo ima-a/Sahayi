@@ -256,3 +256,13 @@ fieldset { margin: 0; padding: 0; border: 0; }
   a { color: #000; text-decoration: underline; }
   .watermark { break-inside: avoid; }
 }
+
+.draft-download { display: grid; gap: 1rem; margin-top: 1.25rem; }
+.draft-download label { display: flex; gap: .75rem; align-items: center; min-height: 48px; }
+.draft-download input[type="checkbox"] { width: 24px; height: 24px; flex: none; }
+.conversation-header { flex-wrap: wrap; }
+.worksheet-fields dd { overflow-wrap: anywhere; }
+@media print {
+  .conversation-page > .eyebrow, .conversation-page > .composer-privacy { display: none; }
+  .worksheet-fields > div { break-inside: avoid; }
+}

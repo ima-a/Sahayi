@@ -9,7 +9,7 @@ const en = {
   loadServicesTitle: 'We could not load services', loadServicesBody: 'The guidance service is temporarily unavailable. Please try again later.',
   loadingServices: 'Loading supported services…', noProceduresTitle: 'No procedures are available', noProceduresBody: 'No verified service guidance can be shown right now.',
   feeNeedsConfirmation: 'Fee needs confirmation', back: 'Back', procedureUnavailable: 'Procedure unavailable', procedureUnavailableBody: 'We could not load this verified procedure.',
-  loadingProcedure: 'Loading procedure guidance…', privateFinder: 'Private service finder', intakeTitle: 'What do you need help with?',
+  loadingProcedure: 'Loading procedure guidance…', privateFinder: 'Private service finder', intakeTitle: 'How can I help you?',
   intakeLead: 'Describe the service, not your personal situation. Matching happens on this device.', queryLabel: 'Tell us what service you need',
   queryHelp: 'Do not enter an Aadhaar number, phone number, address, OTP, email, or other personal details.', privacyNote: 'Your words stay in this browser and are not sent to Sahayi.',
   tryLater: 'You can try again later.', findService: 'Find my service', conversationSend: 'Send', browseServices: 'Browse all services',

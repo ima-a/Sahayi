@@ -30,7 +30,7 @@ describe('local OCR worker lifecycle', () => {
   it('renders bounded PDF pages to temporary canvases and cleans every resource', async () => {
     const cleanup = vi.fn()
     const page = { getViewport: vi.fn(() => ({ width: 100, height: 100 })), render: vi.fn(() => ({ promise: Promise.resolve() })), cleanup }
-    const pdf = { numPages: 1, getPage: vi.fn(async () => page), cleanup: vi.fn(async () => undefined) }
+    const pdf = { numPages: 1, getAttachments: vi.fn(async () => null), getJSActions: vi.fn(async () => null), getPage: vi.fn(async () => page), cleanup: vi.fn(async () => undefined) }
     const destroy = vi.fn(async () => undefined)
     getDocument.mockReturnValue({ promise: Promise.resolve(pdf), destroy, onPassword: null })
     recognize.mockResolvedValue({ data: { text: 'synthetic pension form', confidence: 80 } })

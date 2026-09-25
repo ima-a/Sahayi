@@ -29,10 +29,10 @@ export function routeCitizenRequest(query: string, procedures: ProcedureSummary[
     return { kind: 'result', result: { kind: 'none', source: 'unsupported' }, reply: 'unsupported' }
   }
 
-  if (activeServiceId === 'kerala-ign-oap' && addressChange && !hasAadhaarScope && !hasPensionScope && aadhaar && pension) {
+  if ((activeServiceId === null || activeServiceId === 'kerala-ign-oap') && addressChange && !hasAadhaarScope && !hasPensionScope && aadhaar && pension) {
     return { kind: 'result', result: { kind: 'ambiguous', candidates: [candidate(aadhaar), candidate(pension)], source: 'deterministic' }, reply: 'address-clarification' }
   }
-  if (activeServiceId === 'kerala-ign-oap' && addressChange && hasPensionScope && !hasAadhaarScope) {
+  if (addressChange && hasPensionScope && !hasAadhaarScope) {
     return { kind: 'result', result: { kind: 'none', source: 'unsupported' }, reply: 'pension-address-unsupported' }
   }
   const reply = classified.result.kind === 'confident' ? 'matched' : classified.result.kind === 'ambiguous' ? 'ambiguous' : 'unsupported'

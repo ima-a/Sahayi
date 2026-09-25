@@ -29,3 +29,22 @@ export function deriveDocumentConclusion(text: string, confidence: number, docum
   if (!best || best.matchedTerms.length < 2) return { documentId: null, appearsRelevant: false, confidence, matchedTerms: [] }
   return { documentId: best.documentId, appearsRelevant: true, confidence, matchedTerms: best.matchedTerms.slice(0, 5) }
 }
+
+export type FieldClue = { fieldId: string; label: string; value: string; confidence: number }
+export function extractFieldClues(text: string, confidence: number, fields: Array<{ field_id: string; label: string; input_type: string | null; maximum_length: number | null }>): FieldClue[] {
+  if (!Number.isFinite(confidence) || confidence < 60) return []
+  const aliases: Record<string, string> = {
+    'applicant-name': '(?:applicant name|name|नाम|പേര്)',
+    'contact-and-address': '(?:contact address|address|पता|വിലാസം)',
+    'new-address': '(?:new address|address|पता|വിലാസം)',
+  }
+  return fields.flatMap(field => {
+    const alias = aliases[field.field_id]
+    if (!alias || !['text', 'textarea'].includes(field.input_type ?? '')) return []
+    const match = text.slice(0, 20000).match(new RegExp(`(?:^|\\n)\\s*${alias}\\s*[:：]\\s*([^\\n]{2,500})`, 'iu'))
+    if (!match) return []
+    const value = redactIdentifierShapes(match[1]).trim()
+    if (value.includes('[redacted]') || value.length > (field.maximum_length ?? 400)) return []
+    return [{ fieldId: field.field_id, label: field.label, value, confidence }]
+  }).slice(0, 3)
+}

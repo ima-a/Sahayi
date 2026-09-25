@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sahayi_api.config import get_settings
+from sahayi_api.forms import load_form_registry
 from sahayi_api.agent import AgentRuntime, AssistantTurnRequest, AssistantTurnResponse, run_assistant_turn
 from sahayi_api.assistance import (
     ChecklistRequest,
@@ -50,6 +51,7 @@ app = FastAPI(title="Sahayi API", docs_url=None, redoc_url=None, openapi_url=Non
 
 try:
     procedure_registry = load_procedure_registry(default_pack_root())
+    form_registry = load_form_registry(procedure_registry)
 except PackLoadError:
     procedure_registry = None
 

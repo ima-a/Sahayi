@@ -32,3 +32,6 @@
 !procedure-packs/
 !procedure-packs/packs/
 !procedure-packs/packs/**
+
+!form-registry/
+!form-registry/**

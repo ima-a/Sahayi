@@ -1,0 +1,94 @@
+{
+  "form_id": "uidai-aadhaar-address-update-preparation",
+  "service_id": "uidai-aadhaar-address-update",
+  "version": "1.0.0",
+  "official_title": "Updating Data on Aadhaar",
+  "official_source_url": "https://uidai.gov.in/en/updating-data-on-aadhaar",
+  "reviewed_date": "2026-09-23",
+  "output": "worksheet",
+  "page_count": 0,
+  "fields": [
+    {
+      "field_id": "update-route",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "uidai-update-overview",
+        "uidai-enrolment-update-faq"
+      ],
+      "maximum_length": 500,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "mobile-auth-ready",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "uidai-update-overview"
+      ],
+      "maximum_length": 500,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "poa-ready",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "uidai-enrolment-update-faq"
+      ],
+      "maximum_length": 500,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "aadhaar-number",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "uidai-update-overview"
+      ],
+      "maximum_length": 500,
+      "leave_blank": true,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "new-address",
+      "field_type": "text",
+      "required": true,
+      "source_ids": [
+        "uidai-enrolment-update-faq"
+      ],
+      "maximum_length": 240,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    },
+    {
+      "field_id": "proof-of-address-document",
+      "field_type": "text",
+      "required": false,
+      "source_ids": [
+        "uidai-update-overview",
+        "uidai-enrolment-update-faq"
+      ],
+      "maximum_length": 120,
+      "leave_blank": false,
+      "signature_or_attestation": false
+    }
+  ],
+  "protected_fields": [
+    "signature",
+    "attestation",
+    "official-use",
+    "biometrics",
+    "payment",
+    "reference-number",
+    "approval",
+    "identifiers",
+    "bank-details"
+  ],
+  "human_review_notes": "Only existing Procedure Pack fields are supported. No PDF bytes or coordinates have been registered. All unsupported and protected fields remain blank.",
+  "translation_limitations": "English is canonical. Hindi and Malayalam are prototype translations requiring human review.",
+  "fallback_reason": "The reviewed Procedure Pack supports online or centre guidance; no applicable citizen-fillable PDF mapping is registered."
+}

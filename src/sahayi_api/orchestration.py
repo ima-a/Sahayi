@@ -8,6 +8,7 @@ from pydantic import Field, HttpUrl, StringConstraints, model_validator
 
 from sahayi_api.agent import AgentRuntime, AssistantTurnRequest, AssistantTurnResponse, run_assistant_turn
 from sahayi_api.assistance import PersonalizedChecklist, SyntheticFormAssistance, SyntheticFormFieldResponse, build_personalized_checklist, localize_preparation_field, prepare_synthetic_form_assistance
+from sahayi_api.forms import load_form_registry
 from sahayi_api.privacy import contains_high_risk_pii
 from sahayi_api.procedures import (
     Identifier,
@@ -24,7 +25,7 @@ from sahayi_api.procedures import (
 from sahayi_api.readiness import AnswerValue, ReadinessEvaluationResponse, ReadinessInputError, ReadinessQuestionResponse, evaluate_readiness
 
 
-MAX_GRAPH_STEPS = 12
+MAX_GRAPH_STEPS = 32
 MAX_LOCAL_CANDIDATES = 2
 MAX_DOCUMENT_EVIDENCE = 8
 CloudMessage = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
@@ -148,6 +149,10 @@ class GraphState(TypedDict):
     official_handoff_url: HttpUrl | None
     diagnostic_category: str
     llm_calls: int
+    required_field_ids: NotRequired[list[str]]
+    mapped_field_ids: NotRequired[list[str]]
+    form_output: NotRequired[str]
+    accepted_document_count: NotRequired[int]
     agent_response: NotRequired[AssistantTurnResponse | None]
 
 
@@ -230,7 +235,7 @@ def build_conversation_graph(
     runtime: AgentRuntime,
     client_address: str,
 ):
-    def safety(state: GraphState) -> dict:
+    async def safety(state: GraphState) -> dict:
         turn = state["request"]
         if turn.message is not None and contains_high_risk_pii(turn.message):
             return {
@@ -239,6 +244,28 @@ def build_conversation_graph(
                 "assistant_message": _COPY[turn.locale]["blocked"],
                 "diagnostic_category": "pii_blocked",
             }
+        public = state["public_state"]
+        if public.service_id is not None and public.service_id not in registry:
+            return _invalid_state(turn.locale)
+        if any(item not in registry for item in public.candidate_service_ids):
+            return _invalid_state(turn.locale)
+        if public.service_id is None and (public.answers or public.completed_field_ids or public.document_evidence):
+            return _invalid_state(turn.locale)
+        if public.service_id is not None:
+            loaded = registry[public.service_id]
+            try:
+                evaluate_readiness(loaded, public.answers, locale=turn.locale)
+            except ReadinessInputError:
+                return _invalid_state(turn.locale)
+            allowed = {f.field_id for f in loaded.pack.assistance.preparation_fields if f.input_type in {PreparationInputType.TEXT, PreparationInputType.TEXTAREA, PreparationInputType.SINGLE_CHOICE, PreparationInputType.DOCUMENT_CLUE}}
+            if len(public.completed_field_ids) != len(set(public.completed_field_ids)) or not set(public.completed_field_ids) <= allowed:
+                return _invalid_state(turn.locale)
+        if turn.event_type == "cloud_clarification":
+            response = await run_assistant_turn(
+                AssistantTurnRequest(locale=turn.locale, message=turn.message or "", history=[], service_id=turn.state.service_id, readiness_answers=turn.state.answers, demo_status_id=None, consent=True),
+                registry, runtime, client_address, graph_node="safety_intent",
+            )
+            return {"agent_response": response, "llm_calls": 1}
         return {}
 
     def intent(state: GraphState) -> dict:
@@ -442,25 +469,93 @@ def build_conversation_graph(
             "progress_text": None,
         }
 
+    def service_clarification(state: GraphState) -> dict:
+        public = state["public_state"]
+        if not public.confirmed and public.candidate_service_ids:
+            return _proposal(state["request"].locale, public, registry)
+        return {}
+
+    def procedure_confirmation(state: GraphState) -> dict:
+        public = state["public_state"]
+        if not public.confirmed or public.service_id not in registry:
+            return _invalid_state(state["request"].locale)
+        return {}
+
+    def requirements_planning(state: GraphState) -> dict:
+        loaded = registry[state["public_state"].service_id]
+        forms = load_form_registry(registry)
+        return {
+            "required_field_ids": [f.field_id for f in loaded.pack.assistance.preparation_fields if f.required and f.input_type is not PreparationInputType.NOT_COLLECTED],
+            "form_output": forms[loaded.pack.service_id].output,
+        }
+
+    def document_intake(state: GraphState) -> dict:
+        # Only structural receipts cross this boundary. Bytes and extraction stay in React.
+        turn = state["request"]
+        allowed = {d.document_id for d in registry[state["public_state"].service_id].pack.required_documents}
+        receipts = [*state["public_state"].document_evidence]
+        if turn.document_evidence is not None:
+            receipts.append(turn.document_evidence)
+        if any(item.document_id not in allowed for item in receipts):
+            return _invalid_state(turn.locale)
+        return {"document_helper_available": bool(allowed)}
+
+    def local_document_extraction(state: GraphState) -> dict:
+        # This is a browser-work boundary, never a server OCR operation.
+        # Strict request models reject files, raw OCR and candidate field values.
+        if state["request"].document_evidence and not state["request"].document_evidence.citizen_confirmed:
+            return _invalid_state(state["request"].locale)
+        return {"accepted_document_count": len(state["public_state"].document_evidence)}
+
+    def readiness_evaluation(state: GraphState) -> dict:
+        public = state["public_state"]
+        return {"readiness": evaluate_readiness(registry[public.service_id], public.answers, locale=state["request"].locale)}
+
+    def form_field_mapping(state: GraphState) -> dict:
+        public = state["public_state"]
+        fields = registry[public.service_id].pack.assistance.preparation_fields
+        mapped = [f.field_id for f in fields if f.field_id in public.completed_field_ids or (f.input_type is PreparationInputType.READINESS_VALUE and f.readiness_question_id in public.answers)]
+        return {"mapped_field_ids": mapped}
+
+    def form_validation(state: GraphState) -> dict:
+        # Validate structural completion only; the browser validates actual values.
+        if not set(state.get("mapped_field_ids", [])) <= {f.field_id for f in registry[state["public_state"].service_id].pack.assistance.preparation_fields}:
+            return _invalid_state(state["request"].locale)
+        return {}
+
+    def session_cleanup(state: GraphState) -> dict:
+        # No durable state exists. Drop optional provider response before returning.
+        return {"agent_response": None}
+
     builder = StateGraph(GraphState)
-    builder.add_node("safety_consent", safety)
-    builder.add_node("intent_clarification", intent)
-    builder.add_node("procedure_router", procedure_router)
-    builder.add_node("document_evidence", document_evidence)
-    builder.add_node("interview_readiness", interview)
-    builder.add_node("checklist", checklist)
-    builder.add_node("preparation", preparation)
-    builder.add_node("explanation", explanation)
-    builder.add_node("official_handoff", official_handoff)
-    builder.add_edge(START, "safety_consent")
-    builder.add_conditional_edges("safety_consent", lambda state: END if state["status"] != "ok" else "intent_clarification")
-    builder.add_conditional_edges("intent_clarification", _after_intent)
-    builder.add_edge("procedure_router", "document_evidence")
-    builder.add_edge("document_evidence", "interview_readiness")
-    builder.add_conditional_edges("interview_readiness", _after_interview)
-    builder.add_edge(["checklist", "preparation"], "explanation")
-    builder.add_conditional_edges("explanation", lambda state: "official_handoff" if state["readiness"] and state["readiness"].complete and state["current_preparation_question"] is None else END)
-    builder.add_edge("official_handoff", END)
+    for name, operation in {
+        "privacy_consent": safety, "intent_understanding": intent,
+        "service_clarification": service_clarification, "procedure_confirmation": procedure_confirmation,
+        "procedure_loading": procedure_router, "requirements_planning": requirements_planning,
+        "document_intake": document_intake, "local_document_extraction": local_document_extraction,
+        "extracted_field_confirmation": document_evidence, "missing_field_interview": interview,
+        "readiness_evaluation": readiness_evaluation, "form_field_mapping": form_field_mapping,
+        "form_validation": form_validation, "checklist_generation": checklist,
+        "form_generation": preparation, "citizen_review": explanation,
+        "official_handoff": official_handoff, "session_cleanup": session_cleanup,
+    }.items():
+        builder.add_node(name, operation)
+    builder.add_edge(START, "privacy_consent")
+    builder.add_conditional_edges("privacy_consent", lambda state: "session_cleanup" if state["status"] != "ok" else "intent_understanding")
+    builder.add_edge("intent_understanding", "service_clarification")
+    builder.add_conditional_edges("service_clarification", lambda state: "procedure_confirmation" if state["status"] == "ok" and state["public_state"].confirmed else "session_cleanup")
+    for left, right in zip(
+        ["procedure_confirmation", "procedure_loading", "requirements_planning", "document_intake", "local_document_extraction", "extracted_field_confirmation", "missing_field_interview"],
+        ["procedure_loading", "requirements_planning", "document_intake", "local_document_extraction", "extracted_field_confirmation", "missing_field_interview", "readiness_evaluation"], strict=True,
+    ):
+        builder.add_conditional_edges(left, lambda state, destination=right: destination if state["status"] == "ok" else "session_cleanup")
+    builder.add_conditional_edges("readiness_evaluation", lambda state: ["checklist_generation", "form_field_mapping"] if state["status"] == "ok" else "session_cleanup")
+    builder.add_edge("form_field_mapping", "form_validation")
+    builder.add_edge("form_validation", "form_generation")
+    builder.add_edge(["checklist_generation", "form_generation"], "citizen_review")
+    builder.add_conditional_edges("citizen_review", lambda state: "official_handoff" if state["status"] == "ok" and state["readiness"] and state["readiness"].complete and state["current_preparation_question"] is None else "session_cleanup")
+    builder.add_edge("official_handoff", "session_cleanup")
+    builder.add_edge("session_cleanup", END)
     return builder.compile()
 
 
@@ -472,25 +567,8 @@ async def run_conversation_turn(
 ) -> ConversationTurnResponse:
     graph = build_conversation_graph(registry, runtime, client_address)
     initial = _base_state(turn)
-    if turn.event_type == "cloud_clarification":
-        initial["agent_response"] = await run_assistant_turn(
-            AssistantTurnRequest(
-                locale=turn.locale,
-                message=turn.message or "",
-                history=[],
-                service_id=turn.state.service_id,
-                readiness_answers=turn.state.answers,
-                demo_status_id=None,
-                consent=True,
-            ),
-            registry,
-            runtime,
-            client_address,
-            graph_node="safety_intent",
-        )
-        initial["llm_calls"] = 1
     try:
-        state = graph.invoke(initial, config={"recursion_limit": MAX_GRAPH_STEPS})
+        state = await graph.ainvoke(initial, config={"recursion_limit": MAX_GRAPH_STEPS})
     except GraphRecursionError:
         state = {**_base_state(turn), **_budget_exhausted(turn.locale)}
     except Exception:
