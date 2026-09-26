@@ -853,6 +853,25 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.queryAllByText('Choose the verified Aadhaar path.')).toHaveLength(0)
   })
 
+  it('keeps chat above the composer and sends with Enter while preserving multiline and IME input', async () => {
+    const fetchMock = mockApi({ agentAvailable: true })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    fireEvent.click(screen.getByRole('checkbox'))
+    const input = screen.getByLabelText('General service question')
+    const log = screen.getByRole('log', { name: UI_MESSAGES.en.aiConversation })
+    expect(log.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.change(input, { target: { value: 'Which services can you help with?' } })
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/assistant/turn'))).toBe(false)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(await within(log).findByText('Choose the verified Aadhaar path.')).toHaveClass('assistant')
+    expect(within(log).getByText('Which services can you help with?')).toHaveClass('user')
+    expect(input).toHaveValue('')
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/assistant/turn'))).toHaveLength(1)
+  })
+
   it('bounds follow-up history after a long accepted question and reply without shortening the display', async () => {
     const longReply = 'Please use the verified procedure. '.repeat(20).trim()
     const longQuestion = 'Please explain the procedure. '.repeat(15).trim()

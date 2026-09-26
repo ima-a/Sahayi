@@ -789,11 +789,14 @@ function AssistantGuide({ messages, language, available, consent, input, history
   voiceState: VoiceInputState; voiceSupported: boolean; onVoiceStart: () => void; onVoiceStop: () => void
   onConsent: (value: boolean) => void; onInput: (value: string) => void; onSubmit: () => void; onChooseService: (serviceId: string) => void; onAction: (actionId: string, serviceId: string | null) => void; onBrowse: () => void; onPrepare: () => void; onViewDetails?: () => void; onStartOver: () => void
 }) {
-  const responseTarget = useRef<HTMLDivElement>(null)
+  const transcriptTarget = useRef<HTMLElement>(null)
   const titleTarget = useRef<HTMLHeadingElement>(null)
   useEffect(() => { titleTarget.current?.focus() }, [])
   const visibleHistory = response && history.at(-1)?.role === 'assistant' && history.at(-1)?.content === response.message ? history.slice(0, -1) : history
-  useEffect(() => { if (response || error || piiWarning) responseTarget.current?.focus() }, [response, error, piiWarning])
+  useEffect(() => {
+    const transcript = transcriptTarget.current
+    if (transcript) transcript.scrollTop = transcript.scrollHeight
+  }, [history, response, loading, error, piiWarning])
   return <main className="kiosk-shell"><section className="content-card agent-page" aria-labelledby="agent-title">{language}
     <nav className="page-actions" aria-label={messages.agentNavigation}><button className="secondary compact" type="button" disabled={loading} onClick={onBrowse}>{messages.browseServices}</button><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
     <p className="eyebrow">{messages.aiDisclosure}</p><h1 id="agent-title" ref={titleTarget} tabIndex={-1}>{messages.aiTitle}</h1>
@@ -801,18 +804,11 @@ function AssistantGuide({ messages, language, available, consent, input, history
     <section className="disclosure-card" aria-labelledby="disclosure-title"><h2 id="disclosure-title">{messages.privacyNotice}</h2><p>{messages.aiDataUse}</p><p>{messages.aiNoZdr}</p><p><strong>{messages.aiDisclaimer}</strong></p>
       <label className="consent-choice"><input type="checkbox" checked={consent} disabled={!available} onChange={event => onConsent(event.target.checked)} /> <span>{messages.aiConsent}</span></label>
     </section>
-    {loading && <p role="status">{messages.checking}</p>}
     {!available && <p className="inline-error" role="status">{messages.aiUnavailable}</p>}
-    {available && consent && <form className="agent-form" onSubmit={event => { event.preventDefault(); onSubmit() }}>
-      <label htmlFor="agent-message">{messages.aiMessageLabel}</label><p id="agent-message-help">{messages.aiMessageHelp}</p>
-      <textarea id="agent-message" maxLength={500} rows={4} value={input} aria-describedby="agent-message-help" onChange={event => onInput(event.target.value)} />
-      <VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} />
-      <button type="submit" disabled={loading || !input.trim()}>{loading ? messages.sending : messages.send}</button>
-    </form>}
-    {visibleHistory.length > 0 && <section className="conversation" aria-labelledby="conversation-title"><h2 id="conversation-title">{messages.aiConversation}</h2>{visibleHistory.map((message, index) => <p className={`message ${message.role}`} key={`${message.role}-${index}`}>{message.content}</p>)}</section>}
-    <div ref={responseTarget} tabIndex={-1} aria-live="polite">
+    <section className="agent-transcript" ref={transcriptTarget} role="log" aria-label={messages.aiConversation} aria-live="polite" aria-relevant="additions text" tabIndex={0}>
+      {visibleHistory.map((message, index) => <p className={`message ${message.role}`} key={`${message.role}-${index}`}>{message.content}</p>)}
       {(error || piiWarning) && <p className="inline-error" role="alert">{piiWarning ? messages.piiWarning : messages.aiError}</p>}
-      {response && <section className="agent-response"><p>{response.message}</p>
+      {response && <section className="agent-response"><p className="message assistant">{response.message}</p>
         {response.selection.choices.length > 0 && <div className="candidate-list">{response.selection.choices.map(choice => <button className="service-card" type="button" key={choice.service_id} disabled={loading} onClick={() => onChooseService(choice.service_id)}><strong>{choice.title}</strong><span aria-hidden="true">→</span></button>)}</div>}
         {response.fact_cards.map(card => <article className="fact-card" key={card.card_id}><h2>{card.title}</h2><p>{card.text}</p></article>)}
         {response.sources.length > 0 && <><h2>{messages.officialSources}</h2><ul className="source-list">{response.sources.map(source => <li key={source.source_id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} <span aria-hidden="true">↗</span></a></li>)}</ul></>}
@@ -820,7 +816,15 @@ function AssistantGuide({ messages, language, available, consent, input, history
         {response.tool_trace.length > 0 && <p className="activity"><strong>{messages.aiActivity}:</strong> {messages.checkingVerified}</p>}
         <p className="result-disclaimer">{response.disclaimer}</p>
       </section>}
-    </div>
+      {loading && input.trim() && <p className="message user">{input}</p>}
+      {loading && <p className="message assistant" role="status">{input.trim() ? messages.sending : messages.checking}</p>}
+    </section>
+    {available && consent && <form className="agent-form" onSubmit={event => { event.preventDefault(); onSubmit() }}>
+      <label htmlFor="agent-message">{messages.aiMessageLabel}</label><p id="agent-message-help">{messages.aiMessageHelp}</p>
+      <textarea id="agent-message" maxLength={500} rows={2} readOnly={loading} value={input} aria-describedby="agent-message-help" onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!loading && input.trim()) onSubmit() } }} onChange={event => onInput(event.target.value)} />
+      <VoiceControls messages={messages} state={voiceState} supported={voiceSupported} onStart={onVoiceStart} onStop={onVoiceStop} />
+      <button type="submit" disabled={loading || !input.trim()}>{loading ? messages.sending : messages.send}</button>
+    </form>}
   </section></main>
 }
 

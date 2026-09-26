@@ -2,6 +2,12 @@
 
 Last updated: 2026-09-26
 
+## Conventional chat layout
+
+Moved the AI message composer below the entire conversation. User and assistant messages share the same bubble layout, including the latest reply; a bounded accessible conversation log scrolls to the newest message without moving keyboard focus away from the composer. The input is smaller, Enter sends, Shift+Enter preserves a newline, and IME composition cannot submit prematurely. Pending messages appear after earlier replies and the field stays read-only during a turn to preserve focus. Consent, service context, history bounds and memory-only cleanup are unchanged.
+
+Frontend lint, typecheck, 98 tests and production build pass. The new interaction regression covers document reading order, message bubbles, Enter, multiline and IME handling. Production browser checks verify desktop/mobile geometry and follow-up turns. Backend behavior and dependencies are unchanged from the preceding verified release. The existing deployment authorization applies to publishing this UI follow-up; hosted results are verified after publication.
+
 ## Selected-service provider follow-up
 
 The UI release `ca843143c6b0f2bfb3d0eae9ed0c8be0f140f2fa` deployed successfully, with matching hosted JavaScript and healthy no-store responses. The focused live Kerala document question twice reached Groq with the correct selected service and consent but failed at round one with HTTP 400/failed-generation present. No citizen/provider content or credentials were logged. The existing provider node exposed both catalogue and procedure tools despite already having a validated service.
