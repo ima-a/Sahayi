@@ -87,4 +87,4 @@ The Docker image serves the compiled frontend and FastAPI from one same-origin s
 - [Privacy and safety](docs/privacy-boundary.md)
 - [Local intent model card](docs/intent-model-card.md)
 - [Procedure Packs](procedure-packs/README.md)
-- [Deployment operations](.ai/DEPLOYMENT.md)
+- [Deployment operations](docs/deployment.md)

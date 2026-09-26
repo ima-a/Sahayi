@@ -39,4 +39,4 @@ GroqCloud guidance is disabled unless the server feature flag and server-side ke
 
 The Procedure Intelligence command compares allowlisted public sources in a bounded one-shot review. It can produce a report for human review; it does not edit or activate procedure facts. The scheduled GitHub workflow is read-only.
 
-The multi-stage Docker build compiles the frontend and installs the API, then serves both from one unprivileged container. See [privacy and safety](privacy-boundary.md) for data boundaries and [deployment operations](../.ai/DEPLOYMENT.md) for release details.
+The multi-stage Docker build compiles the frontend and installs the API, then serves both from one unprivileged container. See [privacy and safety](privacy-boundary.md) for data boundaries and [deployment](deployment.md) for hosting details.

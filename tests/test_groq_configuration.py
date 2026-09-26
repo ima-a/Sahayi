@@ -38,23 +38,19 @@ def test_runtime_and_render_configuration_use_only_groq_credentials() -> None:
     assert "value: openai/gpt-oss-120b" in render
 
 
-def test_retired_model_appears_only_in_labelled_history_or_migration_checks() -> None:
+def test_retired_model_is_absent_from_runtime_and_public_documentation() -> None:
     active_runtime_files = [
         ROOT / "src/sahayi_api/config.py",
         ROOT / ".env.example",
         ROOT / "render.yaml",
+    ]
+    public_docs = [
+        ROOT / "README.md",
         ROOT / "docs/architecture.md",
-        ROOT / ".ai/ARCHITECTURE.md",
-        ROOT / ".ai/ENVIRONMENT.md",
-        ROOT / ".ai/DEPLOYMENT.md",
+        ROOT / "docs/deployment.md",
     ]
     assert all(RETIRED_MODEL not in path.read_text() for path in active_runtime_files)
-
-    readme = (ROOT / "README.md").read_text()
-    decisions = (ROOT / ".ai/DECISIONS.md").read_text()
-    assert "retired `llama-3.3-70b-versatile`" in readme
-    assert "Historical migration context" in decisions
-    assert "retirement of `llama-3.3-70b-versatile`" in decisions
+    assert all(RETIRED_MODEL not in path.read_text() for path in public_docs)
 
 
 def test_completion_budget_default_and_explicit_operator_limit(monkeypatch) -> None:
