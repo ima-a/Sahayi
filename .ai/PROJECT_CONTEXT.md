@@ -1,26 +1,18 @@
-# Sahayi project context
+# Project context
 
-Sahayi addresses the citizen problem of not knowing which department, scheme, channel, or sequence applies to a need. The final hackathon release candidate is a publicly demonstrable, privacy-first multilingual preparation conversation: it starts from the person's need, proposes one of two supported services locally, requires confirmation, asks only the next deterministic readiness or preparation question, fills a browser-memory preparation record, updates the checklist automatically, and hands off to a verified official channel.
+Sahayi is a multilingual hackathon prototype for preparing applications to two supported services: UIDAI Aadhaar address update and Kerala Indira Gandhi National Old Age Pension preliminary guidance.
 
-The implemented release supports UIDAI Aadhaar address update and Kerala Indira Gandhi National Old Age Pension in English, Hindi, and Malayalam. English is canonical. Hindi/Malayalam UI, Procedure Pack text, and synthetic intent examples are machine-assisted prototypes pending native-speaker and legal review.
+## Current behavior
 
-Architecture boundaries:
+- React and TypeScript provide the conversation-first browser experience in English, Hindi, and Malayalam.
+- The browser proposes services using pack-authored phrases and a bundled synthetic-data Naive Bayes model. The user confirms every proposed service.
+- FastAPI and a stateless LangGraph serve deterministic, source-linked procedures, readiness guidance, checklists, worksheet definitions, and official handoff.
+- Personal values, conversation state, documents, OCR text, and voice transcripts remain in browser memory. No citizen database, browser storage, analytics, or telemetry is implemented.
+- Optional OCR and voice features are browser enhancements. Optional GroqCloud help is consent-gated and disabled unless configured on the server.
+- Procedure monitoring is a bounded one-shot review workflow. It does not change or activate facts.
 
-- Browser-local inference combines deterministic pack phrases with a bundled character 2–5-gram Multinomial Naive Bayes classifier; raw finder text is not sent online.
-- One typed bounded LangGraph composes intent confirmation, verified procedure routing, deterministic readiness, structural completed-field/document evidence, parallel checklist/preparation-definition generation, and official handoff through a strict stateless conversation-turn API. Personal preparation values stay only in React memory; it has no checkpointer, store, database, tracing, or server thread.
-- FastAPI serves the React build and stateless deterministic Procedure Pack, readiness, checklist, synthetic worksheet, conversation-turn, and demo status APIs from one same-origin container.
-- Optional GroqCloud guidance is separately disclosed, consent-gated, unavailable without server configuration, and limited to strict local tools; AI never supplies authoritative facts or outcomes.
-- Procedure Intelligence is an offline-first, one-shot, human-reviewed source comparison CLI, optionally invoked by a read-only daily GitHub Actions workflow; it is not hosted citizen functionality or automatic fact activation.
-- Browser-dependent voice input/read-aloud is explicit, memory-only, and always paired with complete text/touch fallback; recognition may use browser/vendor processing.
-- Optional Tesseract.js/PDF.js printed-text assistance is explicit, lazy, checksum-verified, same-origin, and browser-local. Raw files/OCR never cross the API; a citizen may confirm only an allowlisted unverified clue.
-- Citizen workflow state is memory-only and cleared by End Session/inactivity. No citizen database, cookies, browser storage, analytics, or telemetry exists.
+## Product limits
 
-The public demo is https://sahayi.onrender.com. Release candidates move linearly through `feat/sahayi-langgraph-orchestration`, `test/sahayi-final`, and `feat/sahayi-deployment`; `main` advances only after the exact hosted commit passes.
+Sahayi is not a government service or eligibility authority. It does not submit applications, handle OTPs or payments, or retrieve real status. No official PDF is enabled; worksheets are marked `DEMO — NOT FOR SUBMISSION`. English is canonical. Hindi and Malayalam are machine-assisted prototypes that need native-speaker and legal review.
 
-Non-goals and limitations: government affiliation/endorsement, legal eligibility decisions, real forms/submission/status, OTP/payment, DigiLocker, certified voice/pronunciation or complete accessibility, production readiness, certified translation, automatic fact activation, verified real-world model accuracy, universal external-provider non-retention, or a Zero Data Retention claim. The UIDAI fee conflict remains unresolved and source-linked; the Kerala pension amount is omitted. Procedure facts must remain deterministic and verified before display.
-
-## AI-first preparation update (2026-09-23)
-
-The initial screen is Sahayi AI; language change, Start Over and End Session return to a clean AI screen. Cloud turns still require explicit consent. Catalogue selection returns to AI with the verified service ID, clearing previous task context; step-by-step local preparation remains available with that service preselected. The journey summary is in normal document flow, not sticky. The 18-node graph validates browser-carried structural state before consented provider access, with a 32-step budget, no checkpointer/store, and parallel checklist/form-definition work. Optional cloud clarification is available in the primary conversation only after local abstention and explicit disclosure/consent. The existing node-routed Groq contract is unchanged.
-
-Versioned `form-registry/` manifests validate at build/startup. Both live services deliberately register worksheet fallback: no reviewed Aadhaar PDF mapping exists, and direct Kerala artifact retrieval returned HTTP 403. No official PDF is activated. Browser-only lazy `pdf-lib` generates worksheets automatically; review gates download, print and official handoff. Synthetic tests cover future checksum-gated AcroForm/overlay filling with protected fields and reviewed watermark placement. Indic worksheet text uses locally shaped raster lines and depends on device fonts; official Indic filling is not enabled. URLs and generated bytes clear on edits/navigation/session cleanup; citizen-saved downloads are outside session cleanup. Local labelled name/address OCR clues require individual confirmation/correction; personal values never cross the API or provider boundary.
+See the public [architecture](../docs/architecture.md) and [privacy boundary](../docs/privacy-boundary.md) for the maintained system description.

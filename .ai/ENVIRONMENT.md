@@ -1,17 +1,38 @@
-# Environment
+# Development environment
 
-Verified runtimes: Python 3.14.7 and Node 25.2.1. System runtimes must not be changed automatically.
+The verified runtime is Python 3.14.7 and Node.js 25.2.1. Python dependencies are pinned in `pyproject.toml`; frontend dependencies are pinned in `frontend/package-lock.json`.
 
-Backend manifest versions: FastAPI 0.141.1, LangGraph 1.2.11, OpenAI Python 3.0.0, Starlette 1.6.0, Uvicorn 0.40.0, HTTPX 0.28.1, pytest 9.1.1. Frontend manifest versions include React 19.2.8, React DOM 19.2.8, Vite 8.2.2, Vitest 4.1.11, TypeScript 6.0.2, Tesseract.js 7.0.0, PDF.js 6.3.289, and English/Hindi/Malayalam Tesseract data 1.0.0.
+## Setup and run
 
-Install with `python3 -m venv .venv && . .venv/bin/activate && python -m pip install -e '.[test]'`, then `cd frontend && npm ci`. Develop with `uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --reload` and `cd frontend && npm run dev`.
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[test]'
+npm --prefix frontend ci
+```
 
-Run `.venv/bin/python -m pytest`; `cd frontend && npm run lint && npm run typecheck && npm test && npm run ocr:check && npm run build`. Run offline agent evaluation with `.venv/bin/python -m pytest tests/test_agent_evals.py`, model integrity with `.venv/bin/python -m tools.intent_model --check`, pack/schema integrity with `.venv/bin/python -m sahayi_api.procedure_tool validate` and `check-schema`, Python dependency consistency with `.venv/bin/python -m pip check`, and frontend dependency audit with `npm audit`. Use `.venv/bin/pip-audit --skip-editable` when available. `predev`/`prebuild` checksum and copy 22 self-hosted OCR assets (52,493,148 bytes) into ignored `frontend/public/ocr`; `ocr:check` verifies them without writing. For a same-origin check, build the frontend then run Uvicorn on `127.0.0.1:8000` and request `/` and `/api/v1/health`.
+Run the API and Vite frontend in separate terminals:
 
-`SAHAYI_DEV_FRONTEND_ORIGIN` permits one exact Vite development origin. `VITE_API_BASE_URL` selects the frontend development API base. `SAHAYI_KIOSK_INACTIVITY_SECONDS` defaults to 300 and is bounded to 60–1800 seconds; `SAHAYI_KIOSK_WARNING_SECONDS` defaults to 30 and is bounded to 10–120 seconds. Their safe effective values are public so the browser can enforce kiosk clearing. The backend reads process environment variables and does not automatically load `.env`; source a trusted local file before starting Uvicorn as documented in README. Optional server-only AI configuration is `GROQ_API_KEY`, `SAHAYI_AGENT_ENABLED` (default false), fixed/allowlisted `SAHAYI_AGENT_PROVIDER=groq`, fixed/allowlisted `SAHAYI_AGENT_MODEL=openai/gpt-oss-120b`, and bounded timeout, output, tool-round, concurrency, request-budget, and rate-window variables documented as placeholders in `.env.example`. The `openai/` prefix is Groq's model namespace; Sahayi still uses only `GROQ_API_KEY` and the fixed `https://api.groq.com/openai/v1` endpoint. Provider/model/availability are safe public metadata; the key and internal provider details remain server-only.
+```bash
+.venv/bin/python -m uvicorn sahayi_api.main:app --host 127.0.0.1 --port 8000 --reload
+npm --prefix frontend run dev
+```
 
-The source detector is invoked with `.venv/bin/python -m sahayi_api.procedure_tool monitor`; offline fixture mode is the default and returns non-zero for its demonstrated changed/unreachable cases. Live public-source retrieval is never part of application startup or hosted routes and requires both `--live` and `--acknowledge-live-public-source-check`. The read-only daily Actions workflow supplies those flags, uploads only its bounded report, and fails visibly for changed/error/missing-baseline states; it never mutates a pack or deploys. Use `--json` and an explicit `--output PATH` only when a bounded review artifact is intentionally needed; local runtime reports are not tracked.
+The backend reads process environment variables and does not load `.env` automatically. `VITE_API_BASE_URL` and `SAHAYI_DEV_FRONTEND_ORIGIN` are for local development. See `.env.example` for the optional kiosk and server-side Groq settings. Never place real secrets in the example file.
 
-The production Docker build uses Python 3.14.7 for build/runtime and Node 25.2.1 only to compile the frontend. Render injects `PORT`; the container binds one Uvicorn process to `0.0.0.0` on that value, with `10000` as a local fallback. Deterministic Sahayi requires no secret. Optional AI later requires a `GROQ_API_KEY` Render secret and deliberate `SAHAYI_AGENT_ENABLED=true`; Groq project access, cost/rate limits, and owner-controlled Data Controls must be reviewed first. Groq's published free-plan row for the selected model is currently 30 RPM, 1,000 RPD, 8,000 TPM, and 200,000 TPD; these are indicative only, and operators must check Groq Console for exact organization limits.
+## Common checks
 
-The candidate container gate is `docker build --no-cache -t sahayi:release-candidate .`; the final image must run as UID/GID 10001 and contain the compiled frontend (including the statically bundled intent model and self-hosted OCR runtime), installed backend/fixture, and active Procedure Packs. Docker is an external prerequisite; absence of a daemon is a release blocker for this gate rather than permission to weaken it.
+```bash
+.venv/bin/python -m pytest
+npm --prefix frontend run lint
+npm --prefix frontend run typecheck
+npm --prefix frontend test
+npm --prefix frontend run build
+.venv/bin/python -m tools.intent_model --check
+.venv/bin/python -m sahayi_api.procedure_tool validate
+.venv/bin/python -m sahayi_api.procedure_tool check-schema
+```
+
+Frontend prebuild copies and verifies the pinned, same-origin OCR assets and checks the form registry. `npm --prefix frontend run ocr:check` and `npm --prefix frontend run forms:check` run those integrity checks directly.
+
+Source monitoring uses an offline fixture by default. Live retrieval is an explicit one-shot command requiring both `--live` and `--acknowledge-live-public-source-check`; it is not part of development startup or hosted API requests.
