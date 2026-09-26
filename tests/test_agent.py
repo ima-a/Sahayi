@@ -171,7 +171,6 @@ async def test_strict_tool_loop_uses_bounded_chat_settings_and_deterministic_fac
         assert "single JSON object without Markdown" in call["messages"][0]["content"]
     assert responses.calls[0]["parallel_tool_calls"] is False
     assert [tool["function"]["name"] for tool in responses.calls[0]["tools"]] == [
-        "list_supported_services",
         "get_verified_procedure",
     ]
     assert responses.calls[0]["tool_choice"] == "auto"
@@ -1128,3 +1127,19 @@ async def test_real_sdk_serializes_tool_and_json_final_requests_without_network(
     assert result.tool_trace == ["get_verified_procedure"]
     assert len(sent) == 2
     assert all(payload["reasoning_effort"] == "low" for payload in sent)
+
+
+@pytest.mark.anyio
+async def test_confirmed_service_rejects_catalogue_tool_outside_its_node() -> None:
+    runtime, responses = fake_runtime([
+        chat_response(tool_calls=[tool_call("list_supported_services", "{}", "wrong-node")]),
+    ])
+    result = await run_assistant_turn(
+        AssistantTurnRequest(locale="en", message="What documents should I prepare?",
+                             service_id="kerala-ign-oap", consent=True),
+        load_procedure_registry(default_pack_root()), runtime, "selected-service-scope",
+        graph_node="procedure_routing",
+    )
+    assert result.status == "fallback"
+    assert result.tool_trace == []
+    assert len(responses.calls) == 1

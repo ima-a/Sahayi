@@ -2,6 +2,12 @@
 
 Last updated: 2026-09-26
 
+## Selected-service provider follow-up
+
+The UI release `ca843143c6b0f2bfb3d0eae9ed0c8be0f140f2fa` deployed successfully, with matching hosted JavaScript and healthy no-store responses. The focused live Kerala document question twice reached Groq with the correct selected service and consent but failed at round one with HTTP 400/failed-generation present. No citizen/provider content or credentials were logged. The existing provider node exposed both catalogue and procedure tools despite already having a validated service.
+
+Narrowed that node to `get_verified_procedure` and made the state-bound empty-argument contract explicit in provider tool descriptions and instructions. The catalogue remains in the intent node; other bounded tool sets, fixed model, auto tool choice, temperature, consent, canonical validation, no retries, and deterministic reconstruction remain intact. Full backend verification passes 255 tests, including rejection of catalogue calls in the selected-service node. The 97 frontend tests and frontend/browser gates from the UI release remain applicable because this follow-up changes no frontend code. A fresh no-cache production build and live verification gate this corrective deployment. Live outcomes are recorded in the final report after deployment.
+
 ## AI entry and catalogue navigation follow-up
 
 Sahayi AI is now the initial screen and the destination after language change, Start Over and End Session. Browse all services shows the verified catalogue; selecting a service opens AI with the verified service ID as context, without a provider request until consent and an explicit message. Switching services aborts pending work and clears previous chat/preparation context. Removed the redundant AI Back control and intervening catalogue-to-procedure screen. Local guided preparation and verified details remain optional actions. The current-step summary scrolls normally instead of sticking to the viewport. Mobile action buttons no longer inherit an oversized vertical flex basis.

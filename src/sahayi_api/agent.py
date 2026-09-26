@@ -57,7 +57,7 @@ AgentGraphNode = Literal[
 ]
 NODE_TOOL_NAMES: dict[AgentGraphNode, tuple[str, ...]] = {
     "safety_intent": ("list_supported_services",),
-    "procedure_routing": ("list_supported_services", "get_verified_procedure"),
+    "procedure_routing": ("get_verified_procedure",),
     "readiness_interview": ("get_readiness_questions", "evaluate_readiness"),
     "automatic_preparation": ("build_personalized_checklist", "prepare_synthetic_form_assistance"),
     "explanation_status": ("explain_simulated_status",),
@@ -861,6 +861,8 @@ def _instructions(
         if final else
         "You may call at most one of the supplied functions with empty arguments {} before your final answer. "
         "The application supplies its validated inputs. Do not call functions not present in this request. "
+        "When a service is already selected and get_verified_procedure is available, use it to read that service. "
+        "Do not list services again or invent a document-search function. Tool arguments must be exactly {}. "
     )
     return (
         "You are Sahayi's concise prototype guide. Respond in the requested locale. "
@@ -931,7 +933,7 @@ def _provider_tool_definitions_for_node(
             "type": "function",
             "function": {
                 "name": name,
-                "description": canonical["description"],
+                "description": canonical["description"] + " All inputs are already bound by the application. Call this function with the empty JSON object {} only; do not supply service_id, locale, or other arguments.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
