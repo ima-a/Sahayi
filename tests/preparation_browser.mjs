@@ -64,6 +64,8 @@ const setLocale = async locale => evaluate(`(() => { const select = document.que
 
 await send('Page.enable'); await send('Runtime.enable')
 await send('Page.navigate', { url: appUrl })
+await waitFor(`Boolean(document.querySelector('#agent-title'))`)
+await evaluate(`document.querySelector('[data-action=prepare]').click()`)
 await waitFor(`Boolean(document.querySelector('#service-query')) && !document.querySelector('.state-panel')`)
 const setInput = async (selector, value) => evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', {bubbles:true})); return true })()`)
 for (const [locale, goal, personal] of [
@@ -71,7 +73,10 @@ for (const [locale, goal, personal] of [
   ['hi', 'आधार पता अपडेट', 'काल्पनिक परीक्षण क्षेत्र'],
   ['ml', 'കേരള വാർദ്ധക്യ പെൻഷൻ', 'സാങ്കൽപ്പിക പരീക്ഷണ സ്ഥലം'],
 ]) {
+  await evaluate(`document.querySelector('.end-session').click()`)
   await setLocale(locale)
+  await waitFor(`Boolean(document.querySelector('#agent-title'))`)
+  await evaluate(`document.querySelector('[data-action=prepare]').click()`)
   await waitFor(`Boolean(document.querySelector('#service-query')) && !document.querySelector('.state-panel')`)
   await evaluate(`(() => { window.__requests=[]; window.__urls=[]; window.__revoked=[]; const original=window.fetch.bind(window); window.fetch=(input,init)=>{ window.__requests.push(String(init?.body ?? '')); return original(input,init) }; const create=URL.createObjectURL.bind(URL), revoke=URL.revokeObjectURL.bind(URL); URL.createObjectURL=(blob)=>{ const url=create(blob); window.__urls.push(url); return url }; URL.revokeObjectURL=(url)=>{window.__revoked.push(url); return revoke(url)} })()`)
   await setInput('#service-query', goal)
@@ -101,11 +106,13 @@ for (const [locale, goal, personal] of [
   await viewport(locale==='hi'?390:locale==='ml'?768:1280)
   await screenshot(`prepared-${locale}`)
   await evaluate(`document.querySelector('.end-session').click()`)
+  await waitFor(`Boolean(document.querySelector('#agent-title'))`)
+  await evaluate(`document.querySelector('[data-action=prepare]').click()`)
   await waitFor(`Boolean(document.querySelector('#service-query'))`)
   if (!await evaluate(`window.__urls.every(url=>window.__revoked.includes(url))`)) throw new Error('Artifact URL not revoked')
   if (await evaluate(`document.body.innerText.includes(${JSON.stringify(personal)})`)) throw new Error('Personal field survived session')
 }
-await setLocale('en'); await waitFor(`!document.querySelector('.state-panel')`)
+await setLocale('en'); await waitFor(`Boolean(document.querySelector('#agent-title'))`); await evaluate(`document.querySelector('[data-action=prepare]').click()`); await waitFor(`!document.querySelector('.state-panel')`)
 for (const [goal, expected] of [['renew my passport', 'no'], ['address update', 'ambiguous']]) {
   await setInput('#service-query', goal)
   await evaluate(`document.querySelector('.conversation-composer button[type="submit"]').click()`)
@@ -113,13 +120,17 @@ for (const [goal, expected] of [['renew my passport', 'no'], ['address update', 
   if (expected==='ambiguous' && !await evaluate(`document.querySelectorAll('.candidate-list .service-card').length===2`)) throw new Error('Ambiguity not clarified')
   if (expected==='no' && await evaluate(`Boolean(document.querySelector('.trust-card'))`)) throw new Error('Unsupported service selected')
   await evaluate(`document.querySelector('.end-session').click()`)
+  await waitFor(`Boolean(document.querySelector('#agent-title'))`)
+  await evaluate(`document.querySelector('[data-action=prepare]').click()`)
   await waitFor(`Boolean(document.querySelector('#service-query')) && !document.querySelector('.state-panel')`)
 }
 await setInput('#service-query', 'SYNTHETIC SESSION INPUT')
 await evaluate(`document.querySelector('.conversation-header button').click()`)
+await waitFor(`Boolean(document.querySelector('#agent-title'))`)
+await evaluate(`document.querySelector('[data-action=prepare]').click()`)
 await waitFor(`document.querySelector('#service-query')?.value === '' && !document.querySelector('.state-panel')`)
 await setInput('#service-query', 'SYNTHETIC SESSION INPUT')
 await evaluate(`(async () => { const config=await fetch('/api/v1/public-config').then(r=>r.json()); const original=Date.now; Date.now=()=>original()+(config.inactivity_timeout_seconds+1)*1000; document.dispatchEvent(new Event('visibilitychange')); Date.now=original })()`)
-await waitFor(`document.body.textContent.includes('Session cleared after inactivity') && document.querySelector('#service-query')?.value === ''`)
+await waitFor(`document.body.textContent.includes('Session cleared after inactivity') && Boolean(document.querySelector('#agent-title'))`)
 socket.close()
 console.log(JSON.stringify({locales:['en','hi','ml'],pension:true,aadhaarWithoutUpload:true,downloads:true,urlCleanup:true,personalValuesLocal:true,unsupported:true,ambiguous:true,startOver:true,inactivityCleanup:true}))

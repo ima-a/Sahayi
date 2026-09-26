@@ -339,9 +339,15 @@ function mockApi(options: { procedures?: ProcedureSummary[]; procedure?: Procedu
   return fetchMock
 }
 
+// Existing preparation and procedure checks explicitly enter the optional guided flow.
+function renderPreparation() {
+  const view = render(<App />)
+  fireEvent.click(screen.getByRole('button', { name: UI_MESSAGES.en.guidedPreparation }))
+  return view
+}
+
 async function openCatalogue() {
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
-  await screen.findByRole('heading', { name: 'How can I help you?' })
   fireEvent.click(screen.getAllByRole('button', { name: 'Browse all services' }).at(-1)!)
   await screen.findByRole('heading', { name: 'Supported services' })
 }
@@ -349,6 +355,7 @@ async function openCatalogue() {
 async function openProcedure() {
   await openCatalogue()
   fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
+  fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES.en.verifiedOfficial }))
   await screen.findByRole('heading', { name: 'Update your Aadhaar address online' })
 }
 
@@ -362,9 +369,43 @@ describe('Sahayi verified procedure flow', () => {
   beforeEach(() => vi.restoreAllMocks())
   afterEach(() => { vi.useRealTimers(); delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition; TestRecognition.instance = null })
 
+  it('opens Sahayi AI directly with consent required and no redundant back button', async () => {
+    const fetchMock = mockApi({ agentAvailable: true })
+    render(<App />)
+    expect(screen.getByRole('heading', { name: UI_MESSAGES.en.aiTitle })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: UI_MESSAGES.en.browseServices })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('General service question')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('checkbox')).toBeEnabled())
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/assistant/turn'))).toBe(false)
+  })
+
+  it('returns catalogue selection to AI and sends that service context only after consent', async () => {
+    const fetchMock = mockApi({ agentAvailable: true, procedures: [summary, pensionSummary] })
+    render(<App />)
+    await openCatalogue()
+    fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
+    await screen.findByRole('button', { name: UI_MESSAGES.en.verifiedOfficial })
+    expect(screen.getByRole('heading', { name: UI_MESSAGES.en.aiTitle })).toBeInTheDocument()
+    expect(screen.getAllByText(summary.title).length).toBeGreaterThan(0)
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/assistant/turn'))).toBe(false)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'What documents should I prepare?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send to AI' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/assistant/turn'))).toBe(true))
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/assistant/turn'))!
+    expect(JSON.parse(String(call[1]?.body)).service_id).toBe(summary.service_id)
+    await waitFor(() => expect(screen.getByRole('button', { name: UI_MESSAGES.en.browseServices })).toBeEnabled())
+    await openCatalogue()
+    fireEvent.click(screen.getByRole('button', { name: /Kerala Indira Gandhi National Old Age Pension/ }))
+    await screen.findByRole('button', { name: UI_MESSAGES.en.verifiedOfficial })
+    expect(screen.queryByText('What documents should I prepare?')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('General service question')).toHaveValue('')
+  })
+
   it('renders the welcome content and loading state', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
-    render(<App />)
+    renderPreparation()
     expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
     expect(screen.getByLabelText('Tell us what service you need')).toBeInTheDocument()
     expect(screen.getByText('Need help?')).toBeInTheDocument()
@@ -374,7 +415,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('enables Start and opens the populated service catalogue', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openCatalogue()
     expect(screen.getByRole('button', { name: /Update your Aadhaar address online/ })).toBeInTheDocument()
     expect(screen.getByText(/Official UIDAI guidance/)).toBeInTheDocument()
@@ -383,7 +424,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('opens the conversation directly without a service-card wall', async () => {
     mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     expect(await screen.findByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
     expect(document.querySelectorAll('.service-card')).toHaveLength(0)
@@ -393,25 +434,25 @@ describe('Sahayi verified procedure flow', () => {
 
   it('offers exactly three accessible languages, updates document language, and keeps the choice in memory across Start Over', async () => {
     const fetchMock = mockApi()
-    render(<App />)
+    renderPreparation()
     const selector = screen.getByLabelText('Language')
     expect(within(selector).getAllByRole('option').map(option => option.textContent)).toEqual(['English', 'हिन्दी', 'മലയാളം'])
     fireEvent.change(selector, { target: { value: 'hi' } })
     expect(document.documentElement.lang).toBe('hi')
-    expect(screen.getByRole('heading', { name: UI_MESSAGES.hi.intakeTitle })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: UI_MESSAGES.hi.aiTitle })).toBeInTheDocument()
     expect(screen.getByRole('note')).toHaveTextContent('मशीन-सहायित प्रोटोटाइप')
-    await screen.findByRole('heading', { name: 'आपको किस काम में मदद चाहिए?' })
+    await screen.findByRole('heading', { name: UI_MESSAGES.hi.aiTitle })
     expect(fetchMock.mock.calls.some(call => String(call[0]).endsWith('/procedures?locale=hi'))).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'फिर से शुरू करें' }))
     expect(screen.getByLabelText('भाषा')).toHaveValue('hi')
     fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
     expect(document.documentElement.lang).toBe('ml')
-    expect(screen.getByRole('heading', { name: UI_MESSAGES.ml.intakeTitle })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: UI_MESSAGES.ml.aiTitle })).toBeInTheDocument()
   })
 
   it('keeps text available when voice is unsupported and reports microphone denial without breaking conversation', async () => {
     mockApi()
-    const view = render(<App />)
+    const view = renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     expect(await screen.findByRole('button', { name: 'Use microphone' })).toBeDisabled()
     expect(screen.getByText(/Voice input is unavailable/)).toBeInTheDocument()
@@ -419,7 +460,7 @@ describe('Sahayi verified procedure flow', () => {
     view.unmount()
 
     Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: TestRecognition })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     fireEvent.click(await screen.findByRole('button', { name: 'Use microphone' }))
     act(() => TestRecognition.instance?.onerror?.({ error: 'not-allowed' }))
@@ -429,9 +470,10 @@ describe('Sahayi verified procedure flow', () => {
 
   it('renders both services and Kerala form, destination, respectful review, and sensitive-choice guidance', async () => {
     mockApi({ procedures: [summary, pensionSummary], procedure: pensionDetail, readinessInitial: readinessStep(pensionSensitiveQuestion, 0, 1) })
-    render(<App />)
+    renderPreparation()
     await openCatalogue()
     fireEvent.click(screen.getByRole('button', { name: /Kerala Indira Gandhi National Old Age Pension/ }))
+    fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES.en.verifiedOfficial }))
     await screen.findByRole('heading', { name: pensionDetail.title })
     expect(screen.getByRole('link', { name: /Social Security Pension.*Application Forms/ })).toHaveAttribute('href', pensionDetail.official_handoff_url)
     expect(screen.getByText('Local body of permanent residence')).toBeInTheDocument()
@@ -450,7 +492,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('selects the service and shows trust-card provenance', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     expect(screen.getByRole('heading', { name: 'Your Sahayi journey' })).toBeInTheDocument()
     expect(screen.getAllByText('Update your Aadhaar address online').length).toBeGreaterThan(1)
@@ -472,7 +514,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('labels the official handoff and applies external-link safety', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     const handoff = screen.getByRole('link', { name: /Open the official service/ })
     expect(handoff).toHaveAttribute('href', 'https://myaadhaar.uidai.gov.in/')
@@ -483,7 +525,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('shows a prominent stale warning', async () => {
     mockApi({ procedure: { ...detail, trust_state: 'stale' } })
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     expect(screen.getAllByRole('alert').some(alert => alert.textContent?.includes('This guidance needs review'))).toBe(true)
     expect(screen.getByText('Stale — review overdue')).toBeInTheDocument()
@@ -492,7 +534,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('shows an accessible conflict warning with both source-attributed claims', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     const warning = screen.getByRole('alert')
     expect(warning).toHaveAccessibleName('Fee needs confirmation')
@@ -508,14 +550,14 @@ describe('Sahayi verified procedure flow', () => {
 
   it('handles backend failure and an empty catalogue', async () => {
     mockApi({ failCatalogue: true })
-    const { unmount } = render(<App />)
+    const { unmount } = renderPreparation()
     await openCatalogue()
     expect(await screen.findByRole('alert')).toHaveTextContent('We could not load services')
 
     unmount()
     vi.restoreAllMocks()
     mockApi({ procedures: [] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     fireEvent.click(await screen.findByRole('button', { name: 'Browse all services' }))
     expect(await screen.findByText('No procedures are available')).toBeInTheDocument()
@@ -523,18 +565,18 @@ describe('Sahayi verified procedure flow', () => {
 
   it('provides Back and Start Over controls', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('heading', { name: 'Supported services' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Start Over' }))
-    expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Sahayi AI' })).toBeInTheDocument()
   })
 
   it('does not introduce browser persistence', async () => {
     const storageWrite = vi.spyOn(Storage.prototype, 'setItem')
     mockApi()
-    render(<App />)
+    renderPreparation()
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
     fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'en' } })
     await openProcedure()
@@ -543,7 +585,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('introduces the private readiness check from the procedure page', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Check what you need' }))
     expect(screen.getByRole('heading', { name: 'Check what you need' })).toBeInTheDocument()
@@ -556,7 +598,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('asks one conditional question per screen with progress and validation', async () => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Check what you need' }))
     fireEvent.click(screen.getByRole('button', { name: 'Begin readiness check' }))
@@ -574,7 +616,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('supports Back and Start Over while clearing answers', async () => {
     const fetchMock = mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Check what you need' }))
     fireEvent.click(screen.getByRole('button', { name: 'Begin readiness check' }))
@@ -584,14 +626,14 @@ describe('Sahayi verified procedure flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('heading', { name: mobileQuestion.prompt })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Start Over' }))
-    expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Sahayi AI' })).toBeInTheDocument()
     const postedBodies = fetchMock.mock.calls.filter(call => new URL(String(call[0]), 'http://test').pathname.endsWith('/readiness/evaluate')).map(call => JSON.parse(String(call[1]?.body)))
     expect(postedBodies.at(-1)).toEqual({ answers: {} })
   })
 
   it('shows completed cited reasoning, next steps, and the non-approval disclaimer', async () => {
     const fetchMock = mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Check what you need' }))
     fireEvent.click(screen.getByRole('button', { name: 'Begin readiness check' }))
@@ -609,7 +651,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('handles readiness backend failure without exposing an answer', async () => {
     mockApi({ failReadiness: true })
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Check what you need' }))
     fireEvent.click(screen.getByRole('button', { name: 'Begin readiness check' }))
@@ -619,20 +661,20 @@ describe('Sahayi verified procedure flow', () => {
 
   it('starts with empty readiness state after a fresh mount', async () => {
     mockApi()
-    const first = render(<App />)
+    const first = renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Check what you need' }))
     fireEvent.click(screen.getByRole('button', { name: 'Begin readiness check' }))
     expect(await screen.findByRole('heading', { name: mobileQuestion.prompt })).toBeInTheDocument()
     first.unmount()
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument())
     expect(screen.queryByText(mobileQuestion.prompt)).not.toBeInTheDocument()
   })
 
   it('keeps a natural-language query in the browser, suggests Aadhaar, and clears it on confirmation', async () => {
     const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     const query = await screen.findByLabelText('Tell us what service you need')
     fireEvent.change(query, { target: { value: 'I moved recently and want to update my Aadhaar address.' } })
@@ -650,7 +692,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('keeps the deterministic journey in one conversation and prepares the checklist, worksheet, and verified handoff automatically', async () => {
     const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'I need to change my Aadhaar address' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
@@ -688,7 +730,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('routes the Kerala pension request and asks only its next pack-owned question', async () => {
     const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'My mother is 67 and I want to know if she can get pension.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
@@ -704,22 +746,22 @@ describe('Sahayi verified procedure flow', () => {
 
   it('clears the unified conversation and active task with Start Over and End session', async () => {
     mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'change Aadhaar address' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(await screen.findByText(/Is this the service you mean/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Start Over' }))
-    expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Sahayi AI' })).toBeInTheDocument()
     expect(screen.queryByText(/Is this the service you mean/)).not.toBeInTheDocument()
     fireEvent.click(await screen.findByRole('button', { name: 'End session' }))
     expect(screen.getByText(/cleared all in-memory session data/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Tell us what service you need')).toHaveValue('')
+    expect(screen.queryByLabelText('General service question')).not.toBeInTheDocument()
   })
 
   it('hides the free-text composer while a structured pension question is active', async () => {
     mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     const input = await screen.findByLabelText('Tell us what service you need')
     fireEvent.change(input, { target: { value: 'old age pension Kerala' } })
@@ -733,7 +775,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('supports both example services, ambiguous/no-match fallback, and local PII warning', async () => {
     const fetchMock = mockApi({ procedures: [summary, pensionSummary], procedure: pensionDetail })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     const query = await screen.findByLabelText('Tell us what service you need')
     fireEvent.change(query, { target: { value: 'old age pension Kerala' } })
@@ -753,7 +795,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('announces local matching, makes no finder request, and clears inference on language change', async () => {
     const fetchMock = mockApi({ procedures: [summary, pensionSummary] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     const query = await screen.findByLabelText('Tell us what service you need')
     const beforeInference = fetchMock.mock.calls.length
@@ -763,13 +805,13 @@ describe('Sahayi verified procedure flow', () => {
     expect(screen.getByText(/This request has not been sent online/)).toHaveTextContent('Matched on this device')
     expect(fetchMock.mock.calls).toHaveLength(beforeInference)
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
-    expect(await screen.findByLabelText('बताएँ कि आपको कौन-सी सेवा चाहिए')).toHaveValue('')
+    expect(screen.getByRole('heading', { name: UI_MESSAGES.hi.aiTitle })).toBeInTheDocument()
     expect(screen.queryByText(/इस डिवाइस पर मिलान हुआ/)).not.toBeInTheDocument()
   })
 
   it('asks the citizen to choose when catalogue phrases are tied', async () => {
     mockApi({ procedures: [{ ...summary, intent_phrases: ['address update'] }, { ...pensionSummary, intent_phrases: ['address update'] }] })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     fireEvent.change(await screen.findByLabelText('Tell us what service you need'), { target: { value: 'address update' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
@@ -780,14 +822,14 @@ describe('Sahayi verified procedure flow', () => {
 
   it('shows an unavailable backend state on initial failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.getByText('Service is temporarily unavailable')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument()
   })
 
   it('requires AI disclosure consent, sends only bounded turn fields, renders verified activity, and Start Over clears memory', async () => {
     const fetchMock = mockApi({ agentAvailable: true })
-    render(<App />)
+    renderPreparation()
     await openAssistant()
     expect(screen.getByText(/Groq collects usage metadata/)).toBeInTheDocument()
     expect(screen.getByText(/owner-controlled Groq Console setting/)).toBeInTheDocument()
@@ -815,7 +857,7 @@ describe('Sahayi verified procedure flow', () => {
     const longReply = 'Please use the verified procedure. '.repeat(20).trim()
     const longQuestion = 'Please explain the procedure. '.repeat(15).trim()
     const fetchMock = mockApi({ agentAvailable: true, agentReply: { ...agentReply, message: longReply } })
-    render(<App />)
+    renderPreparation()
     await openAssistant()
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.change(screen.getByLabelText('General service question'), { target: { value: longQuestion } })
@@ -846,11 +888,11 @@ describe('Sahayi verified procedure flow', () => {
   it('uses the selected locale for the AI turn and clears conversation when language changes', async () => {
     const hindiReply: AssistantTurnResponse = { ...agentReply, locale: 'hi', message: 'सत्यापित प्रक्रिया चुनें।', disclaimer: 'AI मार्गदर्शन स्वीकृति नहीं है।' }
     const fetchMock = mockApi({ agentAvailable: true, agentReply: hindiReply })
-    render(<App />)
+    renderPreparation()
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'hi' } })
     fireEvent.click(await screen.findByRole('button', { name: 'सभी सेवाएँ देखें' }))
     fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Ask Sahayi AI' }))
+    await screen.findByRole('button', { name: UI_MESSAGES.hi.verifiedOfficial })
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.change(screen.getByLabelText('सामान्य सेवा प्रश्न'), { target: { value: 'आधार पता अपडेट में मदद' } })
     fireEvent.click(screen.getByRole('button', { name: 'AI को भेजें' }))
@@ -859,13 +901,13 @@ describe('Sahayi verified procedure flow', () => {
     expect(JSON.parse(String(call[1]?.body)).locale).toBe('hi')
     fireEvent.change(screen.getByLabelText('भाषा'), { target: { value: 'ml' } })
     expect(screen.queryAllByText('सत्यापित प्रक्रिया चुनें।')).toHaveLength(0)
-    expect(screen.getByRole('heading', { name: UI_MESSAGES.ml.intakeTitle })).toBeInTheDocument()
-    expect(screen.getByLabelText(UI_MESSAGES.ml.queryLabel)).toHaveValue('')
+    expect(screen.getByRole('heading', { name: UI_MESSAGES.ml.aiTitle })).toBeInTheDocument()
+    expect(screen.queryByLabelText(UI_MESSAGES.ml.aiMessageLabel)).not.toBeInTheDocument()
   })
 
   it('blocks multilingual identifier-shaped AI input in the browser without a provider request', async () => {
     const fetchMock = mockApi({ agentAvailable: true })
-    render(<App />)
+    renderPreparation()
     await openAssistant()
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'मेरा आधार १२३४ ५६७८ ९०१२ है' } })
@@ -890,7 +932,7 @@ describe('Sahayi verified procedure flow', () => {
         fallback: true,
       },
     })
-    render(<App />)
+    renderPreparation()
     await openAssistant()
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.change(screen.getByLabelText('General service question'), { target: { value: 'Help with this service' } })
@@ -902,7 +944,7 @@ describe('Sahayi verified procedure flow', () => {
     const print = vi.fn()
     vi.stubGlobal('print', print)
     mockApi()
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Build personalized checklist' }))
     expect(await screen.findByRole('heading', { name: 'Personalized preparation checklist' })).toBeInTheDocument()
@@ -922,10 +964,11 @@ describe('Sahayi verified procedure flow', () => {
     ['ml', 'ഡെമോ സമർപ്പണവുമായി തുടരുക', 'അപേക്ഷ സമർപ്പിക്കില്ല.'],
   ] as const)('shows the localized demo disclosure in %s', async (locale, continueLabel, disclosure) => {
     mockApi()
-    render(<App />)
+    renderPreparation()
     if (locale !== 'en') fireEvent.change(screen.getByLabelText('Language'), { target: { value: locale } })
     fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].browseServices }))
     fireEvent.click(await screen.findByRole('button', { name: /Update your Aadhaar address online/ }))
+    fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].verifiedOfficial }))
     fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].syntheticForm }))
     for (let index = 0; index < formFixture.fields.length; index += 1) fireEvent.click(await screen.findByRole('button', { name: UI_MESSAGES[locale].nextField }))
     fireEvent.click(await screen.findByRole('button', { name: continueLabel }))
@@ -937,7 +980,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('supports deliberate normal and action-required status paths with accessible current status', async () => {
     mockApi({ agentAvailable: true })
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
     for (let index = 0; index < formFixture.fields.length; index += 1) fireEvent.click(await screen.findByRole('button', { name: 'Next demo field' }))
@@ -969,7 +1012,7 @@ describe('Sahayi verified procedure flow', () => {
 
   it('passes only the validated current demo status ID to the optional agent tool boundary', async () => {
     const fetchMock = mockApi({ agentAvailable: true })
-    render(<App />)
+    renderPreparation()
     await openProcedure()
     fireEvent.click(screen.getByRole('button', { name: 'Prepare synthetic demo worksheet' }))
     for (let index = 0; index < formFixture.fields.length; index += 1) fireEvent.click(await screen.findByRole('button', { name: 'Next demo field' }))
@@ -987,22 +1030,22 @@ describe('Sahayi verified procedure flow', () => {
 
   it('End session aborts requests, clears citizen state, and returns a clean welcome', async () => {
     const fetchMock = mockApi({ pendingDetail: true })
-    render(<App />)
+    renderPreparation()
     await openCatalogue()
     fireEvent.click(screen.getByRole('button', { name: /Update your Aadhaar address online/ }))
-    await screen.findByText('Loading procedure guidance…')
+    await screen.findByText(UI_MESSAGES.en.checking)
     const detailCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/procedures/uidai-'))!
     expect(detailCall[1]?.signal?.aborted).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'End session' }))
     expect(detailCall[1]?.signal?.aborted).toBe(true)
-    expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Sahayi AI' })).toBeInTheDocument()
     expect(screen.getByText(/cleared all in-memory session data/)).toBeInTheDocument()
-    expect(screen.queryByText('Loading procedure guidance…')).not.toBeInTheDocument()
+    expect(screen.queryByText(UI_MESSAGES.en.checking)).not.toBeInTheDocument()
   })
 
   it('warns, continues, and clears on kiosk inactivity using elapsed time', async () => {
     mockApi({ inactivityTimeout: 60, inactivityWarning: 10 })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
     vi.useFakeTimers()
@@ -1016,13 +1059,13 @@ describe('Sahayi verified procedure flow', () => {
     await act(async () => { vi.advanceTimersByTime(1_000) })
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     await act(async () => { vi.advanceTimersByTime(10_000) })
-    expect(screen.getByRole('heading', { name: 'How can I help you?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ask Sahayi AI' })).toBeInTheDocument()
     expect(screen.getByText(/Session cleared after inactivity/)).toBeInTheDocument()
   })
 
   it('clears by elapsed time when a throttled hidden tab becomes visible', async () => {
     mockApi({ inactivityTimeout: 60, inactivityWarning: 10 })
-    render(<App />)
+    renderPreparation()
     await waitFor(() => expect(screen.queryByText('Loading supported services…')).not.toBeInTheDocument())
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
     vi.useFakeTimers()

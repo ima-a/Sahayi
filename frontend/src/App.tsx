@@ -78,7 +78,7 @@ function App() {
   const [availability, setAvailability] = useState<Availability>('loading')
   const [, setName] = useState('Sahayi')
   const [agentAvailable, setAgentAvailable] = useState(false)
-  const [screen, setScreen] = useState<Screen>('intake')
+  const [screen, setScreen] = useState<Screen>('assistant')
   const [procedures, setProcedures] = useState<ProcedureSummary[] | null>(null)
   const [detail, setDetail] = useState<ProcedureDetail | null>(null)
   const [catalogueError, setCatalogueError] = useState(false)
@@ -147,7 +147,7 @@ function App() {
     requestControllers.current.clear()
     objectUrls.current.forEach(url => URL.revokeObjectURL(url))
     objectUrls.current.clear()
-    setScreen('intake'); setProcedures(null); setDetail(null); setCatalogueError(false); setDetailError(false)
+    setScreen('assistant'); setProcedures(null); setDetail(null); setCatalogueError(false); setDetailError(false)
     setReadiness(null); setReadinessAnswers({}); setReadinessHistory([]); setReadinessLoading(false); setReadinessError(false)
     stopVoice()
     setQuery(''); setJourneyGoal(''); setConversationHistory([]); setConversationResponse(null); setMatch(null); setPiiWarning(false)
@@ -406,6 +406,13 @@ function App() {
   }
 
   const chooseAgentService = async (serviceId: string) => {
+    // A service switch clears the old conversation and all preparation context.
+    requestControllers.current.forEach(controller => controller.abort())
+    sessionGeneration.current += 1
+    setScreen('assistant'); setDetail(null); setAgentHistory([]); setAgentResponse(null); setAgentInput('')
+    setAgentLoading(true); setAgentPiiWarning(false); setJourneyGoal('')
+    setChecklist(null); setFormAssistance(null); setPreparedValues({}); setReadinessLabels({})
+    setConversationHistory([]); setConversationResponse(null); setMatch(null); setQuery(''); setDemo(null)
     setAgentError(false)
     try {
       const selected = await request(signal => getProcedure(serviceId, locale, signal))
@@ -414,8 +421,8 @@ function App() {
       setReadiness(null)
       setReadinessAnswers({})
       setReadinessHistory([])
-      setAgentResponse(previous => previous ? { ...previous, selection: { state: 'selected', service_id: serviceId, choices: [] } } : previous)
     } catch (error) { if (!isAbort(error)) setAgentError(true) }
+    finally { setAgentLoading(false) }
   }
 
   const openChecklist = async (serviceId = detail?.service_id) => {
@@ -556,7 +563,7 @@ function App() {
     history={agentHistory} response={agentResponse} loading={agentLoading} error={agentError} piiWarning={agentPiiWarning}
     voiceState={voice.inputState} voiceSupported={voice.inputSupported} onVoiceStart={() => voice.startInput(value => { if (detectHighRiskPii(value)) { setAgentInput(''); setAgentPiiWarning(true) } else { setAgentInput(value); setAgentPiiWarning(false) } })} onVoiceStop={() => voice.stopInput()}
     onConsent={setAgentConsent} onInput={value => { setAgentInput(value); setAgentPiiWarning(false) }} onSubmit={submitAgent}
-    onChooseService={chooseAgentService} onAction={handleAgentAction} onBack={() => setScreen(demo ? 'demo' : detail ? 'detail' : 'intake')} onStartOver={startOver} />)
+    onChooseService={chooseAgentService} onAction={handleAgentAction} onBrowse={() => setScreen('catalogue')} onPrepare={() => { setScreen('intake'); if (detail) void startConversationProcedure(detail.service_id) }} onViewDetails={detail ? () => selectProcedure(detail.service_id) : undefined} onStartOver={startOver} />)
 
   if (screen === 'checklist') return wrapSession(<ChecklistView messages={messages} language={language} checklist={checklist} loading={assistanceLoading} error={assistanceError}
     onBack={() => setScreen(detail ? 'detail' : 'assistant')} onStartOver={startOver} onForm={() => openFormAssistance(checklist?.service_id)} onDemo={() => openDemo(checklist?.service_id)} />)
@@ -587,7 +594,7 @@ function App() {
     {catalogueError ? <div className="state-panel error" role="alert"><h2>{messages.loadServicesTitle}</h2><p>{messages.loadServicesBody}</p></div>
       : procedures === null ? <div className="state-panel" role="status" aria-live="polite">{messages.loadingServices}</div>
         : procedures.length === 0 ? <div className="state-panel" role="status"><h2>{messages.noProceduresTitle}</h2><p>{messages.noProceduresBody}</p></div>
-          : <ul className="service-list">{procedures.map(procedure => <li key={procedure.service_id}><button className="service-card" type="button" onClick={() => selectProcedure(procedure.service_id, procedure.title)}>
+          : <ul className="service-list">{procedures.map(procedure => <li key={procedure.service_id}><button className="service-card" type="button" onClick={() => chooseAgentService(procedure.service_id)}>
             <span><strong>{procedure.title}</strong><small>{procedure.short_description}</small>{procedure.attention_required && <small className="attention-badge">{messages.feeNeedsConfirmation}</small>}</span><span aria-hidden="true">→</span>
           </button></li>)}</ul>}
   </section></main>)
@@ -777,20 +784,24 @@ function ReadinessFlow({ response, loading, error, locale, messages, language, o
   </section></main>
 }
 
-function AssistantGuide({ messages, language, available, consent, input, history, response, loading, error, piiWarning, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onConsent, onInput, onSubmit, onChooseService, onAction, onBack, onStartOver }: {
+function AssistantGuide({ messages, language, available, consent, input, history, response, loading, error, piiWarning, voiceState, voiceSupported, onVoiceStart, onVoiceStop, onConsent, onInput, onSubmit, onChooseService, onAction, onBrowse, onPrepare, onViewDetails, onStartOver }: {
   messages: Messages; language: React.ReactNode; available: boolean; consent: boolean; input: string; history: ConversationMessage[]; response: AssistantTurnResponse | null; loading: boolean; error: boolean; piiWarning: boolean
   voiceState: VoiceInputState; voiceSupported: boolean; onVoiceStart: () => void; onVoiceStop: () => void
-  onConsent: (value: boolean) => void; onInput: (value: string) => void; onSubmit: () => void; onChooseService: (serviceId: string) => void; onAction: (actionId: string, serviceId: string | null) => void; onBack: () => void; onStartOver: () => void
+  onConsent: (value: boolean) => void; onInput: (value: string) => void; onSubmit: () => void; onChooseService: (serviceId: string) => void; onAction: (actionId: string, serviceId: string | null) => void; onBrowse: () => void; onPrepare: () => void; onViewDetails?: () => void; onStartOver: () => void
 }) {
   const responseTarget = useRef<HTMLDivElement>(null)
+  const titleTarget = useRef<HTMLHeadingElement>(null)
+  useEffect(() => { titleTarget.current?.focus() }, [])
   const visibleHistory = response && history.at(-1)?.role === 'assistant' && history.at(-1)?.content === response.message ? history.slice(0, -1) : history
   useEffect(() => { if (response || error || piiWarning) responseTarget.current?.focus() }, [response, error, piiWarning])
   return <main className="kiosk-shell"><section className="content-card agent-page" aria-labelledby="agent-title">{language}
-    <nav className="page-actions" aria-label={messages.agentNavigation}><button className="secondary compact" type="button" onClick={onBack}>{messages.back}</button><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
-    <p className="eyebrow">{messages.aiDisclosure}</p><h1 id="agent-title">{messages.aiTitle}</h1>
+    <nav className="page-actions" aria-label={messages.agentNavigation}><button className="secondary compact" type="button" disabled={loading} onClick={onBrowse}>{messages.browseServices}</button><button className="secondary compact" type="button" onClick={onStartOver}>{messages.startOver}</button></nav>
+    <p className="eyebrow">{messages.aiDisclosure}</p><h1 id="agent-title" ref={titleTarget} tabIndex={-1}>{messages.aiTitle}</h1>
+    <div className="assistance-actions"><button type="button" className="secondary" data-action="prepare" disabled={loading} onClick={onPrepare}>{messages.guidedPreparation}</button>{onViewDetails && <button type="button" className="secondary" data-action="procedure" disabled={loading} onClick={onViewDetails}>{messages.verifiedOfficial}</button>}</div>
     <section className="disclosure-card" aria-labelledby="disclosure-title"><h2 id="disclosure-title">{messages.privacyNotice}</h2><p>{messages.aiDataUse}</p><p>{messages.aiNoZdr}</p><p><strong>{messages.aiDisclaimer}</strong></p>
       <label className="consent-choice"><input type="checkbox" checked={consent} disabled={!available} onChange={event => onConsent(event.target.checked)} /> <span>{messages.aiConsent}</span></label>
     </section>
+    {loading && <p role="status">{messages.checking}</p>}
     {!available && <p className="inline-error" role="status">{messages.aiUnavailable}</p>}
     {available && consent && <form className="agent-form" onSubmit={event => { event.preventDefault(); onSubmit() }}>
       <label htmlFor="agent-message">{messages.aiMessageLabel}</label><p id="agent-message-help">{messages.aiMessageHelp}</p>
@@ -802,7 +813,7 @@ function AssistantGuide({ messages, language, available, consent, input, history
     <div ref={responseTarget} tabIndex={-1} aria-live="polite">
       {(error || piiWarning) && <p className="inline-error" role="alert">{piiWarning ? messages.piiWarning : messages.aiError}</p>}
       {response && <section className="agent-response"><p>{response.message}</p>
-        {response.selection.choices.length > 0 && <div className="candidate-list">{response.selection.choices.map(choice => <button className="service-card" type="button" key={choice.service_id} onClick={() => onChooseService(choice.service_id)}><strong>{choice.title}</strong><span aria-hidden="true">→</span></button>)}</div>}
+        {response.selection.choices.length > 0 && <div className="candidate-list">{response.selection.choices.map(choice => <button className="service-card" type="button" key={choice.service_id} disabled={loading} onClick={() => onChooseService(choice.service_id)}><strong>{choice.title}</strong><span aria-hidden="true">→</span></button>)}</div>}
         {response.fact_cards.map(card => <article className="fact-card" key={card.card_id}><h2>{card.title}</h2><p>{card.text}</p></article>)}
         {response.sources.length > 0 && <><h2>{messages.officialSources}</h2><ul className="source-list">{response.sources.map(source => <li key={source.source_id}><a href={source.url} target="_blank" rel="noopener noreferrer">{source.title} <span aria-hidden="true">↗</span></a></li>)}</ul></>}
         {response.actions.length > 0 && <div className="assistance-actions">{response.actions.map(action => <button type="button" key={action.action_id} onClick={() => onAction(action.action_id, action.service_id)}>{action.label}</button>)}</div>}

@@ -1,6 +1,12 @@
 # Task state
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
+
+## AI entry and catalogue navigation follow-up
+
+Sahayi AI is now the initial screen and the destination after language change, Start Over and End Session. Browse all services shows the verified catalogue; selecting a service opens AI with the verified service ID as context, without a provider request until consent and an explicit message. Switching services aborts pending work and clears previous chat/preparation context. Removed the redundant AI Back control and intervening catalogue-to-procedure screen. Local guided preparation and verified details remain optional actions. The current-step summary scrolls normally instead of sticking to the viewport. Mobile action buttons no longer inherit an oversized vertical flex basis.
+
+Verification: 254 backend and 97 frontend tests pass, plus lint, TypeScript, production build, model/pack/schema/form checks, pip consistency and zero-known-vulnerability npm/Python dependency audits. Browser smoke covers 23 captures across three languages and four widths, direct AI entry, catalogue selection, a summary that scrolls away, OCR, preparation and synthetic journeys. Full preparation browser tests cover all three languages, local PDF downloads, no personal values in requests, URL revocation, unsupported/ambiguous intent, Start Over and inactivity cleanup. No secrets or persistence were added. Production container runs as UID/GID 10001 with no-store responses. The final no-cache image `1aaab32ceb7f7bf238584d319fc9933d69526963d92aa801a9cd3b004b91e644` passes the repeated responsive smoke suite and focused AI-entry/context/static-summary/mobile-action checks. A transient npm connection reset was retried; only this task’s superseded container/build images were removed. Deployment follows the user's explicit instruction; hosted release results are reported after the commit.
 
 ## AI-first form preparation phase
 

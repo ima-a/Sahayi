@@ -27,7 +27,7 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 4px solid
 .start-note { margin: 14px 0 0; color: #526d62; font-size: .95rem; }
 .first-help { margin-top: 22px; padding: 12px 16px; border: 1px solid #78988b; border-radius: 10px; text-align: left; }
 .first-help summary, .procedure-details summary, .procedure-intelligence summary { cursor: pointer; color: #173d2e; font-weight: 850; }
-.journey-summary { position: sticky; z-index: 10; top: 12px; width: min(880px, calc(100vw - 32px)); margin: 12px auto -10px; padding: 16px 20px; border: 2px solid #287355; border-radius: 14px; background: #f8fcfa; box-shadow: 0 6px 20px rgba(4, 45, 29, .12); }
+.journey-summary { position: static; width: min(880px, calc(100vw - 32px)); margin: 12px auto -10px; padding: 16px 20px; border: 2px solid #287355; border-radius: 14px; background: #f8fcfa; box-shadow: 0 6px 20px rgba(4, 45, 29, .12); }
 .journey-summary h2 { margin: 0 0 10px; font-size: 1.35rem; }
 .journey-summary dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
 .journey-summary dl > div { min-width: 0; }
@@ -242,6 +242,7 @@ fieldset { margin: 0; padding: 0; border: 0; }
   .composer-actions > button { width: 100%; }
   .page-actions, .welcome-actions, .intake-actions, .assistance-actions { align-items: stretch; flex-direction: column; }
   .page-actions button, .welcome-actions button, .intake-actions button, .assistance-actions button { width: 100%; }
+  .assistance-actions button { flex-basis: auto; }
 }
 
 @media print {

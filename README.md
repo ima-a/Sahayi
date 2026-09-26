@@ -19,8 +19,8 @@ English is the canonical verified guidance. Hindi and Malayalam are machine-assi
 
 ## Citizen journey
 
-1. Open directly into “How can I help you?” and type or explicitly use the microphone. English, Hindi and Malayalam and browsing supported services remain available; there is no Start screen.
-2. The browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. Finder text is not sent online.
+1. Open directly into “Ask Sahayi AI”. Cloud conversation requires the displayed consent. “Browse all services” lists the verified catalogue; selecting a service returns to AI with that service as context. Switching services clears the previous conversation and preparation. The current-step summary scrolls with the page.
+2. Choose “Prepare with step-by-step guidance” for the local preparation flow, including when AI is unavailable. A selected service carries into preparation. Otherwise the browser blocks obvious identifier-shaped input, then combines deterministic Procedure Pack phrases with a bundled Naive Bayes classifier. Finder text is not sent online.
 3. Confirm the proposed verified service. Ambiguous address requests inside the pension task are clarified using only catalogue entries.
 4. Stay in the same conversation while Sahayi asks one verified readiness or preparation question at a time. Confirmed answers immediately fill one browser-memory preparation record; already completed fields are skipped.
 5. At a relevant document question, optionally choose a JPEG, PNG, WebP, or PDF for browser-local printed-text OCR. The file, OCR text, and suggested personal value never leave the browser. A confirmed allowlisted clue can fill its mapped preparation field locally while only the clue category ID reaches the stateless graph.
